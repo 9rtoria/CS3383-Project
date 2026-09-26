@@ -1,2 +1,2 @@
 # CS3383-Project
-testing
+Repository for CS3383 Project
