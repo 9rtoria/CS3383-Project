@@ -6,6 +6,8 @@ import com.example.kanbanplanner.domain.Priority;
 import com.example.kanbanplanner.domain.Progress;
 import com.example.kanbanplanner.domain.Task;
 import com.example.kanbanplanner.repository.PlannerRepository;
+import com.example.kanbanplanner.validation.ValidationDetail;
+import com.example.kanbanplanner.validation.ValidationException;
 import com.example.kanbanplanner.validation.PlannerValidator;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -20,134 +22,162 @@ public class TaskService {
     private final PlannerValidator validator;
     private final IdGenerator idGenerator;
 
-<span class="fc" id="L23">    public TaskService(PlannerRepository plannerRepository, PlannerValidator validator, IdGenerator idGenerator) {</span>
-<span class="fc" id="L24">        this.plannerRepository = plannerRepository;</span>
-<span class="fc" id="L25">        this.validator = validator;</span>
-<span class="fc" id="L26">        this.idGenerator = idGenerator;</span>
-<span class="fc" id="L27">    }</span>
+<span class="fc" id="L25">    public TaskService(PlannerRepository plannerRepository, PlannerValidator validator, IdGenerator idGenerator) {</span>
+<span class="fc" id="L26">        this.plannerRepository = plannerRepository;</span>
+<span class="fc" id="L27">        this.validator = validator;</span>
+<span class="fc" id="L28">        this.idGenerator = idGenerator;</span>
+<span class="fc" id="L29">    }</span>
 
     public Task createTask(String planId, TaskInput input) {
-<span class="fc" id="L30">        Plan plan = findPlanRequired(planId);</span>
-<span class="fc" id="L31">        ValidatedTaskFields fields = validateTaskInput(plan, input);</span>
+<span class="fc" id="L32">        Plan plan = findPlanRequired(planId);</span>
+<span class="fc" id="L33">        ValidatedTaskFields fields = validateTaskInput(plan, input);</span>
 
-<span class="fc" id="L33">        Task newTask = new Task(</span>
-<span class="fc" id="L34">                idGenerator.nextTaskId(),</span>
-<span class="fc" id="L35">                fields.title(),</span>
-<span class="fc" id="L36">                fields.bucketId(),</span>
-<span class="fc" id="L37">                fields.progress(),</span>
-<span class="fc" id="L38">                fields.priority(),</span>
-<span class="fc" id="L39">                fields.startDate(),</span>
-<span class="fc" id="L40">                fields.dueDate(),</span>
-<span class="fc" id="L41">                fields.notes(),</span>
-<span class="fc" id="L42">                fields.checklist());</span>
+<span class="fc" id="L35">        Task newTask = new Task(</span>
+<span class="fc" id="L36">                idGenerator.nextTaskId(),</span>
+<span class="fc" id="L37">                fields.title(),</span>
+<span class="fc" id="L38">                fields.bucketId(),</span>
+<span class="fc" id="L39">                fields.progress(),</span>
+<span class="fc" id="L40">                fields.priority(),</span>
+<span class="fc" id="L41">                fields.startDate(),</span>
+<span class="fc" id="L42">                fields.dueDate(),</span>
+<span class="fc" id="L43">                fields.notes(),</span>
+<span class="fc" id="L44">                fields.checklist());</span>
 
-<span class="fc" id="L44">        List&lt;Task&gt; updatedTasks = new ArrayList&lt;&gt;(plan.tasks());</span>
-<span class="fc" id="L45">        updatedTasks.add(newTask);</span>
+<span class="fc" id="L46">        List&lt;Task&gt; updatedTasks = new ArrayList&lt;&gt;(plan.tasks());</span>
+<span class="fc" id="L47">        updatedTasks.add(newTask);</span>
 
-<span class="fc" id="L47">        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);</span>
-<span class="fc" id="L48">        plannerRepository.savePlan(updatedPlan);</span>
-<span class="fc" id="L49">        return newTask;</span>
+<span class="fc" id="L49">        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);</span>
+<span class="fc" id="L50">        plannerRepository.savePlan(updatedPlan);</span>
+<span class="fc" id="L51">        return newTask;</span>
     }
 
     public Task updateTask(String planId, String taskId, TaskInput input) {
-<span class="fc" id="L53">        Plan plan = findPlanRequired(planId);</span>
-<span class="fc" id="L54">        Task existing = findTaskRequired(plan, taskId);</span>
+<span class="fc" id="L55">        Plan plan = findPlanRequired(planId);</span>
+<span class="fc" id="L56">        Task existing = findTaskRequired(plan, taskId);</span>
 
-<span class="fc" id="L56">        ValidatedTaskFields fields = validateTaskInput(plan, input);</span>
-<span class="fc" id="L57">        Task updatedTask = new Task(</span>
-<span class="fc" id="L58">                existing.id(),</span>
-<span class="fc" id="L59">                fields.title(),</span>
-<span class="fc" id="L60">                fields.bucketId(),</span>
-<span class="fc" id="L61">                fields.progress(),</span>
-<span class="fc" id="L62">                fields.priority(),</span>
-<span class="fc" id="L63">                fields.startDate(),</span>
-<span class="fc" id="L64">                fields.dueDate(),</span>
-<span class="fc" id="L65">                fields.notes(),</span>
-<span class="fc" id="L66">                fields.checklist());</span>
+<span class="fc" id="L58">        ValidatedTaskFields fields = validateTaskInput(plan, input);</span>
+<span class="fc" id="L59">        Task updatedTask = new Task(</span>
+<span class="fc" id="L60">                existing.id(),</span>
+<span class="fc" id="L61">                fields.title(),</span>
+<span class="fc" id="L62">                fields.bucketId(),</span>
+<span class="fc" id="L63">                fields.progress(),</span>
+<span class="fc" id="L64">                fields.priority(),</span>
+<span class="fc" id="L65">                fields.startDate(),</span>
+<span class="fc" id="L66">                fields.dueDate(),</span>
+<span class="fc" id="L67">                fields.notes(),</span>
+<span class="fc" id="L68">                fields.checklist());</span>
 
-<span class="fc" id="L68">        List&lt;Task&gt; updatedTasks = plan.tasks().stream()</span>
-<span class="pc bpc" id="L69" title="1 of 2 branches missed.">                .map(task -&gt; task.id().equals(existing.id()) ? updatedTask : task)</span>
-<span class="fc" id="L70">                .toList();</span>
+<span class="fc" id="L70">        List&lt;Task&gt; updatedTasks = plan.tasks().stream()</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">                .map(task -&gt; task.id().equals(existing.id()) ? updatedTask : task)</span>
+<span class="fc" id="L72">                .toList();</span>
 
-<span class="fc" id="L72">        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);</span>
-<span class="fc" id="L73">        plannerRepository.savePlan(updatedPlan);</span>
-<span class="fc" id="L74">        return updatedTask;</span>
+<span class="fc" id="L74">        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);</span>
+<span class="fc" id="L75">        plannerRepository.savePlan(updatedPlan);</span>
+<span class="fc" id="L76">        return updatedTask;</span>
+    }
+
+    public Task patchTask(String planId, String taskId, TaskPatchInput input) {
+<span class="fc bfc" id="L80" title="All 2 branches covered.">        boolean hasBucketId = input.bucketId() != null;</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        boolean hasProgress = input.progress() != null;</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (hasBucketId == hasProgress) {</span>
+<span class="fc" id="L83">            throw ValidationErrors.invalidPatch();</span>
+        }
+
+<span class="fc" id="L86">        Task existing = getTask(planId, taskId);</span>
+<span class="fc" id="L87">        TaskInput merged = new TaskInput(</span>
+<span class="fc" id="L88">                existing.title(),</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">                hasBucketId ? input.bucketId() : existing.bucketId(),</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">                hasProgress ? input.progress() : existing.progress(),</span>
+<span class="fc" id="L91">                existing.priority(),</span>
+<span class="fc" id="L92">                existing.startDate(),</span>
+<span class="fc" id="L93">                existing.dueDate(),</span>
+<span class="fc" id="L94">                existing.notes(),</span>
+<span class="fc" id="L95">                existing.checklist().stream()</span>
+<span class="fc" id="L96">                        .map(item -&gt; new ChecklistItemInput(item.id(), item.text(), item.completed()))</span>
+<span class="fc" id="L97">                        .toList());</span>
+
+<span class="fc" id="L99">        return updateTask(planId, taskId, merged);</span>
     }
 
     public void deleteTask(String planId, String taskId) {
-<span class="fc" id="L78">        Plan plan = findPlanRequired(planId);</span>
-<span class="fc" id="L79">        findTaskRequired(plan, taskId);</span>
+<span class="fc" id="L103">        Plan plan = findPlanRequired(planId);</span>
+<span class="fc" id="L104">        findTaskRequired(plan, taskId);</span>
 
-<span class="fc" id="L81">        List&lt;Task&gt; updatedTasks = plan.tasks().stream()</span>
-<span class="fc bfc" id="L82" title="All 2 branches covered.">                .filter(task -&gt; !task.id().equals(taskId))</span>
-<span class="fc" id="L83">                .toList();</span>
+<span class="fc" id="L106">        List&lt;Task&gt; updatedTasks = plan.tasks().stream()</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">                .filter(task -&gt; !task.id().equals(taskId))</span>
+<span class="fc" id="L108">                .toList();</span>
 
-<span class="fc" id="L85">        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);</span>
-<span class="fc" id="L86">        plannerRepository.savePlan(updatedPlan);</span>
-<span class="fc" id="L87">    }</span>
+<span class="fc" id="L110">        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);</span>
+<span class="fc" id="L111">        plannerRepository.savePlan(updatedPlan);</span>
+<span class="fc" id="L112">    }</span>
 
     public boolean isTaskOverdue(String planId, String taskId, LocalDate today) {
-<span class="fc" id="L90">        Plan plan = findPlanRequired(planId);</span>
-<span class="fc" id="L91">        Task task = findTaskRequired(plan, taskId);</span>
-<span class="fc" id="L92">        return task.isOverdue(today);</span>
+<span class="fc" id="L115">        Plan plan = findPlanRequired(planId);</span>
+<span class="fc" id="L116">        Task task = findTaskRequired(plan, taskId);</span>
+<span class="fc" id="L117">        return task.isOverdue(today);</span>
+    }
+
+    public Task getTask(String planId, String taskId) {
+<span class="fc" id="L121">        Plan plan = findPlanRequired(planId);</span>
+<span class="fc" id="L122">        return findTaskRequired(plan, taskId);</span>
     }
 
     private ValidatedTaskFields validateTaskInput(Plan plan, TaskInput input) {
-<span class="fc" id="L96">        String title = validator.validateTaskTitle(input.title());</span>
-<span class="fc" id="L97">        String bucketId = validator.validateRequiredBucketId(input.bucketId());</span>
-<span class="fc" id="L98">        validator.requireBucketExists(plan, bucketId);</span>
+<span class="fc" id="L126">        String title = validator.validateTaskTitle(input.title());</span>
+<span class="fc" id="L127">        String bucketId = validator.validateRequiredBucketId(input.bucketId());</span>
+<span class="fc" id="L128">        validator.requireBucketExists(plan, bucketId);</span>
 
-<span class="fc" id="L100">        Progress progress = validator.requireProgress(input.progress());</span>
-<span class="fc" id="L101">        Priority priority = validator.requirePriority(input.priority());</span>
+<span class="fc" id="L130">        Progress progress = validator.requireProgress(input.progress());</span>
+<span class="fc" id="L131">        Priority priority = validator.requirePriority(input.priority());</span>
 
-<span class="fc" id="L103">        LocalDate startDate = input.startDate();</span>
-<span class="fc" id="L104">        LocalDate dueDate = input.dueDate();</span>
-<span class="fc" id="L105">        validator.validateDateConsistency(startDate, dueDate);</span>
+<span class="fc" id="L133">        LocalDate startDate = input.startDate();</span>
+<span class="fc" id="L134">        LocalDate dueDate = input.dueDate();</span>
+<span class="fc" id="L135">        validator.validateDateConsistency(startDate, dueDate);</span>
 
-<span class="fc" id="L107">        List&lt;ChecklistItem&gt; checklist = normalizeChecklist(input.checklist());</span>
-<span class="fc" id="L108">        String notes = normalizeNotes(input.notes());</span>
+<span class="fc" id="L137">        List&lt;ChecklistItem&gt; checklist = normalizeChecklist(input.checklist());</span>
+<span class="fc" id="L138">        String notes = normalizeNotes(input.notes());</span>
 
-<span class="fc" id="L110">        return new ValidatedTaskFields(title, bucketId, progress, priority, startDate, dueDate, notes, checklist);</span>
+<span class="fc" id="L140">        return new ValidatedTaskFields(title, bucketId, progress, priority, startDate, dueDate, notes, checklist);</span>
     }
 
     private List&lt;ChecklistItem&gt; normalizeChecklist(List&lt;ChecklistItemInput&gt; inputChecklist) {
-<span class="pc bpc" id="L114" title="1 of 2 branches missed.">        if (inputChecklist == null) {</span>
-<span class="nc" id="L115">            return List.of();</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">        if (inputChecklist == null) {</span>
+<span class="nc" id="L145">            return List.of();</span>
         }
 
-<span class="fc" id="L118">        List&lt;ChecklistItem&gt; checklist = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L119" title="All 2 branches covered.">        for (ChecklistItemInput checklistItem : inputChecklist) {</span>
-<span class="fc" id="L120">            String text = validator.validateChecklistItemText(checklistItem.text());</span>
-<span class="fc" id="L121">            String id = Optional.ofNullable(checklistItem.id())</span>
-<span class="fc" id="L122">                    .map(String::trim)</span>
-<span class="pc bpc" id="L123" title="1 of 2 branches missed.">                    .filter(value -&gt; !value.isEmpty())</span>
-<span class="fc" id="L124">                    .orElseGet(idGenerator::nextChecklistItemId);</span>
-<span class="fc" id="L125">            checklist.add(new ChecklistItem(id, text, checklistItem.completed()));</span>
-<span class="fc" id="L126">        }</span>
-<span class="fc" id="L127">        return List.copyOf(checklist);</span>
+<span class="fc" id="L148">        List&lt;ChecklistItem&gt; checklist = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">        for (ChecklistItemInput checklistItem : inputChecklist) {</span>
+<span class="fc" id="L150">            String text = validator.validateChecklistItemText(checklistItem.text());</span>
+<span class="fc" id="L151">            String id = Optional.ofNullable(checklistItem.id())</span>
+<span class="fc" id="L152">                    .map(String::trim)</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">                    .filter(value -&gt; !value.isEmpty())</span>
+<span class="fc" id="L154">                    .orElseGet(idGenerator::nextChecklistItemId);</span>
+<span class="fc" id="L155">            checklist.add(new ChecklistItem(id, text, checklistItem.completed()));</span>
+<span class="fc" id="L156">        }</span>
+<span class="fc" id="L157">        return List.copyOf(checklist);</span>
     }
 
     private String normalizeNotes(String notes) {
-<span class="fc bfc" id="L131" title="All 2 branches covered.">        if (notes == null) {</span>
-<span class="fc" id="L132">            return null;</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        if (notes == null) {</span>
+<span class="fc" id="L162">            return null;</span>
         }
-<span class="fc" id="L134">        String trimmed = notes.trim();</span>
-<span class="pc bpc" id="L135" title="1 of 2 branches missed.">        return trimmed.isEmpty() ? null : trimmed;</span>
+<span class="fc" id="L164">        String trimmed = notes.trim();</span>
+<span class="pc bpc" id="L165" title="1 of 2 branches missed.">        return trimmed.isEmpty() ? null : trimmed;</span>
     }
 
     private Task findTaskRequired(Plan plan, String taskId) {
-<span class="fc" id="L139">        return plan.tasks().stream()</span>
-<span class="fc" id="L140">                .filter(task -&gt; task.id().equals(taskId))</span>
-<span class="fc" id="L141">                .findFirst()</span>
-<span class="pc" id="L142">                .orElseThrow(() -&gt; new NotFoundException(&quot;Task not found: &quot; + taskId));</span>
+<span class="fc" id="L169">        return plan.tasks().stream()</span>
+<span class="fc" id="L170">                .filter(task -&gt; task.id().equals(taskId))</span>
+<span class="fc" id="L171">                .findFirst()</span>
+<span class="fc" id="L172">                .orElseThrow(() -&gt; new NotFoundException(&quot;Task not found: &quot; + taskId));</span>
     }
 
     private Plan findPlanRequired(String planId) {
-<span class="fc" id="L146">        return plannerRepository.findPlanById(planId)</span>
-<span class="pc" id="L147">                .orElseThrow(() -&gt; new NotFoundException(&quot;Plan not found: &quot; + planId));</span>
+<span class="fc" id="L176">        return plannerRepository.findPlanById(planId)</span>
+<span class="pc" id="L177">                .orElseThrow(() -&gt; new NotFoundException(&quot;Plan not found: &quot; + planId));</span>
     }
 
-<span class="fc" id="L150">    public record TaskInput(</span>
+<span class="fc" id="L180">    public record TaskInput(</span>
             String title,
             String bucketId,
             Progress progress,
@@ -158,10 +188,13 @@ public class TaskService {
             List&lt;ChecklistItemInput&gt; checklist) {
     }
 
-<span class="fc" id="L161">    public record ChecklistItemInput(String id, String text, boolean completed) {</span>
+<span class="fc" id="L191">    public record ChecklistItemInput(String id, String text, boolean completed) {</span>
     }
 
-<span class="fc" id="L164">    private record ValidatedTaskFields(</span>
+<span class="fc" id="L194">    public record TaskPatchInput(String bucketId, Progress progress) {</span>
+    }
+
+<span class="fc" id="L197">    private record ValidatedTaskFields(</span>
             String title,
             String bucketId,
             Progress progress,
@@ -170,6 +203,19 @@ public class TaskService {
             LocalDate dueDate,
             String notes,
             List&lt;ChecklistItem&gt; checklist) {
+    }
+
+    private static final class ValidationErrors {
+        private ValidationErrors() {
+        }
+
+        private static ValidationException invalidPatch() {
+<span class="fc" id="L213">            return new ValidationException(</span>
+                    &quot;Validation failed&quot;,
+<span class="fc" id="L215">                    List.of(new ValidationDetail(</span>
+                            &quot;patch&quot;,
+                            &quot;Exactly one of bucketId or progress must be provided&quot;)));
+        }
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

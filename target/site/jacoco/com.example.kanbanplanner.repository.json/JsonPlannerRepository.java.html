@@ -212,12 +212,12 @@ public class JsonPlannerRepository implements PlannerRepository {
 
     private static List&lt;Plan&gt; replaceOrAppendPlan(List&lt;Plan&gt; source, Plan replacement) {
 <span class="fc" id="L214">        int index = indexOfPlan(source, replacement.id());</span>
-<span class="pc bpc" id="L215" title="1 of 2 branches missed.">        if (index &lt; 0) {</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">        if (index &lt; 0) {</span>
 <span class="fc" id="L216">            List&lt;Plan&gt; appended = new ArrayList&lt;&gt;(source);</span>
 <span class="fc" id="L217">            appended.add(replacement);</span>
 <span class="fc" id="L218">            return List.copyOf(appended);</span>
         }
-<span class="nc" id="L220">        return replaceByIndex(source, index, replacement);</span>
+<span class="fc" id="L220">        return replaceByIndex(source, index, replacement);</span>
     }
 
     private static List&lt;Plan&gt; replacePlan(List&lt;Plan&gt; source, Plan replacement) {

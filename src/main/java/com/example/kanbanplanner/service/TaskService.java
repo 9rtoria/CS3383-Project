@@ -6,6 +6,8 @@ import com.example.kanbanplanner.domain.Priority;
 import com.example.kanbanplanner.domain.Progress;
 import com.example.kanbanplanner.domain.Task;
 import com.example.kanbanplanner.repository.PlannerRepository;
+import com.example.kanbanplanner.validation.ValidationDetail;
+import com.example.kanbanplanner.validation.ValidationException;
 import com.example.kanbanplanner.validation.PlannerValidator;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -74,6 +76,29 @@ public class TaskService {
         return updatedTask;
     }
 
+    public Task patchTask(String planId, String taskId, TaskPatchInput input) {
+        boolean hasBucketId = input.bucketId() != null;
+        boolean hasProgress = input.progress() != null;
+        if (hasBucketId == hasProgress) {
+            throw ValidationErrors.invalidPatch();
+        }
+
+        Task existing = getTask(planId, taskId);
+        TaskInput merged = new TaskInput(
+                existing.title(),
+                hasBucketId ? input.bucketId() : existing.bucketId(),
+                hasProgress ? input.progress() : existing.progress(),
+                existing.priority(),
+                existing.startDate(),
+                existing.dueDate(),
+                existing.notes(),
+                existing.checklist().stream()
+                        .map(item -> new ChecklistItemInput(item.id(), item.text(), item.completed()))
+                        .toList());
+
+        return updateTask(planId, taskId, merged);
+    }
+
     public void deleteTask(String planId, String taskId) {
         Plan plan = findPlanRequired(planId);
         findTaskRequired(plan, taskId);
@@ -90,6 +115,11 @@ public class TaskService {
         Plan plan = findPlanRequired(planId);
         Task task = findTaskRequired(plan, taskId);
         return task.isOverdue(today);
+    }
+
+    public Task getTask(String planId, String taskId) {
+        Plan plan = findPlanRequired(planId);
+        return findTaskRequired(plan, taskId);
     }
 
     private ValidatedTaskFields validateTaskInput(Plan plan, TaskInput input) {
@@ -161,6 +191,9 @@ public class TaskService {
     public record ChecklistItemInput(String id, String text, boolean completed) {
     }
 
+    public record TaskPatchInput(String bucketId, Progress progress) {
+    }
+
     private record ValidatedTaskFields(
             String title,
             String bucketId,
@@ -170,5 +203,18 @@ public class TaskService {
             LocalDate dueDate,
             String notes,
             List<ChecklistItem> checklist) {
+    }
+
+    private static final class ValidationErrors {
+        private ValidationErrors() {
+        }
+
+        private static ValidationException invalidPatch() {
+            return new ValidationException(
+                    "Validation failed",
+                    List.of(new ValidationDetail(
+                            "patch",
+                            "Exactly one of bucketId or progress must be provided")));
+        }
     }
 }

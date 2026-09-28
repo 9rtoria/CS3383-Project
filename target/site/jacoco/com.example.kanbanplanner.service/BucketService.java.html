@@ -29,32 +29,32 @@ public class BucketService {
     public Bucket createBucket(String planId, String rawBucketName) {
 <span class="fc" id="L30">        Plan plan = findPlanRequired(planId);</span>
 <span class="fc" id="L31">        String bucketName = validator.validateBucketName(rawBucketName);</span>
-<span class="nc" id="L32">        validator.validateBucketNameUnique(plan, bucketName, null);</span>
+<span class="fc" id="L32">        validator.validateBucketNameUnique(plan, bucketName, null);</span>
 
-<span class="nc" id="L34">        Bucket bucket = new Bucket(idGenerator.nextBucketId(), bucketName);</span>
-<span class="nc" id="L35">        List&lt;Bucket&gt; updatedBuckets = new ArrayList&lt;&gt;(plan.buckets());</span>
-<span class="nc" id="L36">        updatedBuckets.add(bucket);</span>
+<span class="fc" id="L34">        Bucket bucket = new Bucket(idGenerator.nextBucketId(), bucketName);</span>
+<span class="fc" id="L35">        List&lt;Bucket&gt; updatedBuckets = new ArrayList&lt;&gt;(plan.buckets());</span>
+<span class="fc" id="L36">        updatedBuckets.add(bucket);</span>
 
-<span class="nc" id="L38">        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());</span>
-<span class="nc" id="L39">        plannerRepository.savePlan(updatedPlan);</span>
-<span class="nc" id="L40">        return bucket;</span>
+<span class="fc" id="L38">        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());</span>
+<span class="fc" id="L39">        plannerRepository.savePlan(updatedPlan);</span>
+<span class="fc" id="L40">        return bucket;</span>
     }
 
     public Bucket renameBucket(String planId, String bucketId, String rawBucketName) {
-<span class="nc" id="L44">        Plan plan = findPlanRequired(planId);</span>
-<span class="nc" id="L45">        Bucket existing = findBucketRequired(plan, bucketId);</span>
+<span class="fc" id="L44">        Plan plan = findPlanRequired(planId);</span>
+<span class="fc" id="L45">        Bucket existing = findBucketRequired(plan, bucketId);</span>
 
-<span class="nc" id="L47">        String bucketName = validator.validateBucketName(rawBucketName);</span>
-<span class="nc" id="L48">        validator.validateBucketNameUnique(plan, bucketName, bucketId);</span>
+<span class="fc" id="L47">        String bucketName = validator.validateBucketName(rawBucketName);</span>
+<span class="fc" id="L48">        validator.validateBucketNameUnique(plan, bucketName, bucketId);</span>
 
-<span class="nc" id="L50">        Bucket renamed = new Bucket(existing.id(), bucketName);</span>
-<span class="nc" id="L51">        List&lt;Bucket&gt; updatedBuckets = plan.buckets().stream()</span>
-<span class="nc bnc" id="L52" title="All 2 branches missed.">                .map(bucket -&gt; bucket.id().equals(bucketId) ? renamed : bucket)</span>
-<span class="nc" id="L53">                .toList();</span>
+<span class="fc" id="L50">        Bucket renamed = new Bucket(existing.id(), bucketName);</span>
+<span class="fc" id="L51">        List&lt;Bucket&gt; updatedBuckets = plan.buckets().stream()</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">                .map(bucket -&gt; bucket.id().equals(bucketId) ? renamed : bucket)</span>
+<span class="fc" id="L53">                .toList();</span>
 
-<span class="nc" id="L55">        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());</span>
-<span class="nc" id="L56">        plannerRepository.savePlan(updatedPlan);</span>
-<span class="nc" id="L57">        return renamed;</span>
+<span class="fc" id="L55">        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());</span>
+<span class="fc" id="L56">        plannerRepository.savePlan(updatedPlan);</span>
+<span class="fc" id="L57">        return renamed;</span>
     }
 
     public void deleteBucket(String planId, String bucketId) {
