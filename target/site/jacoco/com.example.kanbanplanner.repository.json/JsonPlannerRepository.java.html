@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonPlannerRepository.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">kanban-planner</a> &gt; <a href="index.source.html" class="el_package">com.example.kanbanplanner.repository.json</a> &gt; <span class="el_source">JsonPlannerRepository.java</span></div><h1>JsonPlannerRepository.java</h1><pre class="source lang-java linenums">package com.example.kanbanplanner.repository.json;
+
+import com.example.kanbanplanner.domain.Bucket;
+import com.example.kanbanplanner.domain.Plan;
+import com.example.kanbanplanner.domain.PlanSummary;
+import com.example.kanbanplanner.domain.Task;
+import com.example.kanbanplanner.repository.PlannerRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class JsonPlannerRepository implements PlannerRepository {
+
+    private static final String DEFAULT_RUNTIME_PATH = &quot;./data/planner-data.json&quot;;
+    private static final String SEED_RESOURCE_PATH = &quot;data/seed-data.json&quot;;
+
+    private final ObjectMapper objectMapper;
+    private final Path runtimeDataPath;
+
+    @Autowired
+    public JsonPlannerRepository(
+            @Value(&quot;${planner.storage.runtime-path:&quot; + DEFAULT_RUNTIME_PATH + &quot;}&quot;) String runtimePath,
+            ObjectMapper objectMapper
+    ) {
+<span class="fc" id="L37">        this(Path.of(runtimePath), objectMapper);</span>
+<span class="fc" id="L38">    }</span>
+
+<span class="fc" id="L40">    JsonPlannerRepository(Path runtimeDataPath, ObjectMapper objectMapper) {</span>
+<span class="fc" id="L41">        this.runtimeDataPath = runtimeDataPath;</span>
+<span class="fc" id="L42">        this.objectMapper = objectMapper;</span>
+<span class="fc" id="L43">    }</span>
+
+    @Override
+    public synchronized List&lt;PlanSummary&gt; findAllPlans() {
+<span class="fc" id="L47">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L48">        return document.plans().stream()</span>
+<span class="fc" id="L49">                .map(plan -&gt; new PlanSummary(plan.id(), plan.name()))</span>
+<span class="fc" id="L50">                .toList();</span>
+    }
+
+    @Override
+    public synchronized Optional&lt;Plan&gt; findPlanById(String planId) {
+<span class="fc" id="L55">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L56">        return document.plans().stream()</span>
+<span class="fc" id="L57">                .filter(plan -&gt; plan.id().equals(planId))</span>
+<span class="fc" id="L58">                .findFirst();</span>
+    }
+
+    @Override
+    public synchronized Plan savePlan(Plan plan) {
+<span class="fc" id="L63">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L64">        List&lt;Plan&gt; updatedPlans = replaceOrAppendPlan(document.plans(), plan);</span>
+<span class="fc" id="L65">        writeRuntimeDocument(new StorageDocument(updatedPlans));</span>
+<span class="fc" id="L66">        return plan;</span>
+    }
+
+    @Override
+    public synchronized void deletePlan(String planId) {
+<span class="fc" id="L71">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L72">        List&lt;Plan&gt; updatedPlans = document.plans().stream()</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">                .filter(plan -&gt; !plan.id().equals(planId))</span>
+<span class="fc" id="L74">                .toList();</span>
+<span class="fc" id="L75">        writeRuntimeDocument(new StorageDocument(updatedPlans));</span>
+<span class="fc" id="L76">    }</span>
+
+    @Override
+    public synchronized Bucket saveBucket(String planId, Bucket bucket) {
+<span class="fc" id="L80">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L81">        Plan targetPlan = findPlanRequired(document.plans(), planId);</span>
+
+<span class="fc" id="L83">        List&lt;Bucket&gt; updatedBuckets = replaceOrAppendBucket(targetPlan.buckets(), bucket);</span>
+<span class="fc" id="L84">        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), updatedBuckets, targetPlan.tasks());</span>
+
+<span class="fc" id="L86">        List&lt;Plan&gt; updatedPlans = replacePlan(document.plans(), updatedPlan);</span>
+<span class="fc" id="L87">        writeRuntimeDocument(new StorageDocument(updatedPlans));</span>
+<span class="fc" id="L88">        return bucket;</span>
+    }
+
+    @Override
+    public synchronized void deleteBucket(String planId, String bucketId) {
+<span class="fc" id="L93">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L94">        Plan targetPlan = findPlanRequired(document.plans(), planId);</span>
+
+<span class="fc" id="L96">        List&lt;Bucket&gt; updatedBuckets = targetPlan.buckets().stream()</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">                .filter(bucket -&gt; !bucket.id().equals(bucketId))</span>
+<span class="fc" id="L98">                .toList();</span>
+<span class="fc" id="L99">        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), updatedBuckets, targetPlan.tasks());</span>
+
+<span class="fc" id="L101">        List&lt;Plan&gt; updatedPlans = replacePlan(document.plans(), updatedPlan);</span>
+<span class="fc" id="L102">        writeRuntimeDocument(new StorageDocument(updatedPlans));</span>
+<span class="fc" id="L103">    }</span>
+
+    @Override
+    public synchronized Task saveTask(String planId, Task task) {
+<span class="fc" id="L107">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L108">        Plan targetPlan = findPlanRequired(document.plans(), planId);</span>
+
+<span class="fc" id="L110">        List&lt;Task&gt; updatedTasks = replaceOrAppendTask(targetPlan.tasks(), task);</span>
+<span class="fc" id="L111">        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), targetPlan.buckets(), updatedTasks);</span>
+
+<span class="fc" id="L113">        List&lt;Plan&gt; updatedPlans = replacePlan(document.plans(), updatedPlan);</span>
+<span class="fc" id="L114">        writeRuntimeDocument(new StorageDocument(updatedPlans));</span>
+<span class="fc" id="L115">        return task;</span>
+    }
+
+    @Override
+    public synchronized void deleteTask(String planId, String taskId) {
+<span class="fc" id="L120">        StorageDocument document = readRuntimeDocument();</span>
+<span class="fc" id="L121">        Plan targetPlan = findPlanRequired(document.plans(), planId);</span>
+
+<span class="fc" id="L123">        List&lt;Task&gt; updatedTasks = targetPlan.tasks().stream()</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">                .filter(task -&gt; !task.id().equals(taskId))</span>
+<span class="fc" id="L125">                .toList();</span>
+<span class="fc" id="L126">        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), targetPlan.buckets(), updatedTasks);</span>
+
+<span class="fc" id="L128">        List&lt;Plan&gt; updatedPlans = replacePlan(document.plans(), updatedPlan);</span>
+<span class="fc" id="L129">        writeRuntimeDocument(new StorageDocument(updatedPlans));</span>
+<span class="fc" id="L130">    }</span>
+
+    private StorageDocument readRuntimeDocument() {
+<span class="fc" id="L133">        ensureRuntimeDataExists();</span>
+
+        try {
+<span class="fc" id="L136">            return objectMapper.readValue(runtimeDataPath.toFile(), StorageDocument.class);</span>
+<span class="nc" id="L137">        } catch (IOException exception) {</span>
+<span class="nc" id="L138">            throw new IllegalStateException(&quot;Failed to read runtime data from: &quot; + runtimeDataPath, exception);</span>
+        }
+    }
+
+    private void ensureRuntimeDataExists() {
+<span class="fc bfc" id="L143" title="All 2 branches covered.">        if (Files.exists(runtimeDataPath)) {</span>
+<span class="fc" id="L144">            return;</span>
+        }
+
+        try {
+<span class="fc" id="L148">            Path parent = runtimeDataPath.toAbsolutePath().getParent();</span>
+<span class="pc bpc" id="L149" title="1 of 2 branches missed.">            if (parent != null) {</span>
+<span class="fc" id="L150">                Files.createDirectories(parent);</span>
+            }
+<span class="nc" id="L152">        } catch (IOException exception) {</span>
+<span class="nc" id="L153">            throw new IllegalStateException(&quot;Failed to create runtime data directory for: &quot; + runtimeDataPath, exception);</span>
+<span class="fc" id="L154">        }</span>
+
+<span class="fc" id="L156">        StorageDocument seedDocument = readSeedDocument();</span>
+<span class="fc" id="L157">        writeRuntimeDocument(seedDocument);</span>
+<span class="fc" id="L158">    }</span>
+
+    private StorageDocument readSeedDocument() {
+<span class="fc" id="L161">        try (InputStream inputStream = Thread.currentThread()</span>
+<span class="fc" id="L162">                .getContextClassLoader()</span>
+<span class="fc" id="L163">                .getResourceAsStream(SEED_RESOURCE_PATH)) {</span>
+<span class="pc bpc" id="L164" title="1 of 2 branches missed.">            if (inputStream == null) {</span>
+<span class="nc" id="L165">                throw new IllegalStateException(&quot;Seed data resource not found: &quot; + SEED_RESOURCE_PATH);</span>
+            }
+<span class="fc" id="L167">            return objectMapper.readValue(inputStream, StorageDocument.class);</span>
+<span class="nc" id="L168">        } catch (IOException exception) {</span>
+<span class="nc" id="L169">            throw new IllegalStateException(&quot;Failed to read seed data resource: &quot; + SEED_RESOURCE_PATH, exception);</span>
+        }
+    }
+
+    private void writeRuntimeDocument(StorageDocument document) {
+        try {
+<span class="fc" id="L175">            Path parent = runtimeDataPath.toAbsolutePath().getParent();</span>
+<span class="pc bpc" id="L176" title="1 of 2 branches missed.">            if (parent == null) {</span>
+<span class="nc" id="L177">                parent = runtimeDataPath.toAbsolutePath().getRoot();</span>
+            }
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">            if (parent == null) {</span>
+<span class="nc" id="L180">                throw new IllegalStateException(&quot;Cannot resolve parent directory for: &quot; + runtimeDataPath);</span>
+            }
+<span class="pc bpc" id="L182" title="1 of 2 branches missed.">            if (parent != null) {</span>
+<span class="fc" id="L183">                Files.createDirectories(parent);</span>
+            }
+
+<span class="fc" id="L186">            Path tempFile = Files.createTempFile(parent, &quot;planner-data-&quot;, &quot;.tmp&quot;);</span>
+            try {
+<span class="fc" id="L188">                objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile.toFile(), document);</span>
+<span class="fc" id="L189">                replaceFile(tempFile, runtimeDataPath);</span>
+            } finally {
+<span class="fc" id="L191">                Files.deleteIfExists(tempFile);</span>
+            }
+<span class="fc" id="L193">        } catch (IOException exception) {</span>
+<span class="fc" id="L194">            throw new IllegalStateException(&quot;Failed to write runtime data to: &quot; + runtimeDataPath, exception);</span>
+<span class="fc" id="L195">        }</span>
+<span class="fc" id="L196">    }</span>
+
+    protected void replaceFile(Path source, Path target) throws IOException {
+        try {
+<span class="fc" id="L200">            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);</span>
+<span class="nc" id="L201">        } catch (AtomicMoveNotSupportedException exception) {</span>
+<span class="nc" id="L202">            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);</span>
+<span class="fc" id="L203">        }</span>
+<span class="fc" id="L204">    }</span>
+
+    private static Plan findPlanRequired(List&lt;Plan&gt; plans, String planId) {
+<span class="fc" id="L207">        return plans.stream()</span>
+<span class="fc" id="L208">                .filter(plan -&gt; plan.id().equals(planId))</span>
+<span class="fc" id="L209">                .findFirst()</span>
+<span class="fc" id="L210">                .orElseThrow(() -&gt; new NoSuchElementException(&quot;Plan not found: &quot; + planId));</span>
+    }
+
+    private static List&lt;Plan&gt; replaceOrAppendPlan(List&lt;Plan&gt; source, Plan replacement) {
+<span class="fc" id="L214">        int index = indexOfPlan(source, replacement.id());</span>
+<span class="pc bpc" id="L215" title="1 of 2 branches missed.">        if (index &lt; 0) {</span>
+<span class="fc" id="L216">            List&lt;Plan&gt; appended = new ArrayList&lt;&gt;(source);</span>
+<span class="fc" id="L217">            appended.add(replacement);</span>
+<span class="fc" id="L218">            return List.copyOf(appended);</span>
+        }
+<span class="nc" id="L220">        return replaceByIndex(source, index, replacement);</span>
+    }
+
+    private static List&lt;Plan&gt; replacePlan(List&lt;Plan&gt; source, Plan replacement) {
+<span class="fc" id="L224">        int index = indexOfPlan(source, replacement.id());</span>
+<span class="pc bpc" id="L225" title="1 of 2 branches missed.">        if (index &lt; 0) {</span>
+<span class="nc" id="L226">            throw new NoSuchElementException(&quot;Plan not found: &quot; + replacement.id());</span>
+        }
+<span class="fc" id="L228">        return replaceByIndex(source, index, replacement);</span>
+    }
+
+    private static List&lt;Bucket&gt; replaceOrAppendBucket(List&lt;Bucket&gt; source, Bucket replacement) {
+<span class="fc" id="L232">        int index = indexOfBucket(source, replacement.id());</span>
+<span class="pc bpc" id="L233" title="1 of 2 branches missed.">        if (index &lt; 0) {</span>
+<span class="nc" id="L234">            List&lt;Bucket&gt; appended = new ArrayList&lt;&gt;(source);</span>
+<span class="nc" id="L235">            appended.add(replacement);</span>
+<span class="nc" id="L236">            return List.copyOf(appended);</span>
+        }
+<span class="fc" id="L238">        List&lt;Bucket&gt; updated = new ArrayList&lt;&gt;(source);</span>
+<span class="fc" id="L239">        updated.set(index, replacement);</span>
+<span class="fc" id="L240">        return List.copyOf(updated);</span>
+    }
+
+    private static List&lt;Task&gt; replaceOrAppendTask(List&lt;Task&gt; source, Task replacement) {
+<span class="fc" id="L244">        int index = indexOfTask(source, replacement.id());</span>
+<span class="pc bpc" id="L245" title="1 of 2 branches missed.">        if (index &lt; 0) {</span>
+<span class="nc" id="L246">            List&lt;Task&gt; appended = new ArrayList&lt;&gt;(source);</span>
+<span class="nc" id="L247">            appended.add(replacement);</span>
+<span class="nc" id="L248">            return List.copyOf(appended);</span>
+        }
+<span class="fc" id="L250">        List&lt;Task&gt; updated = new ArrayList&lt;&gt;(source);</span>
+<span class="fc" id="L251">        updated.set(index, replacement);</span>
+<span class="fc" id="L252">        return List.copyOf(updated);</span>
+    }
+
+    private static List&lt;Plan&gt; replaceByIndex(List&lt;Plan&gt; source, int index, Plan replacement) {
+<span class="fc" id="L256">        List&lt;Plan&gt; updated = new ArrayList&lt;&gt;(source);</span>
+<span class="fc" id="L257">        updated.set(index, replacement);</span>
+<span class="fc" id="L258">        return List.copyOf(updated);</span>
+    }
+
+    private static int indexOfPlan(List&lt;Plan&gt; plans, String planId) {
+<span class="fc bfc" id="L262" title="All 2 branches covered.">        for (int i = 0; i &lt; plans.size(); i++) {</span>
+<span class="fc bfc" id="L263" title="All 2 branches covered.">            if (plans.get(i).id().equals(planId)) {</span>
+<span class="fc" id="L264">                return i;</span>
+            }
+        }
+<span class="fc" id="L267">        return -1;</span>
+    }
+
+    private static int indexOfBucket(List&lt;Bucket&gt; buckets, String bucketId) {
+<span class="pc bpc" id="L271" title="1 of 2 branches missed.">        for (int i = 0; i &lt; buckets.size(); i++) {</span>
+<span class="pc bpc" id="L272" title="1 of 2 branches missed.">            if (buckets.get(i).id().equals(bucketId)) {</span>
+<span class="fc" id="L273">                return i;</span>
+            }
+        }
+<span class="nc" id="L276">        return -1;</span>
+    }
+
+    private static int indexOfTask(List&lt;Task&gt; tasks, String taskId) {
+<span class="pc bpc" id="L280" title="1 of 2 branches missed.">        for (int i = 0; i &lt; tasks.size(); i++) {</span>
+<span class="pc bpc" id="L281" title="1 of 2 branches missed.">            if (tasks.get(i).id().equals(taskId)) {</span>
+<span class="fc" id="L282">                return i;</span>
+            }
+        }
+<span class="nc" id="L285">        return -1;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
