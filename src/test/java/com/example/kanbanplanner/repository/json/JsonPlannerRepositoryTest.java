@@ -15,6 +15,7 @@ import com.example.kanbanplanner.domain.Progress;
 import com.example.kanbanplanner.domain.Task;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -123,6 +124,32 @@ class JsonPlannerRepositoryTest {
         assertEquals(before, after);
         assertTrue(repository.findPlanById("pln_atomic_001").isPresent());
         assertTrue(repository.findPlanById("pln_atomic_002").isEmpty());
+    }
+
+    @Test
+    void transientAccessDeniedDuringReplaceRetriesAndEventuallySucceeds() {
+        Path runtimePath = tempDir.resolve("planner-data.json");
+        JsonPlannerRepository repository = newRepository(runtimePath);
+        repository.savePlan(samplePlan("pln_retry_seed", "Retry Seed"));
+
+        JsonPlannerRepository retryingRepository = new JsonPlannerRepository(runtimePath, objectMapper()) {
+            private int replaceAttempts = 0;
+
+            @Override
+            protected void replaceFile(Path source, Path target) throws IOException {
+                replaceAttempts++;
+                if (replaceAttempts <= 2) {
+                    throw new AccessDeniedException(source.toString(), target.toString(), "Simulated transient lock");
+                }
+                super.replaceFile(source, target);
+            }
+        };
+
+        retryingRepository.savePlan(samplePlan("pln_retry_001", "Retry Success"));
+
+        JsonPlannerRepository reloaded = newRepository(runtimePath);
+        assertTrue(reloaded.findPlanById("pln_retry_seed").isPresent());
+        assertTrue(reloaded.findPlanById("pln_retry_001").isPresent());
     }
 
     @Test

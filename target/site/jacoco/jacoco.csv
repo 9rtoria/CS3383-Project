@@ -3,7 +3,7 @@ kanban-planner,com.example.kanbanplanner.validation,PlannerValidator.ValidationE
 kanban-planner,com.example.kanbanplanner.validation,ValidationException,0,11,0,0,0,4,0,2,0,2
 kanban-planner,com.example.kanbanplanner.validation,PlannerValidator,8,158,5,27,1,40,5,26,0,15
 kanban-planner,com.example.kanbanplanner.validation,ValidationDetail,0,9,0,0,0,1,0,1,0,1
-kanban-planner,com.example.kanbanplanner.repository.json,JsonPlannerRepository,99,543,14,24,20,124,14,36,0,31
+kanban-planner,com.example.kanbanplanner.repository.json,JsonPlannerRepository,120,574,18,26,29,135,17,38,0,33
 kanban-planner,com.example.kanbanplanner.repository.json,StorageDocument,7,11,1,1,1,3,2,1,1,1
 kanban-planner,com.example.kanbanplanner.controller,ApiExceptionHandler,0,52,0,0,0,10,0,5,0,5
 kanban-planner,com.example.kanbanplanner.controller,BucketController,0,40,0,0,0,10,0,4,0,4

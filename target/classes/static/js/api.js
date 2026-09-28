@@ -87,6 +87,16 @@ export const planApi = {
         });
     },
 
+    patchTask(planId, taskId, patchBody) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(patchBody)
+        });
+    },
+
     deletePlan(planId) {
         return request(`${API_BASE}/${encodeURIComponent(planId)}`, {
             method: "DELETE"

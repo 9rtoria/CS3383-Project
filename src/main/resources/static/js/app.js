@@ -3,17 +3,44 @@
 import {planApi} from "./api.js";
 import {createAppState} from "./state.js";
 import {createPlansView} from "./views/plans.js";
+import {createBoardView} from "./views/board.js";
 
 document.addEventListener("DOMContentLoaded", () => {
     const state = createAppState();
 
-    const view = createPlansView({
+    let plansView;
+    let boardView;
+
+    function renderEverything() {
+        plansView.render();
+        boardView.render();
+    }
+
+    plansView = createPlansView({
         state,
         planApi,
         onStateChange: () => {
+            boardView.clearMessages();
+            boardView.render();
         }
     });
 
-    view.render();
-    view.refreshPlans();
+    boardView = createBoardView({
+        state,
+        planApi,
+        getPlanDetail: () => state.selectedPlanDetail,
+        updatePlanDetail: (detail) => {
+            state.selectedPlanDetail = detail;
+            renderEverything();
+        },
+        onPatchStart: () => {
+            plansView.render();
+        },
+        onPatchEnd: () => {
+            plansView.render();
+        }
+    });
+
+    renderEverything();
+    plansView.refreshPlans();
 });

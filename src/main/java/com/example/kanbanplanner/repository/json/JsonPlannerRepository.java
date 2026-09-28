@@ -8,6 +8,7 @@ import com.example.kanbanplanner.repository.PlannerRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +26,8 @@ public class JsonPlannerRepository implements PlannerRepository {
 
     private static final String DEFAULT_RUNTIME_PATH = "./data/planner-data.json";
     private static final String SEED_RESOURCE_PATH = "data/seed-data.json";
+    private static final int REPLACE_RETRY_ATTEMPTS = 6;
+    private static final long REPLACE_RETRY_DELAY_MILLIS = 30L;
 
     private final ObjectMapper objectMapper;
     private final Path runtimeDataPath;
@@ -186,12 +189,44 @@ public class JsonPlannerRepository implements PlannerRepository {
             Path tempFile = Files.createTempFile(parent, "planner-data-", ".tmp");
             try {
                 objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile.toFile(), document);
-                replaceFile(tempFile, runtimeDataPath);
+                replaceFileWithRetry(tempFile, runtimeDataPath);
             } finally {
                 Files.deleteIfExists(tempFile);
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write runtime data to: " + runtimeDataPath, exception);
+        }
+    }
+
+    private void replaceFileWithRetry(Path source, Path target) throws IOException {
+        AccessDeniedException lastAccessDenied = null;
+
+        for (int attempt = 1; attempt <= REPLACE_RETRY_ATTEMPTS; attempt++) {
+            try {
+                replaceFile(source, target);
+                return;
+            } catch (AccessDeniedException exception) {
+                lastAccessDenied = exception;
+                if (attempt == REPLACE_RETRY_ATTEMPTS) {
+                    throw exception;
+                }
+                sleepBeforeRetry(lastAccessDenied, attempt);
+            }
+        }
+
+        if (lastAccessDenied != null) {
+            throw lastAccessDenied;
+        }
+    }
+
+    private void sleepBeforeRetry(AccessDeniedException failure, int attempt) throws IOException {
+        try {
+            Thread.sleep(REPLACE_RETRY_DELAY_MILLIS * attempt);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            IOException wrapped = new IOException("Interrupted while retrying runtime data file replace", interruptedException);
+            wrapped.addSuppressed(failure);
+            throw wrapped;
         }
     }
 

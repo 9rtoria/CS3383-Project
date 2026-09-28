@@ -16,5 +16,6 @@ com\example\kanbanplanner\repository\json\JsonPlannerRepositoryTest.class
 com\example\kanbanplanner\controller\PlanControllerTest.class
 com\example\kanbanplanner\controller\HealthControllerTest.class
 com\example\kanbanplanner\domain\ChecklistItemTest.class
+com\example\kanbanplanner\repository\json\JsonPlannerRepositoryTest$2.class
 com\example\kanbanplanner\service\support\InMemoryPlannerRepository.class
 com\example\kanbanplanner\service\PlanServiceTest.class

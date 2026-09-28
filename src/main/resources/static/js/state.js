@@ -8,7 +8,11 @@ export function createAppState() {
         isLoadingPlans: false,
         isLoadingDetail: false,
         plansStatus: "",
-        mainError: ""
+        mainError: "",
+        boardGrouping: "bucket",
+        boardStatus: "",
+        boardError: "",
+        isPatchingTask: false
     };
 }
 
