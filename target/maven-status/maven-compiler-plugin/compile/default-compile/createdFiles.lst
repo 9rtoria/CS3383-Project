@@ -1,2 +1,10 @@
-com\example\kanbanplanner\controller\HealthController.class
+com\example\kanbanplanner\domain\Bucket.class
+com\example\kanbanplanner\domain\Priority.class
+com\example\kanbanplanner\domain\Progress.class
+com\example\kanbanplanner\repository\PlannerRepository.class
+com\example\kanbanplanner\domain\PlanSummary.class
+com\example\kanbanplanner\domain\ChecklistItem.class
 com\example\kanbanplanner\KanbanPlannerApplication.class
+com\example\kanbanplanner\controller\HealthController.class
+com\example\kanbanplanner\domain\Plan.class
+com\example\kanbanplanner\domain\Task.class

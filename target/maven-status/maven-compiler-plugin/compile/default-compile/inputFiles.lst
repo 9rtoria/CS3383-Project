@@ -1,2 +1,10 @@
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\controller\HealthController.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Bucket.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\ChecklistItem.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Plan.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\PlanSummary.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Priority.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Progress.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Task.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\KanbanPlannerApplication.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\PlannerRepository.java

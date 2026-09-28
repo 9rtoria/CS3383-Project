@@ -1,3 +1,10 @@
 GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
 kanban-planner,com.example.kanbanplanner.controller,HealthController,0,7,0,0,0,2,0,2,0,2
 kanban-planner,com.example.kanbanplanner,KanbanPlannerApplication,5,3,0,0,2,1,1,1,1,1
+kanban-planner,com.example.kanbanplanner.domain,PlanSummary,0,9,0,0,0,1,0,1,0,1
+kanban-planner,com.example.kanbanplanner.domain,Progress,3,61,0,4,1,11,1,5,1,3
+kanban-planner,com.example.kanbanplanner.domain,ChecklistItem,0,12,0,0,0,1,0,1,0,1
+kanban-planner,com.example.kanbanplanner.domain,Task,2,51,1,7,0,5,1,5,0,2
+kanban-planner,com.example.kanbanplanner.domain,Bucket,0,9,0,0,0,1,0,1,0,1
+kanban-planner,com.example.kanbanplanner.domain,Plan,0,29,0,4,0,4,0,3,0,1
+kanban-planner,com.example.kanbanplanner.domain,Priority,3,68,0,4,1,12,1,5,1,3
