@@ -1,3 +1,9 @@
 com\example\kanbanplanner\StaticResourceTest.class
+com\example\kanbanplanner\domain\ProgressTest.class
+com\example\kanbanplanner\domain\TaskTest.class
 com\example\kanbanplanner\KanbanPlannerApplicationTests.class
+com\example\kanbanplanner\domain\PlanTest.class
+com\example\kanbanplanner\repository\PlannerRepositoryContractTest.class
+com\example\kanbanplanner\domain\PriorityTest.class
 com\example\kanbanplanner\controller\HealthControllerTest.class
+com\example\kanbanplanner\domain\ChecklistItemTest.class
