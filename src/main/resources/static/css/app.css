@@ -19,17 +19,25 @@
     box-sizing: border-box;
 }
 
+html {
+    height: 100%;
+}
+
 body {
     margin: 0;
     min-height: 100vh;
+    height: 100%;
     font-family: "Trebuchet MS", "Segoe UI", sans-serif;
     color: var(--text-primary);
     background: var(--bg-page);
+    overflow: hidden;
 }
 
 .app-shell {
     display: grid;
+    height: 100vh;
     min-height: 100vh;
+    overflow: hidden;
     transition: grid-template-columns 0.2s ease;
 }
 
@@ -47,6 +55,7 @@ body {
     border-right: 1px solid rgba(231, 239, 246, 0.15);
     display: grid;
     grid-template-rows: auto 1fr;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -275,8 +284,11 @@ button:disabled {
 .main-panel {
     padding: 24px;
     display: grid;
-    align-content: start;
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: 14px;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .main-header {
@@ -389,6 +401,32 @@ button:disabled {
     border-radius: 14px;
     padding: 15px;
     box-shadow: var(--shadow-md);
+    min-height: 0;
+    min-width: 0;
+}
+
+.empty-state[hidden],
+.detail-card[hidden] {
+    display: none;
+}
+
+#board-section[hidden],
+#grid-section[hidden],
+#charts-section[hidden] {
+    display: none;
+}
+
+#no-plan-state {
+    overflow: auto;
+}
+
+#plan-detail {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 8px;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .empty-state h3,
@@ -426,7 +464,21 @@ button:disabled {
 .board-card,
 .grid-card,
 .charts-card {
-    margin-top: 8px;
+    margin-top: 0;
+}
+
+#board-section {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+#grid-section,
+#charts-section {
+    min-height: 0;
+    overflow: auto;
 }
 
 .charts-placeholder {
@@ -509,7 +561,8 @@ button:disabled {
     align-items: stretch;
     overflow-x: auto;
     overflow-y: hidden;
-    height: 60vh;
+    height: 100%;
+    min-height: 0;
     padding-bottom: 4px;
 }
 
@@ -827,10 +880,16 @@ button:disabled {
 }
 
 @media (max-width: 940px) {
+    body {
+        overflow: auto;
+    }
+
     .app-shell,
     .app-shell.sidebar-expanded,
     .app-shell.sidebar-collapsed {
         grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
     }
 
     .sidebar {
@@ -844,6 +903,24 @@ button:disabled {
 
     .main-panel {
         padding: 16px;
+        grid-template-rows: auto auto auto;
+        overflow: visible;
+    }
+
+    #no-plan-state,
+    #plan-detail,
+    #board-section,
+    #grid-section,
+    #charts-section {
+        overflow: visible;
+    }
+
+    #plan-detail {
+        grid-template-rows: auto auto;
+    }
+
+    #board-section {
+        grid-template-rows: auto auto auto auto;
     }
 
     .plan-title {
