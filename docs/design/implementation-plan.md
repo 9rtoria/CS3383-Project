@@ -409,7 +409,7 @@ These remain future extensions only.
 ## 12. Progress
 - Milestone 1 - Completed
 - Milestone 2 - Completed
-- Milestone 3 - Not started
+- Milestone 3 - Completed
 - Milestone 4 - Not started
 - Milestone 5 - Not started
 - Milestone 6 - Not started

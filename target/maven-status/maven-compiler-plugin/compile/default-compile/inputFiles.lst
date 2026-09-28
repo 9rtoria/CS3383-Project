@@ -7,4 +7,6 @@ C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Progress.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\domain\Task.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\KanbanPlannerApplication.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\json\JsonPlannerRepository.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\json\StorageDocument.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\PlannerRepository.java
