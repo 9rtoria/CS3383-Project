@@ -410,7 +410,7 @@ These remain future extensions only.
 - Milestone 1 - Completed
 - Milestone 2 - Completed
 - Milestone 3 - Completed
-- Milestone 4 - Not started
+- Milestone 4 - Completed
 - Milestone 5 - Not started
 - Milestone 6 - Not started
 - Milestone 7 - Not started
