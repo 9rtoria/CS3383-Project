@@ -36,12 +36,19 @@ class StaticResourceTest {
     }
 
     @Test
-    void indexHtmlIncludesBoardAndGridContainers() throws Exception {
+    void indexHtmlIncludesTabsBoardGridAndTaskDrawerContainers() throws Exception {
         mockMvc.perform(get("/index.html"))
                 .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"tab-board\"")))
+                .andExpect(content().string(containsString("id=\"tab-grid\"")))
+                .andExpect(content().string(containsString("id=\"tab-charts\"")))
                 .andExpect(content().string(containsString("id=\"board-columns\"")))
                 .andExpect(content().string(containsString("id=\"grid-section\"")))
-                .andExpect(content().string(containsString("id=\"grid-table\"")));
+                .andExpect(content().string(containsString("id=\"grid-table\"")))
+                .andExpect(content().string(containsString("id=\"task-drawer\"")))
+                .andExpect(content().string(containsString("id=\"task-details-form\"")))
+                .andExpect(content().string(containsString("id=\"show-create-plan-button\"")))
+                .andExpect(content().string(containsString("id=\"open-create-task-button\"")));
     }
 
     @Test

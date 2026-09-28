@@ -15,14 +15,22 @@ export function createBoardView(options) {
         planApi,
         getPlanDetail,
         updatePlanDetail,
+        onTaskSelect = () => {
+        },
+        onCreateTaskFromBoard = () => {
+        },
         onPatchStart = () => {
         },
         onPatchEnd = () => {
+        },
+        onNotice = () => {
         }
     } = options;
 
     const elements = {
+        section: document.getElementById("board-section"),
         groupingSwitcher: document.getElementById("board-grouping-switcher"),
+        addBucketButton: document.getElementById("board-add-bucket-button"),
         columns: document.getElementById("board-columns"),
         status: document.getElementById("board-status"),
         error: document.getElementById("board-error")
@@ -53,14 +61,28 @@ export function createBoardView(options) {
             }
 
             state.boardGrouping = target.value;
-            state.boardStatus = `Grouped by ${target.value}.`;
-            state.boardError = "";
+            clearMessages();
             render();
         });
+
+        if (elements.addBucketButton) {
+            elements.addBucketButton.addEventListener("click", async () => {
+                const proposed = window.prompt("Bucket name");
+                if (proposed == null) {
+                    return;
+                }
+                await createBucket(proposed);
+            });
+        }
     }
 
     function render() {
-        if (!elements.columns) {
+        if (!elements.section || !elements.columns) {
+            return;
+        }
+
+        elements.section.hidden = state.activeView !== "board";
+        if (elements.section.hidden) {
             return;
         }
 
@@ -69,15 +91,17 @@ export function createBoardView(options) {
         const planDetail = getPlanDetail();
         elements.columns.innerHTML = "";
 
+        if (elements.addBucketButton) {
+            elements.addBucketButton.hidden = state.boardGrouping !== "bucket";
+            elements.addBucketButton.disabled = state.isPatchingTask || !planDetail;
+        }
+
         if (!planDetail) {
             renderMessages();
             elements.columns.appendChild(renderPlaceholder("Select a plan to see board columns."));
             return;
         }
 
-        if (!state.boardStatus) {
-            state.boardStatus = `Drag tasks to update ${state.boardGrouping}.`;
-        }
         renderMessages();
 
         const tasks = [...planDetail.tasks].sort(compareTasksByDefaultOrder);
@@ -91,10 +115,6 @@ export function createBoardView(options) {
     }
 
     function syncGroupingInputs() {
-        if (!elements.groupingSwitcher) {
-            return;
-        }
-
         const inputs = elements.groupingSwitcher.querySelectorAll("input[name='board-grouping']");
         inputs.forEach((input) => {
             if (input instanceof HTMLInputElement) {
@@ -108,6 +128,7 @@ export function createBoardView(options) {
         return buckets.map((bucket) => ({
             id: bucket.id,
             label: bucket.name,
+            bucket: bucket,
             tasks: tasks.filter((task) => task.bucketId === bucket.id)
         }));
     }
@@ -127,12 +148,35 @@ export function createBoardView(options) {
         const header = document.createElement("header");
         header.className = "board-column-header";
 
+        const titleWrap = document.createElement("div");
+        titleWrap.className = "board-column-title-wrap";
+
         const title = document.createElement("h4");
         title.textContent = column.label;
+        titleWrap.appendChild(title);
+
+        if (state.boardGrouping === "bucket") {
+            titleWrap.appendChild(renderBucketMenuButton(column));
+        }
+
         const count = document.createElement("p");
         count.textContent = `${column.tasks.length} task${column.tasks.length === 1 ? "" : "s"}`;
-        header.appendChild(title);
+        header.appendChild(titleWrap);
         header.appendChild(count);
+
+        const addTaskButton = document.createElement("button");
+        addTaskButton.type = "button";
+        addTaskButton.className = "ghost-main small";
+        addTaskButton.textContent = "+";
+        addTaskButton.setAttribute("aria-label", `Add task in ${column.label}`);
+        addTaskButton.disabled = state.isPatchingTask;
+        addTaskButton.addEventListener("click", () => {
+            const initialDraft = state.boardGrouping === "bucket"
+                    ? {bucketId: column.id}
+                    : {progress: column.id};
+            onCreateTaskFromBoard(initialDraft);
+        });
+        titleWrap.appendChild(addTaskButton);
 
         const dropZone = document.createElement("div");
         dropZone.className = "board-drop-zone";
@@ -169,7 +213,7 @@ export function createBoardView(options) {
         if (column.tasks.length === 0) {
             const empty = document.createElement("p");
             empty.className = "board-empty";
-            empty.textContent = "No tasks in this column.";
+            empty.textContent = "No tasks.";
             dropZone.appendChild(empty);
         } else {
             column.tasks.forEach((task) => {
@@ -182,11 +226,122 @@ export function createBoardView(options) {
         return columnElement;
     }
 
+    function renderBucketMenuButton(column) {
+        const wrap = document.createElement("div");
+        wrap.className = "menu-wrap";
+
+        const menuButton = document.createElement("button");
+        menuButton.type = "button";
+        menuButton.className = "icon-button";
+        menuButton.textContent = "...";
+        menuButton.setAttribute("aria-label", `${column.label} menu`);
+
+        const menu = document.createElement("div");
+        menu.className = "menu";
+        menu.hidden = true;
+
+        const renameButton = document.createElement("button");
+        renameButton.type = "button";
+        renameButton.className = "menu-item";
+        renameButton.textContent = "Rename";
+        renameButton.addEventListener("click", async () => {
+            menu.hidden = true;
+            const proposed = window.prompt("Rename bucket", column.label);
+            if (proposed == null) {
+                return;
+            }
+            await renameBucket(column.id, proposed);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "menu-item danger-light";
+        deleteButton.textContent = "Delete";
+        deleteButton.addEventListener("click", async () => {
+            menu.hidden = true;
+            const confirmed = window.confirm(`Delete bucket \"${column.label}\"?`);
+            if (!confirmed) {
+                return;
+            }
+            await deleteBucket(column.id);
+        });
+
+        menuButton.addEventListener("click", () => {
+            menu.hidden = !menu.hidden;
+        });
+
+        menu.appendChild(renameButton);
+        menu.appendChild(deleteButton);
+        wrap.appendChild(menuButton);
+        wrap.appendChild(menu);
+        return wrap;
+    }
+
+    async function createBucket(name) {
+        if (!state.selectedPlanId) {
+            return;
+        }
+        try {
+            const created = await planApi.createBucket(state.selectedPlanId, name);
+            const planDetail = getPlanDetail();
+            if (!planDetail) {
+                return;
+            }
+            updatePlanDetail({
+                ...planDetail,
+                buckets: [...planDetail.buckets, created]
+            });
+            onNotice("Saved");
+        } catch (error) {
+            state.boardError = toMessage(error);
+            renderMessages();
+        }
+    }
+
+    async function renameBucket(bucketId, name) {
+        if (!state.selectedPlanId) {
+            return;
+        }
+        try {
+            const renamed = await planApi.renameBucket(state.selectedPlanId, bucketId, name);
+            const planDetail = getPlanDetail();
+            if (!planDetail) {
+                return;
+            }
+            updatePlanDetail({
+                ...planDetail,
+                buckets: planDetail.buckets.map((bucket) => bucket.id === renamed.id ? renamed : bucket)
+            });
+            onNotice("Saved");
+        } catch (error) {
+            state.boardError = toMessage(error);
+            renderMessages();
+        }
+    }
+
+    async function deleteBucket(bucketId) {
+        if (!state.selectedPlanId) {
+            return;
+        }
+        try {
+            await planApi.deleteBucket(state.selectedPlanId, bucketId);
+            const latest = await planApi.getPlan(state.selectedPlanId);
+            updatePlanDetail(latest);
+            onNotice("Saved");
+        } catch (error) {
+            state.boardError = toMessage(error);
+            renderMessages();
+        }
+    }
+
     function renderTaskCard(task) {
         const card = document.createElement("article");
         card.className = "task-card";
         card.draggable = !state.isPatchingTask;
         card.dataset.taskId = task.id;
+        if (state.selectedTaskId === task.id) {
+            card.classList.add("selected");
+        }
 
         card.addEventListener("dragstart", (event) => {
             if (state.isPatchingTask) {
@@ -201,13 +356,19 @@ export function createBoardView(options) {
                 event.dataTransfer.setData("text/plain", task.id);
             }
             state.boardError = "";
-            state.boardStatus = "Drag task to a new column to update it.";
             renderMessages();
         });
 
         card.addEventListener("dragend", () => {
             card.classList.remove("dragging");
             activeDragTaskId = null;
+        });
+
+        card.addEventListener("click", () => {
+            if (state.isPatchingTask) {
+                return;
+            }
+            onTaskSelect(task.id);
         });
 
         const title = document.createElement("strong");
@@ -254,16 +415,12 @@ export function createBoardView(options) {
                 ? draggedTask.bucketId === targetColumnId
                 : draggedTask.progress === targetColumnId;
         if (noChange) {
-            state.boardStatus = "Task remains in the same column.";
-            state.boardError = "";
-            renderMessages();
             return;
         }
 
         const previousDetail = clonePlanDetail(planDetail);
         const optimisticDetail = applyOptimisticUpdate(previousDetail, draggedTask.id, targetColumnId, state.boardGrouping);
         updatePlanDetail(optimisticDetail);
-        state.boardStatus = "Saving board update...";
         state.boardError = "";
         state.isPatchingTask = true;
         onPatchStart();
@@ -274,11 +431,9 @@ export function createBoardView(options) {
             const latestDetail = getPlanDetail();
             const merged = mergeUpdatedTask(latestDetail, updatedTask);
             updatePlanDetail(merged);
-            state.boardStatus = "Board update saved.";
-            state.boardError = "";
+            onNotice("Saved");
         } catch (error) {
             updatePlanDetail(previousDetail);
-            state.boardStatus = "";
             state.boardError = toMessage(error);
         } finally {
             state.isPatchingTask = false;
@@ -340,7 +495,7 @@ export function createBoardView(options) {
         if (error instanceof ApiError) {
             return error.message;
         }
-        return "Unexpected board update error. Please retry.";
+        return "Unexpected error. Please retry.";
     }
 
     function clearMessages() {

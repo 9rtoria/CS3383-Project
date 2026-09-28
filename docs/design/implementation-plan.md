@@ -120,17 +120,39 @@ Verification:
 Deliverables:
 - Task details panel from board card and grid row.
 - Create/edit/delete task and checklist interactions.
+- Frontend confirmation dialogs for deleting a task and deleting a checklist item.
 - No auto-progress change from checklist completion.
 
 Verification:
 - Manual test scenarios and backend tests confirming checklist rule.
+
+### Milestone 9.5 - UI layout refinement
+Deliverables:
+- Sidebar refinement: narrower/collapsible sidebar and `+ New plan` reveal flow.
+- Header tab shell: `Board`, `Grid`, `Charts` tabs with one active view at a time.
+- Task details converted to side drawer: hidden by default, opens from board/grid, closes on cancel/close/save.
+- Add-task entry points:
+  - `+ Add task` in plan header for default draft.
+  - `+` control on each board column for contextual draft prefill.
+- Board-centric bucket controls:
+  - `+ Add bucket` terminal column (bucket grouping only).
+  - Bucket column menu with Rename/Delete actions.
+- Plan header actions:
+  - Inline title rename interaction.
+  - Plan delete action in header menu with existing confirmation.
+- User messaging cleanup: remove developer-oriented status copy and use short temporary notices.
+- Bug hardening check: task details drawer always hydrates from saved task values (including bucket/progress).
+
+Verification:
+- Manual workflow checks for sidebar, tabs, drawer lifecycle, add-task entry points, and bucket controls.
+- Regression check that grid->details and board->details always show persisted task values.
 
 ### Milestone 10 - Charts view + theme toggle + hardening
 Deliverables:
 - Progress donut, tasks per bucket, tasks per priority, overdue count.
 - Chart aggregates computed in frontend from plan detail response.
 - Light theme default + dark mode toggle.
-- Deletion confirmation dialogs for plan, bucket, task, checklist item.
+- Final UX hardening pass (including any remaining deletion confirmation polish outside Milestone 9 scope).
 - Final pass on validation messages and UX polish.
 
 Verification:
@@ -390,6 +412,12 @@ Database migration path:
 - Deletion confirmation dialogs appear for plan, bucket, task, and checklist item.
 - Grid default sort comparator and board column card ordering produce matching order.
 - Grid sorting and chart aggregates are computed from plan detail API response data.
+- Milestone 9.5 UI checks:
+  - Sidebar collapse and `+ New plan` reveal flow work.
+  - Board/Grid/Charts tabs show one panel at a time.
+  - Task drawer opens/closes via all defined triggers.
+  - Board add-bucket and bucket menu actions preserve bucket business rules.
+  - Details drawer fields always match saved values when opened.
 
 ## 11. Non-goals in Current Build
 Do not implement detailed designs for:
@@ -415,5 +443,6 @@ These remain future extensions only.
 - Milestone 6 - Completed
 - Milestone 7 - Completed
 - Milestone 8 - Completed
-- Milestone 9 - Not started
+- Milestone 9 - Completed
+- Milestone 9.5 - Completed
 - Milestone 10 - Not started

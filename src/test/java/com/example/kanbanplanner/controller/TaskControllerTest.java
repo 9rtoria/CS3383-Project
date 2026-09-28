@@ -9,12 +9,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.kanbanplanner.support.TestRuntimeDataSupport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,16 +36,7 @@ class TaskControllerTest {
     @BeforeEach
     void resetRuntimeData() throws Exception {
         Path runtimePath = Path.of("target", "test-data", "task-controller", "planner-data.json");
-        Files.createDirectories(runtimePath.getParent());
-
-        try (InputStream inputStream = Thread.currentThread()
-                .getContextClassLoader()
-                .getResourceAsStream("data/seed-data.json")) {
-            if (inputStream == null) {
-                throw new IllegalStateException("Missing seed data resource");
-            }
-            Files.copy(inputStream, runtimePath, StandardCopyOption.REPLACE_EXISTING);
-        }
+        TestRuntimeDataSupport.resetRuntimeData(runtimePath);
     }
 
     @Test
@@ -389,6 +378,253 @@ class TaskControllerTest {
                         .content(putBody))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void putTaskUpdateTitleBoundariesEnforced() throws Exception {
+        String createBody = baseCreateBody("Boundary task", "item");
+        MvcResult createdResult = mockMvc.perform(post("/api/plans/pln_seed_001/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String taskId = readTree(createdResult).path("id").asText();
+
+        String zeroTitle = """
+                {
+                  "title": "   ",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": []
+                }
+                """;
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(zeroTitle))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("title"));
+
+        String tooLongTitle = """
+                {
+                  "title": "%s",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": []
+                }
+                """.formatted(repeat("x", 121));
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(tooLongTitle))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("title"));
+
+        String oneTitle = """
+                {
+                  "title": "A",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": []
+                }
+                """;
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(oneTitle))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("A"));
+
+        String maxTitle = """
+                {
+                  "title": "%s",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": []
+                }
+                """.formatted(repeat("m", 120));
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(maxTitle))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value(repeat("m", 120)));
+    }
+
+    @Test
+    void putTaskChecklistBoundariesAndCompletionRuleEnforced() throws Exception {
+        String createBody = """
+                {
+                  "title": "Checklist rule",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": [
+                    { "id": "chk_1", "text": "first", "completed": false },
+                    { "id": "chk_2", "text": "second", "completed": false }
+                  ]
+                }
+                """;
+
+        MvcResult createdResult = mockMvc.perform(post("/api/plans/pln_seed_001/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String taskId = readTree(createdResult).path("id").asText();
+
+        String zeroChecklist = """
+                {
+                  "title": "Checklist rule",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": [
+                    { "id": "chk_1", "text": "", "completed": true }
+                  ]
+                }
+                """;
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(zeroChecklist))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("checklist.text"));
+
+        String tooLongChecklist = """
+                {
+                  "title": "Checklist rule",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": [
+                    { "id": "chk_1", "text": "%s", "completed": true }
+                  ]
+                }
+                """.formatted(repeat("c", 121));
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(tooLongChecklist))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("checklist.text"));
+
+        String validChecklistAndAllCompleted = """
+                {
+                  "title": "Checklist rule",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "checklist": [
+                    { "id": "chk_1", "text": "Z", "completed": true },
+                    { "id": "chk_2", "text": "%s", "completed": true }
+                  ]
+                }
+                """.formatted(repeat("k", 120));
+
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validChecklistAndAllCompleted))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progress").value("Not started"))
+                .andExpect(jsonPath("$.checklist[0].completed").value(true))
+                .andExpect(jsonPath("$.checklist[1].completed").value(true))
+                .andExpect(jsonPath("$.checklist[1].text").value(repeat("k", 120)));
+    }
+
+    @Test
+    void putTaskChecklistEditsPersistAddAndRemove() throws Exception {
+        String createBody = """
+                {
+                  "title": "Checklist edits",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "In progress",
+                  "priority": "Important",
+                  "checklist": [
+                    { "id": "chk_keep", "text": "Keep", "completed": false },
+                    { "id": "chk_remove", "text": "Remove", "completed": false }
+                  ]
+                }
+                """;
+
+        MvcResult createdResult = mockMvc.perform(post("/api/plans/pln_seed_001/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String taskId = readTree(createdResult).path("id").asText();
+
+        String updateBody = """
+                {
+                  "title": "Checklist edits",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "In progress",
+                  "priority": "Important",
+                  "checklist": [
+                    { "id": "chk_keep", "text": "Keep updated", "completed": true },
+                    { "text": "New item", "completed": false }
+                  ]
+                }
+                """;
+
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checklist[0].id").value("chk_keep"))
+                .andExpect(jsonPath("$.checklist[0].text").value("Keep updated"))
+                .andExpect(jsonPath("$.checklist[0].completed").value(true))
+                .andExpect(jsonPath("$.checklist[1].id").isNotEmpty())
+                .andExpect(jsonPath("$.checklist[1].text").value("New item"));
+    }
+
+    @Test
+    void putTaskDateConsistencyAllowsSameDayAndRejectsStartAfterDue() throws Exception {
+        String createBody = baseCreateBody("Date update", "item");
+        MvcResult createdResult = mockMvc.perform(post("/api/plans/pln_seed_001/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String taskId = readTree(createdResult).path("id").asText();
+
+        String sameDayBody = """
+                {
+                  "title": "Date update",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "startDate": "2026-09-20",
+                  "dueDate": "2026-09-20",
+                  "checklist": []
+                }
+                """;
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(sameDayBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startDate").value("2026-09-20"))
+                .andExpect(jsonPath("$.dueDate").value("2026-09-20"));
+
+        String invalidRangeBody = """
+                {
+                  "title": "Date update",
+                  "bucketId": "bkt_seed_001",
+                  "progress": "Not started",
+                  "priority": "Medium",
+                  "startDate": "2026-09-21",
+                  "dueDate": "2026-09-20",
+                  "checklist": []
+                }
+                """;
+        mockMvc.perform(put("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidRangeBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("dueDate"));
     }
 
     @Test

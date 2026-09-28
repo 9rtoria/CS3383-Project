@@ -8,10 +8,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import com.example.kanbanplanner.support.TestRuntimeDataSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,16 +30,7 @@ class BucketControllerTest {
     @BeforeEach
     void resetRuntimeData() throws Exception {
         Path runtimePath = Path.of("target", "test-data", "bucket-controller", "planner-data.json");
-        Files.createDirectories(runtimePath.getParent());
-
-        try (InputStream inputStream = Thread.currentThread()
-                .getContextClassLoader()
-                .getResourceAsStream("data/seed-data.json")) {
-            if (inputStream == null) {
-                throw new IllegalStateException("Missing seed data resource");
-            }
-            Files.copy(inputStream, runtimePath, StandardCopyOption.REPLACE_EXISTING);
-        }
+        TestRuntimeDataSupport.resetRuntimeData(runtimePath);
     }
 
     @Test
