@@ -9,13 +9,13 @@
       "id" : "bkt_seed_003",
       "name" : "Done"
     }, {
-      "id" : "bkt_cdbc3828439e45db99352fc62e1fc210",
+      "id" : "bkt_e88792d252c04205bb3043e2c8ebfb57",
       "name" : "Uncategorized"
     } ],
     "tasks" : [ {
       "id" : "tsk_seed_001",
       "title" : "Explore starter data",
-      "bucketId" : "bkt_cdbc3828439e45db99352fc62e1fc210",
+      "bucketId" : "bkt_e88792d252c04205bb3043e2c8ebfb57",
       "progress" : "NOT_STARTED",
       "priority" : "MEDIUM",
       "startDate" : "2026-09-01",

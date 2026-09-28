@@ -1,5 +1,19 @@
 "use strict";
 
+import {planApi} from "./api.js";
+import {createAppState} from "./state.js";
+import {createPlansView} from "./views/plans.js";
+
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("Kanban Planner Milestone 1 loaded");
+    const state = createAppState();
+
+    const view = createPlansView({
+        state,
+        planApi,
+        onStateChange: () => {
+        }
+    });
+
+    view.render();
+    view.refreshPlans();
 });
