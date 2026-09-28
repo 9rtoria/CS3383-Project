@@ -12,7 +12,11 @@ export function createAppState() {
         boardGrouping: "bucket",
         boardStatus: "",
         boardError: "",
-        isPatchingTask: false
+        isPatchingTask: false,
+        gridSortKey: "dueDate",
+        gridSortDirection: "asc",
+        gridStatus: "",
+        gridError: ""
     };
 }
 

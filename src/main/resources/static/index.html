@@ -105,6 +105,33 @@
                 <p id="board-error" class="board-error" role="alert" aria-live="assertive"></p>
                 <div id="board-columns" class="board-columns" aria-label="Task board"></div>
             </section>
+
+            <section id="grid-section" class="detail-card grid-card" aria-label="Grid view">
+                <div class="grid-toolbar">
+                    <h3>Grid</h3>
+                    <p class="grid-hint">Sortable task table computed from plan detail data.</p>
+                </div>
+                <p id="grid-status" class="grid-status" role="status" aria-live="polite"></p>
+                <p id="grid-error" class="grid-error" role="alert" aria-live="assertive"></p>
+
+                <p id="grid-empty" class="grid-empty">Select a plan to view tasks in the grid.</p>
+
+                <div class="grid-table-wrap">
+                    <table id="grid-table" class="grid-table" hidden>
+                        <thead id="grid-headings">
+                        <tr>
+                            <th scope="col"><button type="button" class="grid-sort-button" data-sort-key="title">Title <span class="grid-sort-indicator" aria-hidden="true">&harr;</span></button></th>
+                            <th scope="col"><button type="button" class="grid-sort-button" data-sort-key="bucket">Bucket <span class="grid-sort-indicator" aria-hidden="true">&harr;</span></button></th>
+                            <th scope="col"><button type="button" class="grid-sort-button" data-sort-key="progress">Progress <span class="grid-sort-indicator" aria-hidden="true">&harr;</span></button></th>
+                            <th scope="col"><button type="button" class="grid-sort-button" data-sort-key="priority">Priority <span class="grid-sort-indicator" aria-hidden="true">&harr;</span></button></th>
+                            <th scope="col"><button type="button" class="grid-sort-button" data-sort-key="startDate">Start <span class="grid-sort-indicator" aria-hidden="true">&harr;</span></button></th>
+                            <th scope="col"><button type="button" class="grid-sort-button" data-sort-key="dueDate">Due <span class="grid-sort-indicator" aria-hidden="true">&harr;</span></button></th>
+                        </tr>
+                        </thead>
+                        <tbody id="grid-body"></tbody>
+                    </table>
+                </div>
+            </section>
         </section>
     </main>
 </div>

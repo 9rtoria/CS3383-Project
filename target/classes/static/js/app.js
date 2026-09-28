@@ -4,16 +4,19 @@ import {planApi} from "./api.js";
 import {createAppState} from "./state.js";
 import {createPlansView} from "./views/plans.js";
 import {createBoardView} from "./views/board.js";
+import {createGridView} from "./views/grid.js";
 
 document.addEventListener("DOMContentLoaded", () => {
     const state = createAppState();
 
     let plansView;
     let boardView;
+    let gridView;
 
     function renderEverything() {
         plansView.render();
         boardView.render();
+        gridView.render();
     }
 
     plansView = createPlansView({
@@ -21,7 +24,9 @@ document.addEventListener("DOMContentLoaded", () => {
         planApi,
         onStateChange: () => {
             boardView.clearMessages();
+            gridView.clearMessages();
             boardView.render();
+            gridView.render();
         }
     });
 
@@ -39,6 +44,11 @@ document.addEventListener("DOMContentLoaded", () => {
         onPatchEnd: () => {
             plansView.render();
         }
+    });
+
+    gridView = createGridView({
+        state,
+        getPlanDetail: () => state.selectedPlanDetail
     });
 
     renderEverything();
