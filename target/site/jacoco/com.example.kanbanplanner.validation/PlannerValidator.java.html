@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PlannerValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">kanban-planner</a> &gt; <a href="index.source.html" class="el_package">com.example.kanbanplanner.validation</a> &gt; <span class="el_source">PlannerValidator.java</span></div><h1>PlannerValidator.java</h1><pre class="source lang-java linenums">package com.example.kanbanplanner.validation;
+
+import com.example.kanbanplanner.domain.Bucket;
+import com.example.kanbanplanner.domain.Plan;
+import com.example.kanbanplanner.domain.Priority;
+import com.example.kanbanplanner.domain.Progress;
+import java.time.LocalDate;
+import java.util.List;
+import org.springframework.stereotype.Component;
+
+@Component
+<span class="fc" id="L12">public class PlannerValidator {</span>
+
+    public static final int PLAN_NAME_MAX_LENGTH = 60;
+    public static final int BUCKET_NAME_MAX_LENGTH = 60;
+    public static final int TASK_TITLE_MAX_LENGTH = 120;
+    public static final int CHECKLIST_ITEM_TEXT_MAX_LENGTH = 120;
+
+    public String validatePlanName(String rawName) {
+<span class="fc" id="L20">        return validateTrimmedLength(&quot;name&quot;, rawName, PLAN_NAME_MAX_LENGTH);</span>
+    }
+
+    public String validateBucketName(String rawName) {
+<span class="fc" id="L24">        return validateTrimmedLength(&quot;name&quot;, rawName, BUCKET_NAME_MAX_LENGTH);</span>
+    }
+
+    public String validateTaskTitle(String rawTitle) {
+<span class="fc" id="L28">        return validateTrimmedLength(&quot;title&quot;, rawTitle, TASK_TITLE_MAX_LENGTH);</span>
+    }
+
+    public String validateChecklistItemText(String rawText) {
+<span class="fc" id="L32">        return validateTrimmedLength(&quot;checklist.text&quot;, rawText, CHECKLIST_ITEM_TEXT_MAX_LENGTH);</span>
+    }
+
+    public String validateRequiredBucketId(String rawBucketId) {
+<span class="pc bpc" id="L36" title="1 of 2 branches missed.">        String bucketId = rawBucketId == null ? &quot;&quot; : rawBucketId.trim();</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">        if (bucketId.isEmpty()) {</span>
+<span class="nc" id="L38">            throw ValidationErrors.single(&quot;bucketId&quot;, &quot;is required&quot;);</span>
+        }
+<span class="fc" id="L40">        return bucketId;</span>
+    }
+
+    public Progress requireProgress(Progress progress) {
+<span class="fc bfc" id="L44" title="All 2 branches covered.">        if (progress == null) {</span>
+<span class="fc" id="L45">            throw ValidationErrors.single(&quot;progress&quot;, &quot;is required&quot;);</span>
+        }
+<span class="fc" id="L47">        return progress;</span>
+    }
+
+    public Priority requirePriority(Priority priority) {
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        if (priority == null) {</span>
+<span class="fc" id="L52">            throw ValidationErrors.single(&quot;priority&quot;, &quot;is required&quot;);</span>
+        }
+<span class="fc" id="L54">        return priority;</span>
+    }
+
+    public Progress parseProgressLabel(String label) {
+        try {
+<span class="nc" id="L59">            return Progress.fromLabel(label);</span>
+<span class="fc" id="L60">        } catch (RuntimeException exception) {</span>
+<span class="fc" id="L61">            throw ValidationErrors.single(&quot;progress&quot;, &quot;must be one of: Not started, In progress, Completed&quot;);</span>
+        }
+    }
+
+    public Priority parsePriorityLabel(String label) {
+        try {
+<span class="nc" id="L67">            return Priority.fromLabel(label);</span>
+<span class="fc" id="L68">        } catch (RuntimeException exception) {</span>
+<span class="fc" id="L69">            throw ValidationErrors.single(&quot;priority&quot;, &quot;must be one of: Urgent, Important, Medium, Low&quot;);</span>
+        }
+    }
+
+    public void validateDateConsistency(LocalDate startDate, LocalDate dueDate) {
+<span class="pc bpc" id="L74" title="1 of 6 branches missed.">        if (startDate != null &amp;&amp; dueDate != null &amp;&amp; startDate.isAfter(dueDate)) {</span>
+<span class="fc" id="L75">            throw ValidationErrors.single(&quot;dueDate&quot;, &quot;must be on or after startDate&quot;);</span>
+        }
+<span class="fc" id="L77">    }</span>
+
+    public void validateBucketNameUnique(Plan plan, String bucketName, String excludedBucketId) {
+<span class="pc bpc" id="L80" title="1 of 2 branches missed.">        for (Bucket bucket : plan.buckets()) {</span>
+<span class="pc bpc" id="L81" title="3 of 4 branches missed.">            if (excludedBucketId != null &amp;&amp; bucket.id().equals(excludedBucketId)) {</span>
+<span class="nc" id="L82">                continue;</span>
+            }
+<span class="pc bpc" id="L84" title="2 of 4 branches missed.">            if (bucket.name() != null &amp;&amp; bucket.name().trim().equalsIgnoreCase(bucketName)) {</span>
+<span class="fc" id="L85">                throw ValidationErrors.single(&quot;name&quot;, &quot;must be unique within the plan&quot;);</span>
+            }
+<span class="nc" id="L87">        }</span>
+<span class="nc" id="L88">    }</span>
+
+    public void requireBucketExists(Plan plan, String bucketId) {
+<span class="fc" id="L91">        boolean exists = plan.buckets().stream().anyMatch(bucket -&gt; bucket.id().equals(bucketId));</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (!exists) {</span>
+<span class="fc" id="L93">            throw ValidationErrors.single(&quot;bucketId&quot;, &quot;must reference an existing bucket in the plan&quot;);</span>
+        }
+<span class="fc" id="L95">    }</span>
+
+    private String validateTrimmedLength(String field, String rawValue, int maxLength) {
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        String value = rawValue == null ? &quot;&quot; : rawValue.trim();</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (value.isEmpty()) {</span>
+<span class="fc" id="L100">            throw ValidationErrors.single(field, &quot;is required&quot;);</span>
+        }
+<span class="fc bfc" id="L102" title="All 2 branches covered.">        if (value.length() &gt; maxLength) {</span>
+<span class="fc" id="L103">            throw ValidationErrors.single(field, &quot;must be between 1 and &quot; + maxLength + &quot; characters&quot;);</span>
+        }
+<span class="fc" id="L105">        return value;</span>
+    }
+
+    private static final class ValidationErrors {
+        private ValidationErrors() {
+        }
+
+        private static ValidationException single(String field, String reason) {
+<span class="fc" id="L113">            return new ValidationException(&quot;Validation failed&quot;, List.of(new ValidationDetail(field, reason)));</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

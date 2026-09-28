@@ -10,3 +10,11 @@ C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\json\JsonPlannerRepository.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\json\StorageDocument.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\repository\PlannerRepository.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\service\BucketService.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\service\IdGenerator.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\service\NotFoundException.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\service\PlanService.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\service\TaskService.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\validation\PlannerValidator.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\validation\ValidationDetail.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\main\java\com\example\kanbanplanner\validation\ValidationException.java

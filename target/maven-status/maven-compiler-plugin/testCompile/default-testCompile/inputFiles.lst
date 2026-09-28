@@ -7,4 +7,10 @@ C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\KanbanPlannerApplicationTests.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\repository\json\JsonPlannerRepositoryTest.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\repository\PlannerRepositoryContractTest.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\service\BucketServiceTest.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\service\PlanServiceTest.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\service\support\InMemoryPlannerRepository.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\service\TaskServiceTest.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\service\TestIdGenerator.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\StaticResourceTest.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project\src\test\java\com\example\kanbanplanner\validation\PlannerValidatorTest.java
