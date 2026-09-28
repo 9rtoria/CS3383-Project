@@ -421,9 +421,10 @@ button:disabled {
 }
 
 #plan-detail {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 8px;
+    height: 100%;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
@@ -465,11 +466,14 @@ button:disabled {
 .grid-card,
 .charts-card {
     margin-top: 0;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 #board-section {
-    display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
@@ -558,12 +562,14 @@ button:disabled {
 .board-columns {
     margin-top: 6px;
     display: flex;
+    flex: 1 1 auto;
     flex-wrap: nowrap;
     gap: 12px;
     align-items: stretch;
+    align-self: stretch;
     overflow-x: auto;
     overflow-y: hidden;
-    height: 100%;
+    height: auto;
     min-height: 0;
     padding-bottom: 4px;
 }
@@ -574,6 +580,7 @@ button:disabled {
     background: var(--bg-soft);
     flex: 0 0 340px;
     width: 340px;
+    align-self: stretch;
     height: 100%;
     min-height: 0;
     display: grid;
@@ -918,11 +925,11 @@ button:disabled {
     }
 
     #plan-detail {
-        grid-template-rows: auto auto;
+        height: auto;
     }
 
     #board-section {
-        grid-template-rows: auto auto auto auto;
+        height: auto;
     }
 
     .plan-title {
