@@ -7,10 +7,88 @@
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<main>
-    <h1>Kanban Planner</h1>
-    <p>Milestone 1 bootstrap is running.</p>
-</main>
-<script src="/js/app.js"></script>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand-block">
+            <p class="eyebrow">Offline Workspace</p>
+            <h1>Kanban Planner</h1>
+            <p class="brand-copy">Plan-centric shell for Milestone 6.</p>
+        </div>
+
+        <section class="panel">
+            <div class="panel-header">
+                <h2>Plans</h2>
+                <button id="reload-plans-button" type="button" class="ghost">Reload</button>
+            </div>
+            <p id="plans-status" class="status" role="status" aria-live="polite"></p>
+            <ul id="plan-list" class="plan-list" aria-label="Plans"></ul>
+        </section>
+
+        <form id="create-plan-form" class="stacked-form" novalidate>
+            <label for="create-plan-name">Create plan</label>
+            <input
+                    id="create-plan-name"
+                    name="name"
+                    type="text"
+                    maxlength="60"
+                    autocomplete="off"
+                    placeholder="Enter a plan name"
+                    required>
+            <button id="create-plan-submit" type="submit">Add plan</button>
+            <p id="create-plan-error" class="form-error" role="alert" aria-live="polite"></p>
+        </form>
+    </aside>
+
+    <main class="main-panel">
+        <header class="main-header">
+            <div>
+                <p class="eyebrow">Plan Workspace</p>
+                <h2 id="selected-plan-heading">No plan selected</h2>
+            </div>
+            <p id="selected-plan-meta" class="meta"></p>
+        </header>
+
+        <p id="main-error" class="banner-error" role="alert" aria-live="assertive"></p>
+
+        <section id="no-plan-state" class="empty-state">
+            <h3>Create your first plan</h3>
+            <p>Use the sidebar form to create a plan, then select it to view and rename it.</p>
+        </section>
+
+        <section id="plan-detail" hidden>
+            <article class="detail-card">
+                <h3>Plan settings</h3>
+                <form id="rename-plan-form" class="stacked-form" novalidate>
+                    <label for="rename-plan-name">Plan name</label>
+                    <input
+                            id="rename-plan-name"
+                            name="name"
+                            type="text"
+                            maxlength="60"
+                            autocomplete="off"
+                            required>
+                    <div class="inline-actions">
+                        <button id="rename-plan-submit" type="submit">Save name</button>
+                        <button id="delete-plan-button" class="danger" type="button">Delete plan</button>
+                    </div>
+                    <p id="rename-plan-error" class="form-error" role="alert" aria-live="polite"></p>
+                </form>
+            </article>
+
+            <section class="detail-grid" aria-label="Selected plan details">
+                <article class="detail-card">
+                    <h3>Buckets</h3>
+                    <ul id="bucket-list" class="info-list"></ul>
+                </article>
+                <article class="detail-card">
+                    <h3>Tasks preview</h3>
+                    <ul id="task-preview-list" class="info-list"></ul>
+                </article>
+            </section>
+        </section>
+    </main>
+</div>
+
+<script type="module" src="/js/app.js"></script>
 </body>
 </html>
