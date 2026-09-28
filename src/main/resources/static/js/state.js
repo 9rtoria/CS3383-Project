@@ -5,6 +5,10 @@ export function createAppState() {
         plans: [],
         selectedPlanId: null,
         selectedPlanDetail: null,
+        activeView: "board",
+        isSidebarCollapsed: true,
+        isCreatePlanFormVisible: false,
+        isPlanTitleEditing: false,
         isLoadingPlans: false,
         isLoadingDetail: false,
         plansStatus: "",
@@ -16,7 +20,13 @@ export function createAppState() {
         gridSortKey: "dueDate",
         gridSortDirection: "asc",
         gridStatus: "",
-        gridError: ""
+        gridError: "",
+        selectedTaskId: null,
+        taskDetailsMode: "view",
+        taskDetailsStatus: "",
+        taskDetailsError: "",
+        isSavingTask: false,
+        taskDrawerOpen: false
     };
 }
 

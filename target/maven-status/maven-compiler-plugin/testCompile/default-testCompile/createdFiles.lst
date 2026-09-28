@@ -10,6 +10,7 @@ com\example\kanbanplanner\repository\PlannerRepositoryContractTest.class
 com\example\kanbanplanner\service\BucketServiceTest.class
 com\example\kanbanplanner\domain\PriorityTest.class
 com\example\kanbanplanner\validation\PlannerValidatorTest.class
+com\example\kanbanplanner\support\TestRuntimeDataSupport.class
 com\example\kanbanplanner\service\TaskServiceTest.class
 com\example\kanbanplanner\KanbanPlannerApplicationTests.class
 com\example\kanbanplanner\repository\json\JsonPlannerRepositoryTest.class

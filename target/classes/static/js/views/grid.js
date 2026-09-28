@@ -14,7 +14,9 @@ const COLUMNS = [
 export function createGridView(options) {
     const {
         state,
-        getPlanDetail
+        getPlanDetail,
+        onTaskSelect = () => {
+        }
     } = options;
 
     const elements = {
@@ -67,16 +69,17 @@ export function createGridView(options) {
             state.gridSortKey = key;
             state.gridSortDirection = "asc";
         }
-
-        const directionLabel = state.gridSortDirection === "asc" ? "ascending" : "descending";
-        const column = COLUMNS.find((item) => item.key === state.gridSortKey);
-        const label = column ? column.label : state.gridSortKey;
-        state.gridStatus = `Sorted by ${label} (${directionLabel}).`;
+        state.gridStatus = "";
         state.gridError = "";
     }
 
     function render() {
         if (!elements.section || !elements.table || !elements.body) {
+            return;
+        }
+
+        elements.section.hidden = state.activeView !== "grid";
+        if (elements.section.hidden) {
             return;
         }
 
@@ -97,20 +100,12 @@ export function createGridView(options) {
             bucketNameById
         });
 
-        if (!state.gridStatus) {
-            state.gridStatus = "Grid ready.";
-        }
-
         renderRows(sortedTasks, bucketNameById);
         elements.status.textContent = state.gridStatus;
         elements.error.textContent = state.gridError;
     }
 
     function renderHeaders() {
-        if (!elements.headings) {
-            return;
-        }
-
         const headingButtons = elements.headings.querySelectorAll("button[data-sort-key]");
         headingButtons.forEach((button) => {
             const key = button.dataset.sortKey;
@@ -156,6 +151,23 @@ export function createGridView(options) {
 
         tasks.forEach((task) => {
             const row = document.createElement("tr");
+            row.className = "grid-row";
+            row.tabIndex = 0;
+            row.dataset.taskId = task.id;
+            if (state.selectedTaskId === task.id) {
+                row.classList.add("selected");
+            }
+
+            row.addEventListener("click", () => {
+                onTaskSelect(task.id);
+            });
+
+            row.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onTaskSelect(task.id);
+                }
+            });
 
             row.appendChild(cell(task.title));
             row.appendChild(cell(bucketNameById[task.bucketId] || "-"));

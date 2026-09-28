@@ -7,110 +7,114 @@
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<div class="app-shell">
-    <aside class="sidebar">
-        <div class="brand-block">
-            <p class="eyebrow">Offline Workspace</p>
-            <h1>Kanban Planner</h1>
-            <p class="brand-copy">Plan-centric shell for Milestone 6.</p>
+<div id="app-shell" class="app-shell sidebar-collapsed">
+    <aside id="sidebar" class="sidebar" aria-label="Plans sidebar">
+        <div class="sidebar-top">
+            <button
+                    id="sidebar-toggle-button"
+                    type="button"
+                    class="ghost sidebar-toggle"
+                    aria-expanded="false"
+                    aria-controls="sidebar-content"
+                    aria-label="Expand sidebar"
+                    title="Expand sidebar">☰</button>
         </div>
 
-        <section class="panel">
-            <div class="panel-header">
-                <h2>Plans</h2>
-                <button id="reload-plans-button" type="button" class="ghost">Reload</button>
+        <div id="sidebar-content" class="sidebar-content">
+            <div class="brand-block">
+                <p class="eyebrow">Offline Workspace</p>
+                <h1>Kanban Planner</h1>
             </div>
-            <p id="plans-status" class="status" role="status" aria-live="polite"></p>
-            <ul id="plan-list" class="plan-list" aria-label="Plans"></ul>
-        </section>
 
-        <form id="create-plan-form" class="stacked-form" novalidate>
-            <label for="create-plan-name">Create plan</label>
-            <input
-                    id="create-plan-name"
-                    name="name"
-                    type="text"
-                    maxlength="60"
-                    autocomplete="off"
-                    placeholder="Enter a plan name"
-                    required>
-            <button id="create-plan-submit" type="submit">Add plan</button>
-            <p id="create-plan-error" class="form-error" role="alert" aria-live="polite"></p>
-        </form>
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Plans</h2>
+                    <button id="show-create-plan-button" type="button" class="ghost">+ New plan</button>
+                </div>
+
+                <form id="create-plan-form" class="stacked-form" hidden novalidate>
+                    <label for="create-plan-name">Plan name</label>
+                    <input
+                            id="create-plan-name"
+                            name="name"
+                            type="text"
+                            maxlength="60"
+                            autocomplete="off"
+                            placeholder="Enter a plan name"
+                            required>
+                    <div class="inline-actions">
+                        <button id="create-plan-submit" type="submit">Create</button>
+                        <button id="cancel-create-plan-button" type="button" class="ghost">Cancel</button>
+                    </div>
+                    <p id="create-plan-error" class="form-error" role="alert" aria-live="polite"></p>
+                </form>
+
+                <p id="plans-status" class="status" role="status" aria-live="polite"></p>
+                <ul id="plan-list" class="plan-list" aria-label="Plans"></ul>
+            </section>
+        </div>
     </aside>
 
     <main class="main-panel">
         <header class="main-header">
-            <div>
+            <div class="main-header-left">
                 <p class="eyebrow">Plan Workspace</p>
-                <h2 id="selected-plan-heading">No plan selected</h2>
+                <div class="plan-title-row">
+                    <h2 id="selected-plan-heading" class="plan-title" tabindex="0">No plan selected</h2>
+                    <input id="selected-plan-heading-input" type="text" maxlength="60" hidden>
+                    <div class="menu-wrap" id="plan-menu-wrap" hidden>
+                        <button id="plan-menu-button" type="button" class="icon-button" aria-label="Plan menu">...</button>
+                        <div id="plan-menu" class="menu" hidden>
+                            <button id="delete-plan-button" type="button" class="menu-item danger-light">Delete plan</button>
+                        </div>
+                    </div>
+                </div>
+                <p id="selected-plan-meta" class="meta"></p>
             </div>
-            <p id="selected-plan-meta" class="meta"></p>
+
+            <div class="main-header-right">
+                <button id="open-create-task-button" type="button">+ Add task</button>
+            </div>
         </header>
 
         <p id="main-error" class="banner-error" role="alert" aria-live="assertive"></p>
 
         <section id="no-plan-state" class="empty-state">
             <h3>Create your first plan</h3>
-            <p>Use the sidebar form to create a plan, then select it to view and rename it.</p>
+            <p>Use the sidebar to create a plan, then select it to begin.</p>
         </section>
 
         <section id="plan-detail" hidden>
-            <article class="detail-card">
-                <h3>Plan settings</h3>
-                <form id="rename-plan-form" class="stacked-form" novalidate>
-                    <label for="rename-plan-name">Plan name</label>
-                    <input
-                            id="rename-plan-name"
-                            name="name"
-                            type="text"
-                            maxlength="60"
-                            autocomplete="off"
-                            required>
-                    <div class="inline-actions">
-                        <button id="rename-plan-submit" type="submit">Save name</button>
-                        <button id="delete-plan-button" class="danger" type="button">Delete plan</button>
-                    </div>
-                    <p id="rename-plan-error" class="form-error" role="alert" aria-live="polite"></p>
-                </form>
-            </article>
+            <div class="view-tabs" role="tablist" aria-label="Views">
+                <button id="tab-board" class="view-tab active" type="button" role="tab" aria-selected="true" data-view="board">Board</button>
+                <button id="tab-grid" class="view-tab" type="button" role="tab" aria-selected="false" data-view="grid">Grid</button>
+                <button id="tab-charts" class="view-tab" type="button" role="tab" aria-selected="false" data-view="charts">Charts</button>
+            </div>
 
-            <section class="detail-grid" aria-label="Selected plan details">
-                <article class="detail-card">
-                    <h3>Buckets</h3>
-                    <ul id="bucket-list" class="info-list"></ul>
-                </article>
-                <article class="detail-card">
-                    <h3>Tasks preview</h3>
-                    <ul id="task-preview-list" class="info-list"></ul>
-                </article>
-            </section>
-
-            <section class="detail-card board-card" aria-label="Board view">
+            <section id="board-section" class="detail-card board-card" aria-label="Board view">
                 <div class="board-toolbar">
                     <h3>Board</h3>
-                    <fieldset id="board-grouping-switcher" class="board-grouping">
-                        <legend>Group by</legend>
-                        <label>
-                            <input type="radio" name="board-grouping" value="bucket" checked>
-                            Bucket
-                        </label>
-                        <label>
-                            <input type="radio" name="board-grouping" value="progress">
-                            Progress
-                        </label>
-                    </fieldset>
+                    <div class="board-toolbar-controls">
+                        <button id="board-add-bucket-button" type="button" class="ghost-main" hidden>+ Add bucket</button>
+                        <fieldset id="board-grouping-switcher" class="board-grouping">
+                            <legend>Group by</legend>
+                            <label>
+                                <input type="radio" name="board-grouping" value="bucket" checked>
+                                Bucket
+                            </label>
+                            <label>
+                                <input type="radio" name="board-grouping" value="progress">
+                                Progress
+                            </label>
+                        </fieldset>
+                    </div>
                 </div>
                 <p id="board-status" class="board-status" role="status" aria-live="polite"></p>
                 <p id="board-error" class="board-error" role="alert" aria-live="assertive"></p>
                 <div id="board-columns" class="board-columns" aria-label="Task board"></div>
             </section>
 
-            <section id="grid-section" class="detail-card grid-card" aria-label="Grid view">
-                <div class="grid-toolbar">
-                    <h3>Grid</h3>
-                    <p class="grid-hint">Sortable task table computed from plan detail data.</p>
-                </div>
+            <section id="grid-section" class="detail-card grid-card" aria-label="Grid view" hidden>
                 <p id="grid-status" class="grid-status" role="status" aria-live="polite"></p>
                 <p id="grid-error" class="grid-error" role="alert" aria-live="assertive"></p>
 
@@ -132,9 +136,100 @@
                     </table>
                 </div>
             </section>
+
+            <section id="charts-section" class="detail-card charts-card" aria-label="Charts view" hidden>
+                <h3>Charts</h3>
+                <p class="charts-placeholder">Charts arrive in Milestone 10.</p>
+            </section>
         </section>
     </main>
 </div>
+
+<aside id="task-drawer" class="task-drawer" aria-label="Task details drawer" hidden>
+    <div id="task-drawer-backdrop" class="task-drawer-backdrop"></div>
+    <section class="task-drawer-panel">
+        <div class="task-drawer-header">
+            <h3>Task details</h3>
+            <button id="task-drawer-close-button" type="button" class="icon-button" aria-label="Close task details">X</button>
+        </div>
+
+        <p id="task-details-status" class="task-details-status" role="status" aria-live="polite"></p>
+        <p id="task-details-error" class="task-details-error" role="alert" aria-live="assertive"></p>
+
+        <p id="task-details-empty" class="task-details-empty">
+            Select a task to edit details.
+        </p>
+
+        <form id="task-details-form" class="stacked-form task-form" hidden novalidate>
+            <label for="task-title-input">Title</label>
+            <input
+                    id="task-title-input"
+                    name="title"
+                    type="text"
+                    maxlength="120"
+                    autocomplete="off"
+                    required>
+
+            <div class="task-two-column">
+                <div class="task-field-group">
+                    <label for="task-bucket-select">Bucket</label>
+                    <select id="task-bucket-select" name="bucketId" required></select>
+                </div>
+                <div class="task-field-group">
+                    <label for="task-progress-select">Progress</label>
+                    <select id="task-progress-select" name="progress" required>
+                        <option value="Not started">Not started</option>
+                        <option value="In progress">In progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="task-two-column">
+                <div class="task-field-group">
+                    <label for="task-priority-select">Priority</label>
+                    <select id="task-priority-select" name="priority" required>
+                        <option value="Urgent">Urgent</option>
+                        <option value="Important">Important</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+                <div class="task-field-group"></div>
+            </div>
+
+            <div class="task-two-column">
+                <div class="task-field-group">
+                    <label for="task-start-date-input">Start date</label>
+                    <input id="task-start-date-input" name="startDate" type="date">
+                </div>
+                <div class="task-field-group">
+                    <label for="task-due-date-input">Due date</label>
+                    <input id="task-due-date-input" name="dueDate" type="date">
+                </div>
+            </div>
+
+            <label for="task-notes-input">Notes</label>
+            <textarea id="task-notes-input" name="notes" rows="4" placeholder="Optional notes"></textarea>
+
+            <div class="task-checklist-header">
+                <h4>Checklist</h4>
+                <button id="task-add-checklist-item-button" type="button" class="ghost-main">Add item</button>
+            </div>
+            <div id="task-checklist-items" class="checklist-items"></div>
+
+            <p id="task-form-error" class="form-error" role="alert" aria-live="polite"></p>
+
+            <div class="inline-actions">
+                <button id="task-save-button" type="submit">Save task</button>
+                <button id="task-cancel-button" type="button" class="ghost-main">Cancel</button>
+                <button id="task-delete-button" type="button" class="danger">Delete task</button>
+            </div>
+        </form>
+    </section>
+</aside>
+
+<div id="notice-host" class="notice-host" aria-live="polite"></div>
 
 <script type="module" src="/js/app.js"></script>
 </body>

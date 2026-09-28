@@ -7,29 +7,31 @@ export function createPlansView(options) {
     const {
         state,
         planApi,
-        onStateChange
+        onStateChange,
+        onNotice = () => {
+        }
     } = options;
 
     const elements = {
+        appShell: document.getElementById("app-shell"),
+        sidebarToggle: document.getElementById("sidebar-toggle-button"),
         planList: document.getElementById("plan-list"),
         plansStatus: document.getElementById("plans-status"),
-        reloadButton: document.getElementById("reload-plans-button"),
+        showCreatePlanButton: document.getElementById("show-create-plan-button"),
+        cancelCreatePlanButton: document.getElementById("cancel-create-plan-button"),
         createForm: document.getElementById("create-plan-form"),
         createInput: document.getElementById("create-plan-name"),
         createError: document.getElementById("create-plan-error"),
         selectedPlanHeading: document.getElementById("selected-plan-heading"),
+        selectedPlanHeadingInput: document.getElementById("selected-plan-heading-input"),
         selectedPlanMeta: document.getElementById("selected-plan-meta"),
+        planMenuWrap: document.getElementById("plan-menu-wrap"),
+        planMenuButton: document.getElementById("plan-menu-button"),
+        planMenu: document.getElementById("plan-menu"),
+        deletePlanButton: document.getElementById("delete-plan-button"),
         mainError: document.getElementById("main-error"),
         noPlanState: document.getElementById("no-plan-state"),
-        planDetail: document.getElementById("plan-detail"),
-        renameForm: document.getElementById("rename-plan-form"),
-        renameInput: document.getElementById("rename-plan-name"),
-        renameError: document.getElementById("rename-plan-error"),
-        deleteButton: document.getElementById("delete-plan-button"),
-        bucketList: document.getElementById("bucket-list"),
-        taskPreviewList: document.getElementById("task-preview-list"),
-        createSubmit: document.getElementById("create-plan-submit"),
-        renameSubmit: document.getElementById("rename-plan-submit")
+        planDetail: document.getElementById("plan-detail")
     };
 
     wireEvents();
@@ -40,91 +42,170 @@ export function createPlansView(options) {
     };
 
     function wireEvents() {
-        elements.reloadButton.addEventListener("click", () => {
-            refreshPlans();
+        elements.sidebarToggle.addEventListener("click", () => {
+            state.isSidebarCollapsed = !state.isSidebarCollapsed;
+            renderSidebarState();
+        });
+
+        elements.showCreatePlanButton.addEventListener("click", () => {
+            state.isCreatePlanFormVisible = true;
+            renderCreatePlanForm();
+            elements.createInput.focus();
+        });
+
+        elements.cancelCreatePlanButton.addEventListener("click", () => {
+            state.isCreatePlanFormVisible = false;
+            elements.createForm.reset();
+            elements.createError.textContent = "";
+            renderCreatePlanForm();
         });
 
         elements.createForm.addEventListener("submit", async (event) => {
             event.preventDefault();
-            clearFormErrors();
-
+            elements.createError.textContent = "";
             const proposedName = elements.createInput.value;
-            disableDuringMutation(true);
+            disableMutations(true);
             try {
                 const createdPlan = await planApi.createPlan(proposedName);
+                state.isCreatePlanFormVisible = false;
+                elements.createForm.reset();
                 await refreshPlans({
                     preferredPlanId: createdPlan.id,
-                    successMessage: `Created plan: ${createdPlan.name}`
+                    successMessage: "Saved"
                 });
-                elements.createForm.reset();
+                onNotice("Saved");
             } catch (error) {
-                handleFormError(error, elements.createError, "name");
+                const message = error instanceof ApiError
+                        ? (error.reasonForField("name") || error.message)
+                        : "Unexpected error. Please retry.";
+                elements.createError.textContent = message;
             } finally {
-                disableDuringMutation(false);
+                disableMutations(false);
+                renderCreatePlanForm();
             }
         });
 
-        elements.renameForm.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            clearFormErrors();
+        elements.selectedPlanHeading.addEventListener("click", () => {
             if (!state.selectedPlanId) {
                 return;
             }
+            state.isPlanTitleEditing = true;
+            renderPlanTitle();
+            elements.selectedPlanHeadingInput.focus();
+            elements.selectedPlanHeadingInput.select();
+        });
 
-            disableDuringMutation(true);
-            try {
-                const updatedPlan = await planApi.renamePlan(state.selectedPlanId, elements.renameInput.value);
-                await refreshPlans({
-                    preferredPlanId: updatedPlan.id,
-                    successMessage: `Saved plan name: ${updatedPlan.name}`,
-                    skipDetailFetch: true,
-                    detail: updatedPlan
-                });
-            } catch (error) {
-                handleFormError(error, elements.renameError, "name");
-            } finally {
-                disableDuringMutation(false);
+        elements.selectedPlanHeading.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+            event.preventDefault();
+            if (!state.selectedPlanId) {
+                return;
+            }
+            state.isPlanTitleEditing = true;
+            renderPlanTitle();
+            elements.selectedPlanHeadingInput.focus();
+            elements.selectedPlanHeadingInput.select();
+        });
+
+        elements.selectedPlanHeadingInput.addEventListener("keydown", async (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                await savePlanTitle();
+            } else if (event.key === "Escape") {
+                event.preventDefault();
+                state.isPlanTitleEditing = false;
+                elements.selectedPlanHeadingInput.value = findSelectedPlanSummary(state)?.name || "";
+                renderPlanTitle();
             }
         });
 
-        elements.deleteButton.addEventListener("click", async () => {
-            clearFormErrors();
+        elements.selectedPlanHeadingInput.addEventListener("blur", async () => {
+            if (state.isPlanTitleEditing) {
+                await savePlanTitle();
+            }
+        });
+
+        elements.planMenuButton.addEventListener("click", () => {
+            const shouldOpen = elements.planMenu.hidden;
+            elements.planMenu.hidden = !shouldOpen;
+        });
+
+        document.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof Node)) {
+                return;
+            }
+            if (!elements.planMenuWrap.contains(target)) {
+                elements.planMenu.hidden = true;
+            }
+        });
+
+        elements.deletePlanButton.addEventListener("click", async () => {
+            elements.planMenu.hidden = true;
             if (!state.selectedPlanId) {
                 return;
             }
 
             const summary = findSelectedPlanSummary(state);
             const targetName = summary ? summary.name : "this plan";
-            const deleteConfirmed = window.confirm(`Delete plan \"${targetName}\"? This cannot be undone.`);
-            if (!deleteConfirmed) {
+            const confirmed = window.confirm(`Delete plan \"${targetName}\"? This cannot be undone.`);
+            if (!confirmed) {
                 return;
             }
 
-            disableDuringMutation(true);
+            disableMutations(true);
             try {
                 const removedPlanId = state.selectedPlanId;
                 await planApi.deletePlan(removedPlanId);
                 await refreshPlans({
                     preferredPlanId: null,
                     deletedPlanId: removedPlanId,
-                    successMessage: `Deleted plan: ${targetName}`
+                    successMessage: "Saved"
                 });
+                onNotice("Saved");
             } catch (error) {
-                handleMainError(error);
+                state.mainError = toMessage(error);
+                renderMessages();
             } finally {
-                disableDuringMutation(false);
+                disableMutations(false);
             }
         });
+    }
+
+    async function savePlanTitle() {
+        if (!state.selectedPlanId) {
+            return;
+        }
+
+        const newName = elements.selectedPlanHeadingInput.value;
+        disableMutations(true);
+        try {
+            const updatedPlan = await planApi.renamePlan(state.selectedPlanId, newName);
+            state.isPlanTitleEditing = false;
+            await refreshPlans({
+                preferredPlanId: updatedPlan.id,
+                skipDetailFetch: true,
+                detail: updatedPlan,
+                successMessage: "Saved"
+            });
+            onNotice("Saved");
+        } catch (error) {
+            state.isPlanTitleEditing = false;
+            state.mainError = toMessage(error);
+            renderMessages();
+            renderPlanTitle();
+        } finally {
+            disableMutations(false);
+        }
     }
 
     async function refreshPlans(options) {
         const config = options || {};
         state.isLoadingPlans = true;
-        if (!config.successMessage) {
-            state.plansStatus = "Loading plans...";
-        }
         state.mainError = "";
-        render();
+        renderMessages();
 
         try {
             const plans = await planApi.listPlans();
@@ -146,10 +227,14 @@ export function createPlansView(options) {
                 await loadSelectedPlanDetail();
             }
 
-            state.plansStatus = config.successMessage || `Loaded ${plans.length} plan${plans.length === 1 ? "" : "s"}.`;
+            if (config.successMessage) {
+                state.plansStatus = config.successMessage;
+            } else {
+                state.plansStatus = "";
+            }
         } catch (error) {
             state.mainError = toMessage(error);
-            state.plansStatus = "Unable to load plans.";
+            state.plansStatus = "";
         } finally {
             state.isLoadingPlans = false;
             render();
@@ -164,11 +249,8 @@ export function createPlansView(options) {
 
         state.selectedPlanId = planId;
         state.mainError = "";
-        state.plansStatus = "Loading selected plan...";
-        render();
-
+        renderMessages();
         await loadSelectedPlanDetail();
-        state.plansStatus = "";
         render();
         onStateChange(state);
     }
@@ -180,8 +262,6 @@ export function createPlansView(options) {
         }
 
         state.isLoadingDetail = true;
-        render();
-
         try {
             state.selectedPlanDetail = await planApi.getPlan(state.selectedPlanId);
         } catch (error) {
@@ -193,10 +273,24 @@ export function createPlansView(options) {
     }
 
     function render() {
+        renderSidebarState();
+        renderCreatePlanForm();
         renderPlanList();
         renderMainArea();
-        elements.plansStatus.textContent = state.plansStatus;
-        elements.mainError.textContent = state.mainError;
+        renderMessages();
+    }
+
+    function renderSidebarState() {
+        elements.appShell.classList.toggle("sidebar-collapsed", state.isSidebarCollapsed);
+        elements.appShell.classList.toggle("sidebar-expanded", !state.isSidebarCollapsed);
+        elements.sidebarToggle.setAttribute("aria-expanded", String(!state.isSidebarCollapsed));
+        elements.sidebarToggle.setAttribute("aria-label", state.isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar");
+        elements.sidebarToggle.setAttribute("title", state.isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar");
+    }
+
+    function renderCreatePlanForm() {
+        elements.createForm.hidden = !state.isCreatePlanFormVisible;
+        elements.showCreatePlanButton.hidden = state.isCreatePlanFormVisible;
     }
 
     function renderPlanList() {
@@ -237,88 +331,49 @@ export function createPlansView(options) {
             elements.selectedPlanMeta.textContent = "Create a plan in the sidebar to begin.";
             elements.noPlanState.hidden = false;
             elements.planDetail.hidden = true;
-            elements.renameInput.value = "";
+            elements.planMenuWrap.hidden = true;
+            state.isPlanTitleEditing = false;
+            renderPlanTitle();
             return;
         }
 
-        elements.selectedPlanHeading.textContent = summary.name;
-
-        if (state.isLoadingDetail) {
-            elements.selectedPlanMeta.textContent = "Loading selected plan...";
-        } else if (detail) {
+        if (detail) {
             const bucketCount = detail.buckets.length;
             const taskCount = detail.tasks.length;
             elements.selectedPlanMeta.textContent = `${bucketCount} bucket${bucketCount === 1 ? "" : "s"} | ${taskCount} task${taskCount === 1 ? "" : "s"}`;
+        } else if (state.isLoadingDetail) {
+            elements.selectedPlanMeta.textContent = "";
         } else {
-            elements.selectedPlanMeta.textContent = "Plan data unavailable.";
+            elements.selectedPlanMeta.textContent = "";
         }
 
         elements.noPlanState.hidden = true;
         elements.planDetail.hidden = false;
-        elements.renameInput.value = summary.name;
-
-        renderBuckets(detail);
-        renderTasks(detail);
-    }
-
-    function renderBuckets(detail) {
-        elements.bucketList.innerHTML = "";
-        if (!detail || detail.buckets.length === 0) {
-            elements.bucketList.appendChild(simpleItem("No buckets in this plan."));
-            return;
+        elements.planMenuWrap.hidden = false;
+        if (!state.isPlanTitleEditing) {
+            elements.selectedPlanHeading.textContent = summary.name;
+            elements.selectedPlanHeadingInput.value = summary.name;
         }
-
-        detail.buckets.forEach((bucket) => {
-            elements.bucketList.appendChild(simpleItem(bucket.name));
-        });
+        renderPlanTitle();
     }
 
-    function renderTasks(detail) {
-        elements.taskPreviewList.innerHTML = "";
-        if (!detail || detail.tasks.length === 0) {
-            elements.taskPreviewList.appendChild(simpleItem("No tasks in this plan."));
-            return;
-        }
-
-        const maxPreview = 6;
-        detail.tasks.slice(0, maxPreview).forEach((task) => {
-            elements.taskPreviewList.appendChild(simpleItem(task.title));
-        });
-
-        if (detail.tasks.length > maxPreview) {
-            elements.taskPreviewList.appendChild(simpleItem(`+ ${detail.tasks.length - maxPreview} more tasks`));
-        }
+    function renderPlanTitle() {
+        elements.selectedPlanHeading.hidden = state.isPlanTitleEditing;
+        elements.selectedPlanHeadingInput.hidden = !state.isPlanTitleEditing;
     }
 
-    function simpleItem(text) {
-        const item = document.createElement("li");
-        item.textContent = text;
-        return item;
+    function disableMutations(isDisabled) {
+        elements.sidebarToggle.disabled = isDisabled;
+        elements.showCreatePlanButton.disabled = isDisabled;
+        elements.cancelCreatePlanButton.disabled = isDisabled;
+        elements.createInput.disabled = isDisabled;
+        elements.selectedPlanHeadingInput.disabled = isDisabled;
+        elements.planMenuButton.disabled = isDisabled;
+        elements.deletePlanButton.disabled = isDisabled;
     }
 
-    function clearFormErrors() {
-        elements.createError.textContent = "";
-        elements.renameError.textContent = "";
-        state.mainError = "";
-        elements.mainError.textContent = "";
-    }
-
-    function disableDuringMutation(isDisabled) {
-        elements.reloadButton.disabled = isDisabled;
-        elements.createSubmit.disabled = isDisabled;
-        elements.renameSubmit.disabled = isDisabled;
-        elements.deleteButton.disabled = isDisabled;
-    }
-
-    function handleFormError(error, targetElement, fieldName) {
-        const message = error instanceof ApiError
-                ? (error.reasonForField(fieldName) || error.message)
-                : toMessage(error);
-        targetElement.textContent = message;
-    }
-
-    function handleMainError(error) {
-        state.mainError = toMessage(error);
+    function renderMessages() {
+        elements.plansStatus.textContent = state.plansStatus;
         elements.mainError.textContent = state.mainError;
     }
 

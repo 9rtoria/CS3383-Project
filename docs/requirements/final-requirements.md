@@ -112,6 +112,35 @@ The system uses:
    - a task,
    - a checklist item.
 
+### 10) UI Layout and Interaction Refinement (Milestone 9.5)
+1. Sidebar behavior:
+   - Sidebar is narrower than earlier milestones and can be collapsed/expanded.
+   - Sidebar plan creation uses a `+ New plan` button that reveals a name input/form.
+   - Sidebar does not show a dedicated reload control.
+2. Main workspace navigation:
+   - Plan workspace shows tabs for `Board`, `Grid`, and `Charts`.
+   - Only one tab panel is visible at a time.
+   - Before Milestone 10 chart rendering is delivered, `Charts` may be a placeholder panel.
+3. Task details interaction:
+   - Task details open as a side drawer from board cards and grid rows.
+   - Drawer is hidden by default.
+   - Drawer closes via cancel action, close (`X`) action, and after successful save.
+4. Task creation entry points:
+   - Plan header provides a `+ Add task` action opening task drawer with default values.
+   - Each board column provides a `+` action opening task drawer prefilled by context:
+     - grouped by bucket -> bucket prefilled,
+     - grouped by progress -> progress prefilled.
+5. Board-centric bucket controls:
+   - Dedicated bucket and task preview summary cards are removed from the main workspace.
+   - When grouped by bucket, board shows an `+ Add bucket` terminal column.
+   - Each bucket column header exposes a menu with `Rename` and `Delete` bucket actions.
+6. Plan header controls:
+   - Plan name can be renamed directly from title interaction in header.
+   - Plan deletion action is available from a header menu and keeps existing confirmation behavior.
+7. Message style:
+   - Developer-oriented instructional status text is removed from user UI.
+   - User feedback uses short, temporary notices.
+
 ## Quality Requirements
 1. Backend shall be covered by JUnit 5 tests.
 2. Test execution shall include a coverage report.

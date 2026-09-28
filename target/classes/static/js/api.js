@@ -87,6 +87,32 @@ export const planApi = {
         });
     },
 
+    createBucket(planId, name) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/buckets`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({name})
+        });
+    },
+
+    renameBucket(planId, bucketId, name) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/buckets/${encodeURIComponent(bucketId)}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({name})
+        });
+    },
+
+    deleteBucket(planId, bucketId) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/buckets/${encodeURIComponent(bucketId)}`, {
+            method: "DELETE"
+        });
+    },
+
     patchTask(planId, taskId, patchBody) {
         return request(`${API_BASE}/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}`, {
             method: "PATCH",
@@ -94,6 +120,32 @@ export const planApi = {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify(patchBody)
+        });
+    },
+
+    createTask(planId, taskBody) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/tasks`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(taskBody)
+        });
+    },
+
+    updateTask(planId, taskId, taskBody) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(taskBody)
+        });
+    },
+
+    deleteTask(planId, taskId) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}`, {
+            method: "DELETE"
         });
     },
 

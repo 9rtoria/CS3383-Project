@@ -134,6 +134,32 @@ class TaskServiceTest {
     }
 
     @Test
+    void updateTaskChecklistAllCompletedStillDoesNotAutoCompleteProgress() {
+        InMemoryPlannerRepository repository = seededRepositoryWithTask();
+        TaskService service = new TaskService(
+                repository,
+                new PlannerValidator(),
+                new TestIdGenerator(List.of(), List.of(), List.of(), List.of()));
+
+        TaskInput update = new TaskInput(
+                "Existing task",
+                "bkt_1",
+                Progress.NOT_STARTED,
+                Priority.IMPORTANT,
+                LocalDate.of(2026, 9, 10),
+                LocalDate.of(2026, 9, 20),
+                "notes",
+                List.of(
+                        new ChecklistItemInput("chk_1", "Item 1", true),
+                        new ChecklistItemInput("chk_2", "Item 2", true)));
+
+        Task updated = service.updateTask("pln_2", "tsk_1", update);
+
+        assertEquals(Progress.NOT_STARTED, updated.progress());
+        assertTrue(updated.checklist().stream().allMatch(ChecklistItem::completed));
+    }
+
+    @Test
     void isTaskOverdueMatchesRequiredMatrix() {
         InMemoryPlannerRepository repository = new InMemoryPlannerRepository();
         LocalDate today = LocalDate.of(2026, 9, 15);

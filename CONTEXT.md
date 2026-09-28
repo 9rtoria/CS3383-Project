@@ -36,6 +36,15 @@ This file captures what is confirmed in this session and what is still proposed 
 - Grid view: sortable table; clicking a row opens task details.
 - Charts view: progress donut, tasks per bucket, tasks per priority, overdue count (plain JavaScript SVG/Canvas).
 - Theme: light by default with dark mode toggle.
+- Milestone 9.5 UI refinement:
+  - Sidebar becomes narrower and collapsible.
+  - Sidebar plan creation uses a `+ New plan` reveal input flow.
+  - Main workspace uses `Board`/`Grid`/`Charts` tabs (single active panel).
+  - Task details use a hidden-by-default side drawer that opens from board/grid and closes on cancel/close/save.
+  - Task creation supports header `+ Add task` plus contextual per-column add controls.
+  - Bucket operations move onto the board via add-bucket column and per-column menu actions.
+  - Plan rename/delete move to title/header menu interactions.
+  - UI copy prefers short temporary notices over developer-style status text.
 
 ## Confirmed business rules from grilling
 1. Deleting a non-empty non-`Uncategorized` bucket moves its tasks to auto-created `Uncategorized`, then deletes the bucket.
