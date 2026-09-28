@@ -549,7 +549,9 @@ button:disabled {
 }
 
 .board-status:empty,
-.board-error:empty {
+.board-error:empty,
+.grid-status:empty,
+.grid-error:empty {
     display: none;
 }
 
@@ -675,7 +677,7 @@ button:disabled {
 }
 
 .grid-table-wrap {
-    margin-top: 10px;
+    margin-top: 0;
     width: 100%;
     overflow-x: auto;
 }
