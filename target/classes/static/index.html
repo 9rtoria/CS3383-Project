@@ -85,6 +85,26 @@
                     <ul id="task-preview-list" class="info-list"></ul>
                 </article>
             </section>
+
+            <section class="detail-card board-card" aria-label="Board view">
+                <div class="board-toolbar">
+                    <h3>Board</h3>
+                    <fieldset id="board-grouping-switcher" class="board-grouping">
+                        <legend>Group by</legend>
+                        <label>
+                            <input type="radio" name="board-grouping" value="bucket" checked>
+                            Bucket
+                        </label>
+                        <label>
+                            <input type="radio" name="board-grouping" value="progress">
+                            Progress
+                        </label>
+                    </fieldset>
+                </div>
+                <p id="board-status" class="board-status" role="status" aria-live="polite"></p>
+                <p id="board-error" class="board-error" role="alert" aria-live="assertive"></p>
+                <div id="board-columns" class="board-columns" aria-label="Task board"></div>
+            </section>
         </section>
     </main>
 </div>

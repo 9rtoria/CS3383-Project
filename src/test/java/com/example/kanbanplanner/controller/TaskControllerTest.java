@@ -289,6 +289,41 @@ class TaskControllerTest {
     }
 
     @Test
+    void patchWithInvalidProgressOrMissingBucketRejected() throws Exception {
+        String createBody = baseCreateBody("Patch validation", "item");
+        MvcResult createdResult = mockMvc.perform(post("/api/plans/pln_seed_001/tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String taskId = readTree(createdResult).path("id").asText();
+
+        String invalidProgressBody = """
+                {
+                  "progress": "Done"
+                }
+                """;
+        mockMvc.perform(patch("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidProgressBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("progress"));
+
+        String missingBucketBody = """
+                {
+                  "bucketId": "bkt_missing"
+                }
+                """;
+        mockMvc.perform(patch("/api/plans/pln_seed_001/tasks/{taskId}", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(missingBucketBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("bucketId"));
+    }
+
+    @Test
     void malformedBodyAndInvalidEnumProduceStructuredErrors() throws Exception {
         String malformed = "{\"title\":";
         mockMvc.perform(post("/api/plans/pln_seed_001/tasks")
