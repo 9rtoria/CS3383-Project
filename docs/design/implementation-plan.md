@@ -13,6 +13,8 @@ All endpoint naming, DTO layouts, and folder structure in this document are prop
 ## 2.1 Compatibility Decisions (Confirmed)
 - Compile target: Maven `release 17` so teammates on JDK 17 can build and run.
 - Dependency selection: choose Spring Boot and JaCoCo versions compatible with both JDK 17 and detected JDK 25.
+- Spring Boot parent version pinned: `3.5.16` (latest stable 3.x at planning time).
+- JaCoCo Maven plugin version pinned: `0.8.15` (supports Java 25 while project compiles with `release 17`).
 
 ## 3. Proposed Architecture
 
@@ -33,14 +35,15 @@ All endpoint naming, DTO layouts, and folder structure in this document are prop
 Deliverables:
 - Spring Boot Maven project with JUnit 5 test setup.
 - Maven compiler plugin configured with `release 17`.
-- Spring Boot and JaCoCo versions selected for JDK 17 and JDK 25 compatibility.
+- Spring Boot and JaCoCo versions pinned for JDK 17 and JDK 25 compatibility.
 - Basic package structure.
-- Static resource serving configured for frontend files.
-- Simple health endpoint.
+- Static resource serving using Spring Boot default static mapping (`src/main/resources/static`) with no custom MVC config.
+- Custom health endpoint: `GET /api/health` returns `{"status":"UP"}` (no Actuator).
 
 Verification:
 - `mvn test` runs successfully.
 - App starts and serves index page.
+- `GET /api/health` returns `200` with `{"status":"UP"}`.
 
 ### Milestone 2 - Domain model and repository interfaces
 Deliverables:
@@ -404,7 +407,7 @@ Do not implement detailed designs for:
 These remain future extensions only.
 
 ## 12. Progress
-- Milestone 1 - Not started
+- Milestone 1 - Completed
 - Milestone 2 - Not started
 - Milestone 3 - Not started
 - Milestone 4 - Not started

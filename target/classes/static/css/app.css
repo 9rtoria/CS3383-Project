@@ -1,0 +1,15 @@
+body {
+    margin: 0;
+    font-family: sans-serif;
+    background: #f5f7fa;
+    color: #1f2937;
+}
+
+main {
+    max-width: 720px;
+    margin: 48px auto;
+    padding: 24px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
