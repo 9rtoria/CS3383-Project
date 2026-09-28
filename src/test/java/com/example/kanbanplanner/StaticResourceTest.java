@@ -36,6 +36,15 @@ class StaticResourceTest {
     }
 
     @Test
+    void indexHtmlIncludesBoardAndGridContainers() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"board-columns\"")))
+                .andExpect(content().string(containsString("id=\"grid-section\"")))
+                .andExpect(content().string(containsString("id=\"grid-table\"")));
+    }
+
+    @Test
     void unknownStaticPathReturnsNotFound() throws Exception {
         mockMvc.perform(get("/does-not-exist"))
                 .andExpect(status().isNotFound());

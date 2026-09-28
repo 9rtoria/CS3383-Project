@@ -274,6 +274,10 @@ button:disabled {
     margin-top: 16px;
 }
 
+.grid-card {
+    margin-top: 16px;
+}
+
 .board-toolbar {
     display: flex;
     justify-content: space-between;
@@ -412,6 +416,110 @@ button:disabled {
     margin: 0;
     font-size: 0.79rem;
     color: var(--text-muted);
+}
+
+.grid-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.grid-toolbar h3 {
+    margin: 0;
+}
+
+.grid-hint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+}
+
+.grid-status,
+.grid-error {
+    min-height: 1.2em;
+    margin: 8px 0 0;
+    font-size: 0.87rem;
+}
+
+.grid-status {
+    color: var(--text-muted);
+}
+
+.grid-error {
+    color: #b02626;
+    font-weight: 600;
+}
+
+.grid-empty {
+    margin: 10px 0 0;
+    padding: 10px;
+    border: 1px dashed var(--border-soft);
+    border-radius: 10px;
+    background: #f9fbfd;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.grid-table-wrap {
+    margin-top: 12px;
+    width: 100%;
+    overflow-x: auto;
+}
+
+.grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 700px;
+}
+
+.grid-table th,
+.grid-table td {
+    border-bottom: 1px solid var(--border-soft);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.grid-table thead th {
+    background: #f5f9fc;
+}
+
+.grid-table tbody tr:hover {
+    background: #fbfdff;
+}
+
+.grid-sort-button {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    padding: 4px 6px;
+    margin: -4px -6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.grid-sort-button:hover {
+    background: #e7eff6;
+}
+
+.grid-sort-button.active {
+    color: #153549;
+}
+
+.grid-sort-indicator {
+    display: inline-block;
+    width: 1em;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
 }
 
 .info-list {
