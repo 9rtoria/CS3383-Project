@@ -370,6 +370,16 @@ button:disabled {
     gap: 4px;
 }
 
+.menu.menu-align-end {
+    right: 0;
+    left: auto;
+}
+
+.menu.menu-align-start {
+    left: 0;
+    right: auto;
+}
+
 .menu[hidden] {
     display: none;
 }
