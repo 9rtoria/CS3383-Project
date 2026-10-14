@@ -9,6 +9,9 @@ const PROGRESS_COLUMNS = [
     {value: "Completed", label: "Completed"}
 ];
 
+const BUCKET_REORDER_ANIMATION_DURATION_MS = 320;
+const BUCKET_REORDER_ANIMATION_EASING = "cubic-bezier(0.2, 0, 0, 1)";
+
 export function createBoardView(options) {
     const {
         state,
@@ -322,6 +325,101 @@ export function createBoardView(options) {
         });
     }
 
+    function captureBucketColumnRects() {
+        const rects = new Map();
+        if (!elements.columns) {
+            return rects;
+        }
+
+        elements.columns.querySelectorAll(".board-column").forEach((column) => {
+            const columnId = column.dataset.columnId;
+            if (columnId) {
+                rects.set(columnId, column.getBoundingClientRect());
+            }
+        });
+        return rects;
+    }
+
+    function shouldReduceMotion() {
+        if (typeof window.matchMedia !== "function") {
+            return false;
+        }
+        return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    function animateBucketColumnReorder(previousRects) {
+        if (!elements.columns || shouldReduceMotion() || previousRects.size === 0) {
+            return Promise.resolve();
+        }
+
+        let animatedCount = 0;
+        let completedCount = 0;
+
+        return new Promise((resolve) => {
+            elements.columns.querySelectorAll(".board-column").forEach((column) => {
+                const columnId = column.dataset.columnId;
+                if (!columnId) {
+                    return;
+                }
+
+                const previousRect = previousRects.get(columnId);
+                if (!previousRect) {
+                    return;
+                }
+
+                const currentRect = column.getBoundingClientRect();
+                const deltaX = previousRect.left - currentRect.left;
+                const deltaY = previousRect.top - currentRect.top;
+
+                if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+                    return;
+                }
+
+                animatedCount += 1;
+                column.classList.add("reorder-animating");
+                column.style.transition = "none";
+                column.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+                const finish = () => {
+                    column.style.transition = "";
+                    column.style.transform = "";
+                    column.classList.remove("reorder-animating");
+                    completedCount += 1;
+                    if (completedCount >= animatedCount) {
+                        resolve();
+                    }
+                };
+
+                let timeoutHandle = null;
+                const onTransitionEnd = (event) => {
+                    if (event.target !== column || event.propertyName !== "transform") {
+                        return;
+                    }
+                    column.removeEventListener("transitionend", onTransitionEnd);
+                    if (timeoutHandle != null) {
+                        window.clearTimeout(timeoutHandle);
+                    }
+                    finish();
+                };
+
+                column.addEventListener("transitionend", onTransitionEnd);
+                timeoutHandle = window.setTimeout(() => {
+                    column.removeEventListener("transitionend", onTransitionEnd);
+                    finish();
+                }, BUCKET_REORDER_ANIMATION_DURATION_MS + 90);
+
+                window.requestAnimationFrame(() => {
+                    column.style.transition = `transform ${BUCKET_REORDER_ANIMATION_DURATION_MS}ms ${BUCKET_REORDER_ANIMATION_EASING}`;
+                    column.style.transform = "translate(0, 0)";
+                });
+            });
+
+            if (animatedCount === 0) {
+                resolve();
+            }
+        });
+    }
+
     function alignBucketMenu(menu) {
         if (!elements.columns || !elements.section) {
             return;
@@ -364,7 +462,7 @@ export function createBoardView(options) {
 
         const menuButton = document.createElement("button");
         menuButton.type = "button";
-        menuButton.className = "icon-button";
+        menuButton.className = "icon-button board-column-menu-button";
         menuButton.textContent = "...";
         menuButton.setAttribute("aria-label", `${column.label} menu`);
 
@@ -538,6 +636,8 @@ export function createBoardView(options) {
             return;
         }
 
+        const previousColumnRects = captureBucketColumnRects();
+
         const fromIndex = planDetail.buckets.findIndex((bucket) => bucket.id === activeDragBucketId);
         const toIndex = planDetail.buckets.findIndex((bucket) => bucket.id === targetBucketId);
         if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
@@ -559,6 +659,8 @@ export function createBoardView(options) {
         onPatchStart();
         activeDragBucketId = null;
         render();
+        const reorderAnimation = animateBucketColumnReorder(previousColumnRects);
+        let reorderFailed = false;
 
         try {
             const savedBuckets = await planApi.reorderBuckets(state.selectedPlanId, bucketIds);
@@ -569,11 +671,15 @@ export function createBoardView(options) {
             });
             onNotice("Saved");
         } catch (error) {
+            reorderFailed = true;
             updatePlanDetail(previousDetail);
             state.boardError = toMessage(error);
         } finally {
             state.isPatchingTask = false;
             onPatchEnd();
+            if (!reorderFailed) {
+                await reorderAnimation;
+            }
             render();
         }
     }

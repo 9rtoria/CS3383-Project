@@ -351,6 +351,17 @@ button:disabled {
     background: #dfeaf3;
 }
 
+.board-column-menu-button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .menu-wrap {
     position: relative;
 }
@@ -515,9 +526,13 @@ button:disabled {
 
 .board-toolbar-controls {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+#board-add-bucket-button {
+    min-height: 44px;
 }
 
 .board-grouping {
@@ -599,6 +614,10 @@ button:disabled {
 
 .board-column.dragging {
     opacity: 0.55;
+}
+
+.board-column.reorder-animating {
+    will-change: transform;
 }
 
 .board-column.bucket-drop-target {
