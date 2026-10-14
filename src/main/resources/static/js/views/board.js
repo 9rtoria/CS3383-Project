@@ -37,6 +37,7 @@ export function createBoardView(options) {
     };
 
     let activeDragTaskId = null;
+    let activeDragBucketId = null;
 
     wireEvents();
 
@@ -144,6 +145,7 @@ export function createBoardView(options) {
     function renderColumn(column) {
         const columnElement = document.createElement("article");
         columnElement.className = "board-column";
+        columnElement.dataset.columnId = column.id;
 
         const header = document.createElement("header");
         header.className = "board-column-header";
@@ -151,12 +153,17 @@ export function createBoardView(options) {
         const titleWrap = document.createElement("div");
         titleWrap.className = "board-column-title-wrap";
 
+        if (state.boardGrouping === "bucket") {
+            titleWrap.appendChild(renderBucketDragHandle(column, columnElement));
+        }
+
         const title = document.createElement("h4");
         title.textContent = column.label;
         titleWrap.appendChild(title);
 
         if (state.boardGrouping === "bucket") {
             titleWrap.appendChild(renderBucketMenuButton(column));
+            wireBucketColumnDrop(columnElement, column.id);
         }
 
         const count = document.createElement("p");
@@ -183,14 +190,14 @@ export function createBoardView(options) {
         dropZone.dataset.columnId = column.id;
 
         dropZone.addEventListener("dragover", (event) => {
-            if (!activeDragTaskId || state.isPatchingTask) {
+            if (!activeDragTaskId || activeDragBucketId || state.isPatchingTask) {
                 return;
             }
             event.preventDefault();
         });
 
         dropZone.addEventListener("dragenter", (event) => {
-            if (!activeDragTaskId || state.isPatchingTask) {
+            if (!activeDragTaskId || activeDragBucketId || state.isPatchingTask) {
                 return;
             }
             event.preventDefault();
@@ -205,6 +212,9 @@ export function createBoardView(options) {
         });
 
         dropZone.addEventListener("drop", async (event) => {
+            if (activeDragBucketId) {
+                return;
+            }
             event.preventDefault();
             dropZone.classList.remove("drop-target");
             await handleDrop(column.id);
@@ -224,6 +234,92 @@ export function createBoardView(options) {
         columnElement.appendChild(header);
         columnElement.appendChild(dropZone);
         return columnElement;
+    }
+
+    function renderBucketDragHandle(column, columnElement) {
+        const handle = document.createElement("button");
+        handle.type = "button";
+        handle.className = "bucket-drag-handle";
+        handle.textContent = "⋮⋮";
+        handle.setAttribute("aria-label", `Drag ${column.label} bucket`);
+        handle.draggable = !state.isPatchingTask;
+        handle.disabled = state.isPatchingTask;
+
+        handle.addEventListener("dragstart", (event) => {
+            if (state.isPatchingTask || activeDragTaskId) {
+                event.preventDefault();
+                return;
+            }
+
+            activeDragBucketId = column.id;
+            columnElement.classList.add("dragging");
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", `bucket:${column.id}`);
+                event.dataTransfer.setDragImage(columnElement, 24, 24);
+            }
+            state.boardError = "";
+            renderMessages();
+        });
+
+        handle.addEventListener("dragend", () => {
+            columnElement.classList.remove("dragging");
+            clearBucketDropTargets();
+            activeDragBucketId = null;
+        });
+
+        return handle;
+    }
+
+    function wireBucketColumnDrop(columnElement, columnId) {
+        columnElement.addEventListener("dragover", (event) => {
+            if (!activeDragBucketId || state.isPatchingTask) {
+                return;
+            }
+            event.preventDefault();
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = "move";
+            }
+        });
+
+        columnElement.addEventListener("dragenter", (event) => {
+            if (!activeDragBucketId || state.isPatchingTask) {
+                return;
+            }
+            event.preventDefault();
+            if (activeDragBucketId !== columnId) {
+                columnElement.classList.add("bucket-drop-target");
+            }
+        });
+
+        columnElement.addEventListener("dragleave", (event) => {
+            if (event.relatedTarget instanceof Node && columnElement.contains(event.relatedTarget)) {
+                return;
+            }
+            columnElement.classList.remove("bucket-drop-target");
+        });
+
+        columnElement.addEventListener("drop", async (event) => {
+            if (!activeDragBucketId) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            columnElement.classList.remove("bucket-drop-target");
+            await handleBucketDrop(columnId);
+        });
+    }
+
+    function clearBucketDropTargets() {
+        if (!elements.columns) {
+            return;
+        }
+        elements.columns.querySelectorAll(".board-column.bucket-drop-target").forEach((column) => {
+            column.classList.remove("bucket-drop-target");
+        });
+        elements.columns.querySelectorAll(".board-column.dragging").forEach((column) => {
+            column.classList.remove("dragging");
+        });
     }
 
     function renderBucketMenuButton(column) {
@@ -344,7 +440,7 @@ export function createBoardView(options) {
         }
 
         card.addEventListener("dragstart", (event) => {
-            if (state.isPatchingTask) {
+            if (state.isPatchingTask || activeDragBucketId) {
                 event.preventDefault();
                 return;
             }
@@ -392,8 +488,58 @@ export function createBoardView(options) {
         return placeholder;
     }
 
+    async function handleBucketDrop(targetBucketId) {
+        if (!activeDragBucketId || state.isPatchingTask) {
+            return;
+        }
+
+        const planDetail = getPlanDetail();
+        if (!planDetail || !state.selectedPlanId) {
+            return;
+        }
+
+        const fromIndex = planDetail.buckets.findIndex((bucket) => bucket.id === activeDragBucketId);
+        const toIndex = planDetail.buckets.findIndex((bucket) => bucket.id === targetBucketId);
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+            return;
+        }
+
+        const previousDetail = clonePlanDetail(planDetail);
+        const reorderedBuckets = [...planDetail.buckets];
+        const [moved] = reorderedBuckets.splice(fromIndex, 1);
+        reorderedBuckets.splice(toIndex, 0, moved);
+        const bucketIds = reorderedBuckets.map((bucket) => bucket.id);
+
+        updatePlanDetail({
+            ...planDetail,
+            buckets: reorderedBuckets
+        });
+        state.boardError = "";
+        state.isPatchingTask = true;
+        onPatchStart();
+        activeDragBucketId = null;
+        render();
+
+        try {
+            const savedBuckets = await planApi.reorderBuckets(state.selectedPlanId, bucketIds);
+            const latestDetail = getPlanDetail();
+            updatePlanDetail({
+                ...latestDetail,
+                buckets: savedBuckets
+            });
+            onNotice("Saved");
+        } catch (error) {
+            updatePlanDetail(previousDetail);
+            state.boardError = toMessage(error);
+        } finally {
+            state.isPatchingTask = false;
+            onPatchEnd();
+            render();
+        }
+    }
+
     async function handleDrop(targetColumnId) {
-        if (!activeDragTaskId || state.isPatchingTask) {
+        if (!activeDragTaskId || activeDragBucketId || state.isPatchingTask) {
             return;
         }
 

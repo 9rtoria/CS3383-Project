@@ -107,6 +107,16 @@ export const planApi = {
         });
     },
 
+    reorderBuckets(planId, bucketIds) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/buckets/order`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({bucketIds})
+        });
+    },
+
     deleteBucket(planId, bucketId) {
         return request(`${API_BASE}/${encodeURIComponent(planId)}/buckets/${encodeURIComponent(bucketId)}`, {
             method: "DELETE"

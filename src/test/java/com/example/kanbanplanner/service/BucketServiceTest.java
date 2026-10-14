@@ -102,6 +102,61 @@ class BucketServiceTest {
     }
 
     @Test
+    void reorderBucketsSuccessPreservesTasks() {
+        InMemoryPlannerRepository repository = new InMemoryPlannerRepository();
+        repository.savePlan(new Plan(
+                "pln_5",
+                "Plan",
+                List.of(
+                        new Bucket("bkt_a", "A"),
+                        new Bucket("bkt_b", "B"),
+                        new Bucket("bkt_c", "C")),
+                List.of(task("tsk_1", "bkt_a", Progress.NOT_STARTED))));
+
+        BucketService service = new BucketService(
+                repository,
+                new PlannerValidator(),
+                new TestIdGenerator(List.of(), List.of(), List.of(), List.of()));
+
+        List<Bucket> reordered = service.reorderBuckets("pln_5", List.of("bkt_c", "bkt_a", "bkt_b"));
+
+        assertEquals(List.of("bkt_c", "bkt_a", "bkt_b"), reordered.stream().map(Bucket::id).toList());
+        Plan updated = repository.findPlanById("pln_5").orElseThrow();
+        assertEquals(List.of("bkt_c", "bkt_a", "bkt_b"), updated.buckets().stream().map(Bucket::id).toList());
+        assertEquals("bkt_a", updated.tasks().get(0).bucketId());
+    }
+
+    @Test
+    void reorderBucketsRejectsMissingExtraAndDuplicateIds() {
+        InMemoryPlannerRepository repository = new InMemoryPlannerRepository();
+        repository.savePlan(new Plan(
+                "pln_6",
+                "Plan",
+                List.of(new Bucket("bkt_a", "A"), new Bucket("bkt_b", "B")),
+                List.of()));
+
+        BucketService service = new BucketService(
+                repository,
+                new PlannerValidator(),
+                new TestIdGenerator(List.of(), List.of(), List.of(), List.of()));
+
+        ValidationException missing = assertThrows(
+                ValidationException.class,
+                () -> service.reorderBuckets("pln_6", List.of("bkt_a")));
+        assertEquals("bucketIds", missing.details().get(0).field());
+
+        ValidationException extra = assertThrows(
+                ValidationException.class,
+                () -> service.reorderBuckets("pln_6", List.of("bkt_a", "bkt_b", "bkt_x")));
+        assertEquals("bucketIds", extra.details().get(0).field());
+
+        ValidationException duplicate = assertThrows(
+                ValidationException.class,
+                () -> service.reorderBuckets("pln_6", List.of("bkt_a", "bkt_a")));
+        assertEquals("bucketIds", duplicate.details().get(0).field());
+    }
+
+    @Test
     void deleteEmptyUncategorizedSucceeds() {
         InMemoryPlannerRepository repository = new InMemoryPlannerRepository();
         Plan plan = new Plan(

@@ -135,6 +135,46 @@ class BucketControllerTest {
     }
 
     @Test
+    void reorderBucketsSuccessUpdatesPlanOrder() throws Exception {
+        String reorderBody = """
+                {
+                  "bucketIds": ["bkt_seed_003", "bkt_seed_001", "bkt_seed_002"]
+                }
+                """;
+
+        mockMvc.perform(put("/api/plans/pln_seed_001/buckets/order")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reorderBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[0].id").value("bkt_seed_003"))
+                .andExpect(jsonPath("$[1].id").value("bkt_seed_001"))
+                .andExpect(jsonPath("$[2].id").value("bkt_seed_002"));
+
+        mockMvc.perform(get("/api/plans/pln_seed_001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.buckets[0].id").value("bkt_seed_003"))
+                .andExpect(jsonPath("$.buckets[1].id").value("bkt_seed_001"))
+                .andExpect(jsonPath("$.buckets[2].id").value("bkt_seed_002"));
+    }
+
+    @Test
+    void reorderBucketsInvalidPermutationRejected() throws Exception {
+        String invalidBody = """
+                {
+                  "bucketIds": ["bkt_seed_001", "bkt_seed_001", "bkt_seed_002"]
+                }
+                """;
+
+        mockMvc.perform(put("/api/plans/pln_seed_001/buckets/order")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("bucketIds"));
+    }
+
+    @Test
     void deleteNonEmptyBucketMovesTaskToUncategorized() throws Exception {
         mockMvc.perform(delete("/api/plans/pln_seed_001/buckets/bkt_seed_001"))
                 .andExpect(status().isNoContent());

@@ -36,6 +36,7 @@ com\example\kanbanplanner\service\BucketService$ValidationErrors.class
 com\example\kanbanplanner\service\TaskService$TaskPatchInput.class
 com\example\kanbanplanner\validation\ValidationException.class
 com\example\kanbanplanner\dto\request\PlanUpsertRequest.class
+com\example\kanbanplanner\dto\request\BucketReorderRequest.class
 com\example\kanbanplanner\controller\ApiExceptionHandler.class
 com\example\kanbanplanner\domain\Progress.class
 com\example\kanbanplanner\dto\response\PlanDetailResponse.class
