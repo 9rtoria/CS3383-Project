@@ -322,6 +322,42 @@ export function createBoardView(options) {
         });
     }
 
+    function alignBucketMenu(menu) {
+        if (!elements.columns || !elements.section) {
+            return;
+        }
+
+        menu.classList.remove("menu-align-start", "menu-align-end");
+        menu.classList.add("menu-align-end");
+
+        const safePadding = 8;
+        const viewportRect = elements.columns.getBoundingClientRect();
+        const endRect = menu.getBoundingClientRect();
+
+        if (endRect.left < viewportRect.left + safePadding) {
+            menu.classList.remove("menu-align-end");
+            menu.classList.add("menu-align-start");
+
+            const startRect = menu.getBoundingClientRect();
+            if (startRect.right > viewportRect.right - safePadding) {
+                menu.classList.remove("menu-align-start");
+                menu.classList.add("menu-align-end");
+            }
+            return;
+        }
+
+        if (endRect.right > viewportRect.right - safePadding) {
+            menu.classList.remove("menu-align-end");
+            menu.classList.add("menu-align-start");
+
+            const startRect = menu.getBoundingClientRect();
+            if (startRect.left < viewportRect.left + safePadding) {
+                menu.classList.remove("menu-align-start");
+                menu.classList.add("menu-align-end");
+            }
+        }
+    }
+
     function renderBucketMenuButton(column) {
         const wrap = document.createElement("div");
         wrap.className = "menu-wrap";
@@ -333,7 +369,7 @@ export function createBoardView(options) {
         menuButton.setAttribute("aria-label", `${column.label} menu`);
 
         const menu = document.createElement("div");
-        menu.className = "menu";
+        menu.className = "menu menu-align-end";
         menu.hidden = true;
 
         const renameButton = document.createElement("button");
@@ -363,7 +399,11 @@ export function createBoardView(options) {
         });
 
         menuButton.addEventListener("click", () => {
-            menu.hidden = !menu.hidden;
+            const shouldOpen = menu.hidden;
+            menu.hidden = !shouldOpen;
+            if (shouldOpen) {
+                alignBucketMenu(menu);
+            }
         });
 
         menu.appendChild(renameButton);
