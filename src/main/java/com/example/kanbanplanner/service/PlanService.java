@@ -2,10 +2,14 @@ package com.example.kanbanplanner.service;
 
 import com.example.kanbanplanner.domain.Bucket;
 import com.example.kanbanplanner.domain.Plan;
+import com.example.kanbanplanner.domain.Progress;
 import com.example.kanbanplanner.domain.PlanSummary;
 import com.example.kanbanplanner.repository.PlannerRepository;
+import com.example.kanbanplanner.validation.ValidationDetail;
+import com.example.kanbanplanner.validation.ValidationException;
 import com.example.kanbanplanner.validation.PlannerValidator;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -42,8 +46,21 @@ public class PlanService {
     public Plan renamePlan(String planId, String rawName) {
         Plan existing = findPlanRequired(planId);
         String name = validator.validatePlanName(rawName);
-        Plan updated = new Plan(existing.id(), name, existing.buckets(), existing.tasks());
+        Plan updated = new Plan(existing.id(), name, existing.buckets(), existing.tasks(), existing.progressOrder());
         return plannerRepository.savePlan(updated);
+    }
+
+    public List<Progress> reorderProgressOrder(String planId, List<String> progressOrderLabels) {
+        Plan existing = findPlanRequired(planId);
+        List<Progress> reordered = validateAndMapProgressOrder(progressOrderLabels);
+        Plan updated = new Plan(
+                existing.id(),
+                existing.name(),
+                existing.buckets(),
+                existing.tasks(),
+                reordered);
+        plannerRepository.savePlan(updated);
+        return reordered;
     }
 
     public void deletePlan(String planId) {
@@ -62,5 +79,51 @@ public class PlanService {
             buckets.add(new Bucket(idGenerator.nextBucketId(), bucketName));
         }
         return List.copyOf(buckets);
+    }
+
+    private List<Progress> validateAndMapProgressOrder(List<String> progressOrderLabels) {
+        List<Progress> defaultOrder = Progress.defaultOrder();
+        if (progressOrderLabels == null || progressOrderLabels.size() != defaultOrder.size()) {
+            throw ValidationErrors.invalidProgressOrder();
+        }
+
+        EnumSet<Progress> seen = EnumSet.noneOf(Progress.class);
+        List<Progress> ordered = new ArrayList<>();
+        for (String label : progressOrderLabels) {
+            if (label == null || label.trim().isEmpty()) {
+                throw ValidationErrors.invalidProgressOrder();
+            }
+
+            Progress parsed;
+            try {
+                parsed = validator.parseProgressLabel(label.trim());
+            } catch (ValidationException exception) {
+                throw ValidationErrors.invalidProgressOrder();
+            }
+
+            if (!seen.add(parsed)) {
+                throw ValidationErrors.invalidProgressOrder();
+            }
+            ordered.add(parsed);
+        }
+
+        if (seen.size() != defaultOrder.size()) {
+            throw ValidationErrors.invalidProgressOrder();
+        }
+
+        return List.copyOf(ordered);
+    }
+
+    private static final class ValidationErrors {
+        private ValidationErrors() {
+        }
+
+        private static ValidationException invalidProgressOrder() {
+            return new ValidationException(
+                    "Validation failed",
+                    List.of(new ValidationDetail(
+                            "progressOrder",
+                            "must be a permutation of: Not started, In progress, Completed")));
+        }
     }
 }

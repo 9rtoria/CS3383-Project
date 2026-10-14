@@ -32,6 +32,7 @@
 4. Verify bucket header `...` menu provides Rename and Delete.
 5. Verify deleting non-empty non-`Uncategorized` bucket moves tasks to `Uncategorized`.
 6. Verify deleting non-empty `Uncategorized` is blocked with a clear validation message.
+7. In progress grouping, drag a progress column by its handle to reorder columns; refresh page and verify the order persists.
 
 ## Task drawer checks
 

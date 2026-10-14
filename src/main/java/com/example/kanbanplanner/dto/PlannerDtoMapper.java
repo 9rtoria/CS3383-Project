@@ -40,7 +40,8 @@ public class PlannerDtoMapper {
                 plan.id(),
                 plan.name(),
                 plan.buckets().stream().map(this::toBucketResponse).toList(),
-                plan.tasks().stream().map(this::toTaskResponse).toList());
+                plan.tasks().stream().map(this::toTaskResponse).toList(),
+                plan.progressOrder().stream().map(Progress::label).toList());
     }
 
     public BucketResponse toBucketResponse(Bucket bucket) {

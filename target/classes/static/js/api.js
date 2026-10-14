@@ -87,6 +87,16 @@ export const planApi = {
         });
     },
 
+    reorderProgress(planId, progressOrder) {
+        return request(`${API_BASE}/${encodeURIComponent(planId)}/progress/order`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({progressOrder})
+        });
+    },
+
     createBucket(planId, name) {
         return request(`${API_BASE}/${encodeURIComponent(planId)}/buckets`, {
             method: "POST",

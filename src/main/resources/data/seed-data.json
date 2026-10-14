@@ -3,6 +3,11 @@
     {
       "id": "pln_seed_001",
       "name": "Sample Plan",
+      "progressOrder": [
+        "NOT_STARTED",
+        "IN_PROGRESS",
+        "COMPLETED"
+      ],
       "buckets": [
         {
           "id": "bkt_seed_001",

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.kanbanplanner.domain.Bucket;
 import com.example.kanbanplanner.domain.Plan;
+import com.example.kanbanplanner.domain.Progress;
 import com.example.kanbanplanner.service.support.InMemoryPlannerRepository;
 import com.example.kanbanplanner.validation.PlannerValidator;
 import com.example.kanbanplanner.validation.ValidationException;
@@ -89,6 +90,51 @@ class PlanServiceTest {
                 () -> service.renamePlan("pln_1", "   "));
 
         assertEquals("name", exception.details().get(0).field());
+    }
+
+    @Test
+    void reorderProgressOrderPersistsForPlan() {
+        InMemoryPlannerRepository repository = new InMemoryPlannerRepository();
+        repository.savePlan(new Plan("pln_1", "Original", List.of(), List.of()));
+
+        PlanService service = new PlanService(
+                repository,
+                new PlannerValidator(),
+                new TestIdGenerator(List.of(), List.of(), List.of(), List.of()));
+
+        List<Progress> reordered = service.reorderProgressOrder(
+                "pln_1",
+                List.of("Completed", "Not started", "In progress"));
+
+        assertEquals(List.of(Progress.COMPLETED, Progress.NOT_STARTED, Progress.IN_PROGRESS), reordered);
+        Plan reloaded = repository.findPlanById("pln_1").orElseThrow();
+        assertEquals(List.of(Progress.COMPLETED, Progress.NOT_STARTED, Progress.IN_PROGRESS), reloaded.progressOrder());
+    }
+
+    @Test
+    void reorderProgressOrderRejectsInvalidPermutation() {
+        InMemoryPlannerRepository repository = new InMemoryPlannerRepository();
+        repository.savePlan(new Plan("pln_1", "Original", List.of(), List.of()));
+
+        PlanService service = new PlanService(
+                repository,
+                new PlannerValidator(),
+                new TestIdGenerator(List.of(), List.of(), List.of(), List.of()));
+
+        ValidationException duplicate = assertThrows(
+                ValidationException.class,
+                () -> service.reorderProgressOrder("pln_1", List.of("Completed", "Completed", "Not started")));
+        assertEquals("progressOrder", duplicate.details().get(0).field());
+
+        ValidationException missing = assertThrows(
+                ValidationException.class,
+                () -> service.reorderProgressOrder("pln_1", List.of("Completed", "Not started")));
+        assertEquals("progressOrder", missing.details().get(0).field());
+
+        ValidationException unknown = assertThrows(
+                ValidationException.class,
+                () -> service.reorderProgressOrder("pln_1", List.of("Completed", "Not started", "Blocked")));
+        assertEquals("progressOrder", unknown.details().get(0).field());
     }
 
     private String repeat(String value, int count) {

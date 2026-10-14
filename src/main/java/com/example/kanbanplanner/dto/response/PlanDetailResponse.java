@@ -6,6 +6,7 @@ public record PlanDetailResponse(
         String id,
         String name,
         List<BucketResponse> buckets,
-        List<TaskResponse> tasks
+        List<TaskResponse> tasks,
+        List<String> progressOrder
 ) {
 }

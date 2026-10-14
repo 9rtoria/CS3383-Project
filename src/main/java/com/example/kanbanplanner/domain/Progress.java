@@ -1,5 +1,7 @@
 package com.example.kanbanplanner.domain;
 
+import java.util.List;
+
 public enum Progress {
     NOT_STARTED("Not started"),
     IN_PROGRESS("In progress"),
@@ -22,5 +24,9 @@ public enum Progress {
             }
         }
         throw new IllegalArgumentException("Unknown progress value: " + label);
+    }
+
+    public static List<Progress> defaultOrder() {
+        return List.of(NOT_STARTED, IN_PROGRESS, COMPLETED);
     }
 }
