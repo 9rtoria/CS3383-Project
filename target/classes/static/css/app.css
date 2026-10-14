@@ -587,6 +587,37 @@ button:disabled {
     grid-template-rows: auto 1fr;
 }
 
+.board-column.dragging {
+    opacity: 0.55;
+}
+
+.board-column.bucket-drop-target {
+    box-shadow: inset 0 0 0 2px rgba(32, 68, 91, 0.4);
+}
+
+.bucket-drag-handle {
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 2px 4px;
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1;
+    letter-spacing: -0.12em;
+    cursor: grab;
+    border-radius: 6px;
+}
+
+.bucket-drag-handle:hover:not(:disabled) {
+    background: rgba(32, 68, 91, 0.08);
+    color: var(--text);
+}
+
+.bucket-drag-handle:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
 .board-column-header {
     padding: 10px 10px 0;
     display: flex;

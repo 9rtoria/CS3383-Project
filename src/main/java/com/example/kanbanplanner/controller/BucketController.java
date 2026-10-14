@@ -2,9 +2,11 @@ package com.example.kanbanplanner.controller;
 
 import com.example.kanbanplanner.domain.Bucket;
 import com.example.kanbanplanner.dto.PlannerDtoMapper;
+import com.example.kanbanplanner.dto.request.BucketReorderRequest;
 import com.example.kanbanplanner.dto.request.BucketUpsertRequest;
 import com.example.kanbanplanner.dto.response.BucketResponse;
 import com.example.kanbanplanner.service.BucketService;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +34,14 @@ public class BucketController {
     public BucketResponse createBucket(@PathVariable String planId, @RequestBody BucketUpsertRequest request) {
         Bucket created = bucketService.createBucket(planId, request.name());
         return mapper.toBucketResponse(created);
+    }
+
+    @PutMapping("/order")
+    public List<BucketResponse> reorderBuckets(
+            @PathVariable String planId,
+            @RequestBody BucketReorderRequest request) {
+        List<Bucket> reordered = bucketService.reorderBuckets(planId, request.bucketIds());
+        return reordered.stream().map(mapper::toBucketResponse).toList();
     }
 
     @PutMapping("/{bucketId}")

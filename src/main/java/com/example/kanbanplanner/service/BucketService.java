@@ -8,7 +8,11 @@ import com.example.kanbanplanner.validation.PlannerValidator;
 import com.example.kanbanplanner.validation.ValidationDetail;
 import com.example.kanbanplanner.validation.ValidationException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -55,6 +59,25 @@ public class BucketService {
         Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());
         plannerRepository.savePlan(updatedPlan);
         return renamed;
+    }
+
+    public List<Bucket> reorderBuckets(String planId, List<String> bucketIds) {
+        Plan plan = findPlanRequired(planId);
+        List<String> requestedIds = bucketIds == null ? List.of() : bucketIds;
+        validateBucketOrder(plan, requestedIds);
+
+        Map<String, Bucket> bucketsById = new HashMap<>();
+        for (Bucket bucket : plan.buckets()) {
+            bucketsById.put(bucket.id(), bucket);
+        }
+
+        List<Bucket> reordered = requestedIds.stream()
+                .map(bucketsById::get)
+                .toList();
+
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), reordered, plan.tasks());
+        plannerRepository.savePlan(updatedPlan);
+        return reordered;
     }
 
     public void deleteBucket(String planId, String bucketId) {
@@ -115,6 +138,24 @@ public class BucketService {
         plannerRepository.savePlan(updatedPlan);
     }
 
+    private void validateBucketOrder(Plan plan, List<String> bucketIds) {
+        List<String> existingIds = plan.buckets().stream().map(Bucket::id).toList();
+        if (bucketIds.size() != existingIds.size()) {
+            throw ValidationErrors.invalidBucketOrder();
+        }
+
+        Set<String> seen = new HashSet<>();
+        for (String bucketId : bucketIds) {
+            if (bucketId == null || bucketId.isBlank() || !seen.add(bucketId)) {
+                throw ValidationErrors.invalidBucketOrder();
+            }
+        }
+
+        if (!seen.equals(new HashSet<>(existingIds))) {
+            throw ValidationErrors.invalidBucketOrder();
+        }
+    }
+
     private Bucket findBucketRequired(Plan plan, String bucketId) {
         return plan.buckets().stream()
                 .filter(bucket -> bucket.id().equals(bucketId))
@@ -148,6 +189,14 @@ public class BucketService {
                     List.of(new ValidationDetail(
                             "bucket",
                             "Cannot delete non-empty Uncategorized bucket")));
+        }
+
+        private static ValidationException invalidBucketOrder() {
+            return new ValidationException(
+                    "Validation failed",
+                    List.of(new ValidationDetail(
+                            "bucketIds",
+                            "must be a permutation of the plan's bucket ids")));
         }
     }
 }
