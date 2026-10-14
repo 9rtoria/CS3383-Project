@@ -3,6 +3,7 @@ com\example\kanbanplanner\service\TaskService$ValidationErrors.class
 com\example\kanbanplanner\dto\request\ChecklistItemRequest.class
 com\example\kanbanplanner\repository\PlannerRepository.class
 com\example\kanbanplanner\repository\json\JsonPlannerRepository.class
+com\example\kanbanplanner\service\PlanService$ValidationErrors.class
 com\example\kanbanplanner\domain\ChecklistItem.class
 com\example\kanbanplanner\repository\json\StorageDocument.class
 com\example\kanbanplanner\controller\HealthController.class
@@ -29,6 +30,7 @@ com\example\kanbanplanner\dto\response\ChecklistItemResponse.class
 com\example\kanbanplanner\domain\PlanSummary.class
 com\example\kanbanplanner\validation\PlannerValidator$ValidationErrors.class
 com\example\kanbanplanner\dto\response\BucketResponse.class
+com\example\kanbanplanner\dto\request\ProgressOrderRequest.class
 com\example\kanbanplanner\dto\response\TaskResponse.class
 com\example\kanbanplanner\service\TaskService$TaskInput.class
 com\example\kanbanplanner\controller\BucketController.class

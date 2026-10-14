@@ -15,6 +15,7 @@ C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\e
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\request\BucketUpsertRequest.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\request\ChecklistItemRequest.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\request\PlanUpsertRequest.java
+C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\request\ProgressOrderRequest.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\request\TaskPatchRequest.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\request\TaskUpsertRequest.java
 C:\Users\codey\Documents\CS3383-Project\CS3383-Project-fresh\src\main\java\com\example\kanbanplanner\dto\response\ApiErrorDetailResponse.java

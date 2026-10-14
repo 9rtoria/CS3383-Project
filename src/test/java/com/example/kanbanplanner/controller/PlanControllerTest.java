@@ -48,7 +48,10 @@ class PlanControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value("pln_seed_001"))
                 .andExpect(jsonPath("$.tasks[0].progress").value("Not started"))
-                .andExpect(jsonPath("$.tasks[0].priority").value("Medium"));
+                .andExpect(jsonPath("$.tasks[0].priority").value("Medium"))
+                .andExpect(jsonPath("$.progressOrder[0]").value("Not started"))
+                .andExpect(jsonPath("$.progressOrder[1]").value("In progress"))
+                .andExpect(jsonPath("$.progressOrder[2]").value("Completed"));
     }
 
     @Test
@@ -111,6 +114,43 @@ class PlanControllerTest {
         mockMvc.perform(get("/api/plans/pln_seed_001"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void reorderProgressOrderSuccessAndInvalidBody() throws Exception {
+        String validBody = """
+                {
+                  "progressOrder": ["Completed", "Not started", "In progress"]
+                }
+                """;
+
+        mockMvc.perform(put("/api/plans/pln_seed_001/progress/order")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[0]").value("Completed"))
+                .andExpect(jsonPath("$[1]").value("Not started"))
+                .andExpect(jsonPath("$[2]").value("In progress"));
+
+        mockMvc.perform(get("/api/plans/pln_seed_001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progressOrder[0]").value("Completed"))
+                .andExpect(jsonPath("$.progressOrder[1]").value("Not started"))
+                .andExpect(jsonPath("$.progressOrder[2]").value("In progress"));
+
+        String invalidBody = """
+                {
+                  "progressOrder": ["Completed", "Completed", "In progress"]
+                }
+                """;
+
+        mockMvc.perform(put("/api/plans/pln_seed_001/progress/order")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("progressOrder"));
     }
 
     private String repeat(String value, int count) {

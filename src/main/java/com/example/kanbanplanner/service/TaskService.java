@@ -46,7 +46,7 @@ public class TaskService {
         List<Task> updatedTasks = new ArrayList<>(plan.tasks());
         updatedTasks.add(newTask);
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks, plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
         return newTask;
     }
@@ -71,7 +71,7 @@ public class TaskService {
                 .map(task -> task.id().equals(existing.id()) ? updatedTask : task)
                 .toList();
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks, plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
         return updatedTask;
     }
@@ -107,7 +107,7 @@ public class TaskService {
                 .filter(task -> !task.id().equals(taskId))
                 .toList();
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks);
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), plan.buckets(), updatedTasks, plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
     }
 

@@ -84,7 +84,12 @@ public class JsonPlannerRepository implements PlannerRepository {
         Plan targetPlan = findPlanRequired(document.plans(), planId);
 
         List<Bucket> updatedBuckets = replaceOrAppendBucket(targetPlan.buckets(), bucket);
-        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), updatedBuckets, targetPlan.tasks());
+        Plan updatedPlan = new Plan(
+                targetPlan.id(),
+                targetPlan.name(),
+                updatedBuckets,
+                targetPlan.tasks(),
+                targetPlan.progressOrder());
 
         List<Plan> updatedPlans = replacePlan(document.plans(), updatedPlan);
         writeRuntimeDocument(new StorageDocument(updatedPlans));
@@ -99,7 +104,12 @@ public class JsonPlannerRepository implements PlannerRepository {
         List<Bucket> updatedBuckets = targetPlan.buckets().stream()
                 .filter(bucket -> !bucket.id().equals(bucketId))
                 .toList();
-        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), updatedBuckets, targetPlan.tasks());
+        Plan updatedPlan = new Plan(
+                targetPlan.id(),
+                targetPlan.name(),
+                updatedBuckets,
+                targetPlan.tasks(),
+                targetPlan.progressOrder());
 
         List<Plan> updatedPlans = replacePlan(document.plans(), updatedPlan);
         writeRuntimeDocument(new StorageDocument(updatedPlans));
@@ -111,7 +121,12 @@ public class JsonPlannerRepository implements PlannerRepository {
         Plan targetPlan = findPlanRequired(document.plans(), planId);
 
         List<Task> updatedTasks = replaceOrAppendTask(targetPlan.tasks(), task);
-        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), targetPlan.buckets(), updatedTasks);
+        Plan updatedPlan = new Plan(
+                targetPlan.id(),
+                targetPlan.name(),
+                targetPlan.buckets(),
+                updatedTasks,
+                targetPlan.progressOrder());
 
         List<Plan> updatedPlans = replacePlan(document.plans(), updatedPlan);
         writeRuntimeDocument(new StorageDocument(updatedPlans));
@@ -126,7 +141,12 @@ public class JsonPlannerRepository implements PlannerRepository {
         List<Task> updatedTasks = targetPlan.tasks().stream()
                 .filter(task -> !task.id().equals(taskId))
                 .toList();
-        Plan updatedPlan = new Plan(targetPlan.id(), targetPlan.name(), targetPlan.buckets(), updatedTasks);
+        Plan updatedPlan = new Plan(
+                targetPlan.id(),
+                targetPlan.name(),
+                targetPlan.buckets(),
+                updatedTasks,
+                targetPlan.progressOrder());
 
         List<Plan> updatedPlans = replacePlan(document.plans(), updatedPlan);
         writeRuntimeDocument(new StorageDocument(updatedPlans));

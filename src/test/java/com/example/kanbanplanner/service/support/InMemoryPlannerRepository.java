@@ -51,7 +51,7 @@ public class InMemoryPlannerRepository implements PlannerRepository {
             buckets.set(index, bucket);
         }
 
-        savePlan(new Plan(plan.id(), plan.name(), buckets, plan.tasks()));
+        savePlan(new Plan(plan.id(), plan.name(), buckets, plan.tasks(), plan.progressOrder()));
         return bucket;
     }
 
@@ -61,7 +61,7 @@ public class InMemoryPlannerRepository implements PlannerRepository {
         List<Bucket> buckets = plan.buckets().stream()
                 .filter(bucket -> !bucket.id().equals(bucketId))
                 .toList();
-        savePlan(new Plan(plan.id(), plan.name(), buckets, plan.tasks()));
+        savePlan(new Plan(plan.id(), plan.name(), buckets, plan.tasks(), plan.progressOrder()));
     }
 
     @Override
@@ -76,7 +76,7 @@ public class InMemoryPlannerRepository implements PlannerRepository {
             tasks.set(index, task);
         }
 
-        savePlan(new Plan(plan.id(), plan.name(), plan.buckets(), tasks));
+        savePlan(new Plan(plan.id(), plan.name(), plan.buckets(), tasks, plan.progressOrder()));
         return task;
     }
 
@@ -86,7 +86,7 @@ public class InMemoryPlannerRepository implements PlannerRepository {
         List<Task> tasks = plan.tasks().stream()
                 .filter(task -> !task.id().equals(taskId))
                 .toList();
-        savePlan(new Plan(plan.id(), plan.name(), plan.buckets(), tasks));
+        savePlan(new Plan(plan.id(), plan.name(), plan.buckets(), tasks, plan.progressOrder()));
     }
 
     private Plan getPlanOrThrow(String planId) {

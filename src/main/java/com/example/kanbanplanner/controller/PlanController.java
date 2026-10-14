@@ -3,6 +3,7 @@ package com.example.kanbanplanner.controller;
 import com.example.kanbanplanner.domain.Plan;
 import com.example.kanbanplanner.dto.PlannerDtoMapper;
 import com.example.kanbanplanner.dto.request.PlanUpsertRequest;
+import com.example.kanbanplanner.dto.request.ProgressOrderRequest;
 import com.example.kanbanplanner.dto.response.PlanDetailResponse;
 import com.example.kanbanplanner.dto.response.PlanSummaryResponse;
 import com.example.kanbanplanner.service.PlanService;
@@ -53,6 +54,15 @@ public class PlanController {
     public PlanDetailResponse updatePlan(@PathVariable String planId, @RequestBody PlanUpsertRequest request) {
         Plan updated = planService.renamePlan(planId, request.name());
         return mapper.toPlanDetailResponse(updated);
+    }
+
+    @PutMapping("/{planId}/progress/order")
+    public List<String> reorderProgressOrder(
+            @PathVariable String planId,
+            @RequestBody ProgressOrderRequest request) {
+        return planService.reorderProgressOrder(planId, request.progressOrder()).stream()
+                .map(progress -> progress.label())
+                .toList();
     }
 
     @DeleteMapping("/{planId}")

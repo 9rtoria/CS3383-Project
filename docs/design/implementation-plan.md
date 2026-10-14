@@ -446,4 +446,5 @@ These remain future extensions only.
 - Milestone 9 - Completed
 - Milestone 9.5 - Completed
 - Post-9.5 board UX: bucket column drag-and-drop (handle-only, bucket grouping) persists order via `PUT /api/plans/{planId}/buckets/order`
+- Post-9.5 board UX: progress column drag-and-drop (handle-only, progress grouping) persists order via `PUT /api/plans/{planId}/progress/order`
 - Milestone 10 - Not started

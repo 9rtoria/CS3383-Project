@@ -39,7 +39,7 @@ public class BucketService {
         List<Bucket> updatedBuckets = new ArrayList<>(plan.buckets());
         updatedBuckets.add(bucket);
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks(), plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
         return bucket;
     }
@@ -56,7 +56,7 @@ public class BucketService {
                 .map(bucket -> bucket.id().equals(bucketId) ? renamed : bucket)
                 .toList();
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks(), plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
         return renamed;
     }
@@ -75,7 +75,7 @@ public class BucketService {
                 .map(bucketsById::get)
                 .toList();
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), reordered, plan.tasks());
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), reordered, plan.tasks(), plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
         return reordered;
     }
@@ -103,7 +103,7 @@ public class BucketService {
             uncategorized = new Bucket(idGenerator.nextBucketId(), UNCATEGORIZED_NAME);
             List<Bucket> expandedBuckets = new ArrayList<>(plan.buckets());
             expandedBuckets.add(uncategorized);
-            planWithUncategorized = new Plan(plan.id(), plan.name(), expandedBuckets, plan.tasks());
+            planWithUncategorized = new Plan(plan.id(), plan.name(), expandedBuckets, plan.tasks(), plan.progressOrder());
         }
 
         String fallbackBucketId = uncategorized.id();
@@ -126,7 +126,7 @@ public class BucketService {
                 .filter(bucket -> !bucket.id().equals(target.id()))
                 .toList();
 
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), finalBuckets, updatedTasks);
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), finalBuckets, updatedTasks, plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
     }
 
@@ -134,7 +134,7 @@ public class BucketService {
         List<Bucket> updatedBuckets = plan.buckets().stream()
                 .filter(bucket -> !bucket.id().equals(bucketId))
                 .toList();
-        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks());
+        Plan updatedPlan = new Plan(plan.id(), plan.name(), updatedBuckets, plan.tasks(), plan.progressOrder());
         plannerRepository.savePlan(updatedPlan);
     }
 
