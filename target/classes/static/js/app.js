@@ -7,6 +7,7 @@ import {createBoardView} from "./views/board.js";
 import {createGridView} from "./views/grid.js";
 import {createChartsView} from "./views/charts.js";
 import {createTaskDetailsView} from "./views/details-panel.js";
+import {createThemeToggle} from "./views/theme.js";
 
 document.addEventListener("DOMContentLoaded", () => {
     const state = createAppState();
@@ -16,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let gridView;
     let chartsView;
     let taskDetailsView;
+    let themeToggle;
 
     const elements = {
         tabBoard: document.getElementById("tab-board"),
@@ -126,7 +128,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    chartsView = createChartsView();
+    chartsView = createChartsView({
+        state,
+        getPlanDetail: () => state.selectedPlanDetail
+    });
 
     taskDetailsView = createTaskDetailsView({
         state,
@@ -151,6 +156,11 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.openCreateTaskButton.addEventListener("click", () => {
         taskDetailsView.openCreate();
         renderEverything();
+    });
+
+    themeToggle = createThemeToggle({
+        state,
+        onNotice: showNotice
     });
 
     wireTabs();

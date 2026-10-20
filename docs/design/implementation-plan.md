@@ -447,4 +447,8 @@ These remain future extensions only.
 - Milestone 9.5 - Completed
 - Post-9.5 board UX: bucket column drag-and-drop (handle-only, bucket grouping) persists order via `PUT /api/plans/{planId}/buckets/order`
 - Post-9.5 board UX: progress column drag-and-drop (handle-only, progress grouping) persists order via `PUT /api/plans/{planId}/progress/order`
-- Milestone 10 - Not started
+- Milestone 10 - Completed
+  - Charts view: progress donut, tasks per bucket, tasks per priority, overdue count rendered as inline SVG/DOM; aggregates computed in frontend from the plan detail response (`js/utils/chart-data.js`, `js/views/charts.js`).
+  - Overdue highlighting added to board cards and grid rows using the shared overdue rule (`isTaskOverdue`), beyond charts-only counting.
+  - Light/dark theme toggle at sidebar bottom, persisted in `localStorage` (`js/views/theme.js`); full CSS token refactor with light + dark palettes in `app.css`.
+  - Tests: `ChartDataScriptTest` (Node-script aggregation boundary cases) and extended `StaticResourceTest` for chart/theme DOM ids.

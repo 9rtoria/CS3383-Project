@@ -26,7 +26,8 @@ export function createAppState() {
         taskDetailsStatus: "",
         taskDetailsError: "",
         isSavingTask: false,
-        taskDrawerOpen: false
+        taskDrawerOpen: false,
+        theme: "light"
     };
 }
 
