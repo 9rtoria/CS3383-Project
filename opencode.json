@@ -1,0 +1,17 @@
+	{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/CS3383/DeepSeek-V4-Flash",
+  "provider": {
+    "deepseek": {
+      "options": {
+        "baseURL": "https://llm.cs.cityu.edu.hk/v1",
+        "apiKey": "sk-xvvE7v26WYQnA5yKwvErTw"
+      },
+      "models": {
+        "CS3383/DeepSeek-V4-Flash": {
+            "name": "DeepSeek V4 Flash"
+        }
+      }
+    }
+  }
+}

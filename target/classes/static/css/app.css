@@ -62,7 +62,7 @@ body {
 .sidebar-top {
     display: flex;
     justify-content: flex-end;
-    padding: 10px 10px 0;
+    padding: 10px 14px 0;
 }
 
 .sidebar-toggle {
@@ -80,8 +80,9 @@ body {
 }
 
 .sidebar-content {
-    padding: 8px 12px 18px;
+    padding: 8px 14px 18px;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
     gap: 14px;
 }
@@ -91,7 +92,7 @@ body {
 }
 
 .brand-block {
-    padding: 2px 6px;
+    padding: 2px 0;
 }
 
 .eyebrow {
@@ -113,6 +114,7 @@ body {
     border: 1px solid rgba(230, 239, 245, 0.16);
     border-radius: 12px;
     padding: 12px;
+    min-width: 0;
 }
 
 .panel-header {
@@ -143,6 +145,7 @@ body {
     gap: 6px;
     max-height: 58vh;
     overflow-y: auto;
+    scrollbar-gutter: stable both-edges;
 }
 
 .plan-button {
