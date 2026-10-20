@@ -2,6 +2,7 @@
 
 import {ApiError} from "../api.js";
 import {compareTasksByDefaultOrder} from "../utils/task-sort.js";
+import {isTaskOverdue} from "../utils/chart-data.js";
 
 const PROGRESS_COLUMNS = [
     {value: "Not started", label: "Not started"},
@@ -712,6 +713,9 @@ export function createBoardView(options) {
     function renderTaskCard(task) {
         const card = document.createElement("article");
         card.className = "task-card";
+        if (isTaskOverdue(task, new Date())) {
+            card.classList.add("task-card-overdue");
+        }
         card.draggable = !state.isPatchingTask;
         card.dataset.taskId = task.id;
         if (state.selectedTaskId === task.id) {
@@ -752,10 +756,18 @@ export function createBoardView(options) {
 
         const dueLabel = task.dueDate ? `Due ${task.dueDate}` : "No due date";
         const priorityLabel = task.priority || "-";
+        const overdue = isTaskOverdue(task, new Date());
         const meta = document.createElement("p");
         meta.className = "task-meta";
         meta.textContent = `${priorityLabel} | ${dueLabel}`;
         card.appendChild(meta);
+
+        if (overdue) {
+            const overdueTag = document.createElement("span");
+            overdueTag.className = "task-overdue-tag";
+            overdueTag.textContent = "Overdue";
+            card.appendChild(overdueTag);
+        }
 
         return card;
     }

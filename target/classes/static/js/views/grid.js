@@ -1,6 +1,7 @@
 "use strict";
 
 import {sortTasksForGrid} from "../utils/task-sort.js";
+import {isTaskOverdue} from "../utils/chart-data.js";
 
 const COLUMNS = [
     {key: "title", label: "Title"},
@@ -154,6 +155,9 @@ export function createGridView(options) {
             row.className = "grid-row";
             row.tabIndex = 0;
             row.dataset.taskId = task.id;
+            if (isTaskOverdue(task, new Date())) {
+                row.classList.add("grid-row-overdue");
+            }
             if (state.selectedTaskId === task.id) {
                 row.classList.add("selected");
             }
@@ -174,7 +178,7 @@ export function createGridView(options) {
             row.appendChild(cell(task.progress || "-"));
             row.appendChild(cell(task.priority || "-"));
             row.appendChild(cell(task.startDate || "-"));
-            row.appendChild(cell(task.dueDate || "-"));
+            row.appendChild(dueDateCell(task));
 
             elements.body.appendChild(row);
         });
@@ -186,6 +190,22 @@ export function createGridView(options) {
     function cell(value) {
         const td = document.createElement("td");
         td.textContent = value;
+        return td;
+    }
+
+    function dueDateCell(task) {
+        const td = document.createElement("td");
+        if (task.dueDate) {
+            td.textContent = task.dueDate;
+        }
+        if (isTaskOverdue(task, new Date())) {
+            const tag = document.createElement("span");
+            tag.className = "task-overdue-tag";
+            tag.textContent = "Overdue";
+            td.appendChild(tag);
+        } else if (!task.dueDate) {
+            td.textContent = "-";
+        }
         return td;
     }
 

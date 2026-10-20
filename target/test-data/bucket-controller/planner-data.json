@@ -1,0 +1,32 @@
+{
+  "plans" : [ {
+    "id" : "pln_seed_001",
+    "name" : "Sample Plan",
+    "buckets" : [ {
+      "id" : "bkt_seed_002",
+      "name" : "Doing"
+    }, {
+      "id" : "bkt_seed_003",
+      "name" : "Done"
+    }, {
+      "id" : "bkt_3442453d00f64e0195f778c1c25a838a",
+      "name" : "Uncategorized"
+    } ],
+    "tasks" : [ {
+      "id" : "tsk_seed_001",
+      "title" : "Explore starter data",
+      "bucketId" : "bkt_3442453d00f64e0195f778c1c25a838a",
+      "progress" : "NOT_STARTED",
+      "priority" : "MEDIUM",
+      "startDate" : "2026-09-01",
+      "dueDate" : "2026-09-15",
+      "notes" : "Sample item used for local bootstrapping.",
+      "checklist" : [ {
+        "id" : "chk_seed_001",
+        "text" : "Read seed plan",
+        "completed" : false
+      } ]
+    } ],
+    "progressOrder" : [ "NOT_STARTED", "IN_PROGRESS", "COMPLETED" ]
+  } ]
+}

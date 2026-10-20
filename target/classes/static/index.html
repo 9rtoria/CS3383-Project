@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kanban Planner</title>
     <link rel="stylesheet" href="/css/app.css">
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem("kanban-theme");
+                if (theme === "dark") {
+                    document.documentElement.dataset.theme = "dark";
+                }
+            } catch (error) {
+                // Ignore storage access failures; default to light theme.
+            }
+        })();
+    </script>
 </head>
 <body>
 <div id="app-shell" class="app-shell sidebar-collapsed">
@@ -52,6 +64,10 @@
                 <p id="plans-status" class="status" role="status" aria-live="polite"></p>
                 <ul id="plan-list" class="plan-list" aria-label="Plans"></ul>
             </section>
+
+            <button id="theme-toggle-button" type="button" class="ghost theme-toggle" aria-pressed="false">
+                <span id="theme-toggle-label" class="theme-toggle-label">Dark mode</span>
+            </button>
         </div>
     </aside>
 
@@ -139,7 +155,24 @@
 
             <section id="charts-section" class="detail-card charts-card" aria-label="Charts view" hidden>
                 <h3>Charts</h3>
-                <p class="charts-placeholder">Charts arrive in Milestone 10.</p>
+                <div id="charts-grid" class="charts-grid">
+                    <div id="chart-progress" class="chart-widget" aria-label="Progress distribution">
+                        <h4>Progress</h4>
+                        <div id="chart-progress-body" class="chart-widget-body"></div>
+                    </div>
+                    <div id="chart-overdue" class="chart-widget" aria-label="Overdue count">
+                        <h4>Overdue</h4>
+                        <div id="chart-overdue-body" class="chart-widget-body"></div>
+                    </div>
+                    <div id="chart-buckets" class="chart-widget" aria-label="Tasks per bucket">
+                        <h4>Tasks per bucket</h4>
+                        <div id="chart-buckets-body" class="chart-widget-body"></div>
+                    </div>
+                    <div id="chart-priority" class="chart-widget" aria-label="Tasks per priority">
+                        <h4>Tasks per priority</h4>
+                        <div id="chart-priority-body" class="chart-widget-body"></div>
+                    </div>
+                </div>
             </section>
         </section>
     </main>

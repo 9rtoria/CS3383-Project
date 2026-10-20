@@ -52,6 +52,18 @@ class StaticResourceTest {
     }
 
     @Test
+    void indexHtmlIncludesChartAndThemeContainers() throws Exception {
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"charts-grid\"")))
+                .andExpect(content().string(containsString("id=\"chart-progress\"")))
+                .andExpect(content().string(containsString("id=\"chart-overdue\"")))
+                .andExpect(content().string(containsString("id=\"chart-buckets\"")))
+                .andExpect(content().string(containsString("id=\"chart-priority\"")))
+                .andExpect(content().string(containsString("id=\"theme-toggle-button\"")));
+    }
+
+    @Test
     void unknownStaticPathReturnsNotFound() throws Exception {
         mockMvc.perform(get("/does-not-exist"))
                 .andExpect(status().isNotFound());
