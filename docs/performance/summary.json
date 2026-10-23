@@ -1,0 +1,36 @@
+{
+  "base": "http://localhost:3000",
+  "generatedAt": "2026-10-23T14:06:54.251Z",
+  "results": [
+    {
+      "page": "Today",
+      "performance": 94,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "lcpMs": 2432,
+      "cls": 0,
+      "tbtMs": 225,
+      "totalBytes": 222632
+    },
+    {
+      "page": "Board",
+      "performance": 97,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "lcpMs": 2438,
+      "cls": 0.038,
+      "tbtMs": 135,
+      "totalBytes": 224818
+    },
+    {
+      "page": "Task drawer",
+      "performance": 95,
+      "accessibility": 100,
+      "bestPractices": 100,
+      "lcpMs": 2658,
+      "cls": 0.044,
+      "tbtMs": 111,
+      "totalBytes": 231333
+    }
+  ]
+}

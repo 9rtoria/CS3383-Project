@@ -1,0 +1,864 @@
+openapi: 3.1.0
+info:
+  title: Drift API
+  version: 1.0.0
+  description: |
+    Session-authenticated JSON API for Drift. Browser requests use the HttpOnly
+    `drift_session` cookie and must send an `Origin` header on mutations. Personal
+    access tokens use `Authorization: Bearer drift_pat_…`. Workspace-scoped routes
+    accept `X-Workspace-Id` or `?workspaceId=`.
+
+    Success bodies are domain-keyed (`{ "task": … }`, `{ "boards": … }`). Errors are
+    `{ "code", "message", "details?", "requestId" }` with `x-request-id` echoed.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+security:
+  - sessionCookie: []
+  - bearerToken: []
+tags:
+  - name: Auth
+  - name: Bootstrap
+  - name: Boards
+  - name: Tasks
+  - name: Planning
+  - name: Collaboration
+  - name: Enterprise
+  - name: Operations
+paths:
+  /api/health:
+    get:
+      tags: [Operations]
+      summary: Liveness and database check
+      security: []
+      responses:
+        "200": { description: Healthy }
+        "503": { description: Degraded }
+  /api/metrics:
+    get:
+      tags: [Operations]
+      summary: Process and tenant counters
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceQuery"
+      responses:
+        "200": { description: Metrics }
+  /api/openapi:
+    get:
+      tags: [Operations]
+      summary: This OpenAPI document
+      security: []
+      responses:
+        "200": { description: YAML description }
+  /api/auth/guest:
+    get:
+      tags: [Auth]
+      summary: Create an anonymous guest session and starter board
+      security: []
+      parameters:
+        - name: next
+          in: query
+          schema: { type: string, default: / }
+      responses:
+        "307": { description: Redirect with session cookie }
+    post:
+      tags: [Auth]
+      summary: Ensure an anonymous guest session (JSON response)
+      security: []
+      responses:
+        "200": { description: Guest session created or reused }
+  /api/auth/signup:
+    post:
+      tags: [Auth]
+      summary: Claim the current guest workspace with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                timezone: { type: string }
+      responses:
+        "200": { description: Account created and session rotated }
+  /api/auth/signin:
+    post:
+      tags: [Auth]
+      summary: Password sign-in, optionally with a TOTP/backup code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                totp: { type: string }
+      responses:
+        "200": { description: Session or MFA challenge }
+    delete:
+      tags: [Auth]
+      summary: Revoke the current session without signing out other devices
+      responses:
+        "200": { description: Signed out }
+  /api/auth/signout:
+    post:
+      tags: [Auth]
+      summary: Revoke all sessions for the current user
+      responses:
+        "200": { description: Signed out everywhere }
+    delete:
+      tags: [Auth]
+      summary: Revoke the current session
+      responses:
+        "200": { description: Signed out }
+  /api/auth/magic:
+    post:
+      tags: [Auth]
+      summary: Request a one-time email sign-in link
+      security: []
+      responses:
+        "202": { description: Request accepted (response does not reveal account existence) }
+  /api/auth/magic/verify:
+    get:
+      tags: [Auth]
+      summary: Consume a magic link and create a session
+      security: []
+      parameters:
+        - { name: token, in: query, required: true, schema: { type: string } }
+        - { name: next, in: query, schema: { type: string } }
+      responses:
+        "307": { description: Redirect with session cookie }
+  /api/auth/mfa/challenge:
+    post:
+      tags: [Auth]
+      summary: Complete a signed MFA challenge
+      security: []
+      responses:
+        "200": { description: Session created }
+  /api/auth/oauth/{provider}:
+    get:
+      tags: [Auth]
+      summary: Start GitHub, Google, or Apple OAuth
+      security: []
+      parameters:
+        - { name: provider, in: path, required: true, schema: { enum: [github, google, apple] } }
+        - { name: next, in: query, schema: { type: string } }
+      responses:
+        "307": { description: Redirect to the provider }
+  /api/auth/oauth/{provider}/callback:
+    get:
+      tags: [Auth]
+      summary: OAuth callback (authorization code + state)
+      security: []
+      responses:
+        "307": { description: Redirect to the app with a session }
+    post:
+      tags: [Auth]
+      summary: OAuth form_post callback (Apple)
+      security: []
+      responses:
+        "307": { description: Redirect to the app with a session }
+  /api/auth/sso/{workspaceId}:
+    get:
+      tags: [Auth]
+      summary: Start workspace OIDC single sign-on
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "307": { description: Redirect to the workspace identity provider }
+  /api/auth/sso/{workspaceId}/callback:
+    get:
+      tags: [Auth]
+      summary: Workspace OIDC callback
+      security: []
+      responses:
+        "307": { description: Redirect to the app with a session }
+    post:
+      tags: [Auth]
+      summary: Workspace OIDC form_post callback
+      security: []
+      responses:
+        "307": { description: Redirect to the app with a session }
+  /api/security/mfa:
+    get:
+      tags: [Auth]
+      summary: MFA status and active sessions
+      responses:
+        "200": { description: MFA state and session list }
+    post:
+      tags: [Auth]
+      summary: Prepare, enable, or disable TOTP MFA
+      responses:
+        "200": { description: MFA state changed }
+    delete:
+      tags: [Auth]
+      summary: Revoke another session
+      responses:
+        "200": { description: Session revoked or current-session refusal }
+  /api/bootstrap:
+    get:
+      tags: [Bootstrap]
+      summary: User, workspaces, boards, settings, notifications, views, templates, flags
+      responses:
+        "200":
+          description: Bootstrap payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, workspaces, settings, serverNow]
+                properties:
+                  user: { type: object }
+                  workspaces: { type: array, items: { type: object } }
+                  settings: { type: object }
+                  notifications: { type: array, items: { type: object } }
+                  unreadCount: { type: integer }
+                  views: { type: array, items: { type: object } }
+                  templates: { type: array, items: { type: object } }
+                  features: { type: object }
+                  oauthProviders: { type: array, items: { type: object } }
+                  serverNow: { type: string, format: date-time }
+  /api/boards:
+    get:
+      tags: [Boards]
+      summary: List boards in the current workspace
+      responses:
+        "200": { description: Boards }
+    post:
+      tags: [Boards]
+      summary: Create a board from a template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workspaceId, name]
+              properties:
+                workspaceId: { type: string }
+                name: { type: string, maxLength: 120 }
+                description: { type: string, maxLength: 2000 }
+                template: { type: string, default: blank }
+                visibility: { enum: [workspace, private], default: workspace }
+      responses:
+        "201": { description: Board created }
+  /api/boards/{id}:
+    get:
+      tags: [Boards]
+      summary: Board with columns, tasks, and members
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Board payload }
+    patch:
+      tags: [Boards]
+      summary: Update board metadata with optimistic version check
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Board updated }
+        "409": { description: Version conflict }
+    delete:
+      tags: [Boards]
+      summary: Soft-delete a board
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Board deleted }
+  /api/boards/{id}/duplicate:
+    post:
+      tags: [Boards]
+      summary: Duplicate a board and its tasks
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "201": { description: Duplicated board }
+  /api/boards/{id}/share:
+    post:
+      tags: [Boards]
+      summary: Enable, rotate, or disable a read-only public share link
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Share state }
+  /api/columns:
+    post:
+      tags: [Boards]
+      summary: Add a column
+      responses:
+        "201": { description: Column created }
+  /api/columns/{id}:
+    patch:
+      tags: [Boards]
+      summary: Rename a column, set WIP limit, or mark done
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Column updated }
+    delete:
+      tags: [Boards]
+      summary: Delete an empty column (at least one done column remains)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Column deleted }
+  /api/columns/reorder:
+    put:
+      tags: [Boards]
+      summary: Reorder columns with fractional positions
+      responses:
+        "200": { description: Columns reordered }
+  /api/tasks:
+    get:
+      tags: [Tasks]
+      summary: Query tasks by board, view, or filters
+      parameters:
+        - { name: boardId, in: query, schema: { type: string } }
+        - { name: view, in: query, schema: { enum: [today, upcoming, all] } }
+      responses:
+        "200": { description: Tasks }
+    post:
+      tags: [Tasks]
+      summary: Create a task
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workspaceId, boardId, columnId, title]
+              properties:
+                workspaceId: { type: string }
+                boardId: { type: string }
+                columnId: { type: string }
+                title: { type: string, maxLength: 500 }
+                description: { type: string, maxLength: 20000 }
+                priority: { enum: [none, low, medium, high, urgent] }
+                dueDate: { type: [string, "null"], format: date-time }
+                dueAllDay: { type: boolean }
+                estimateMinutes: { type: [integer, "null"], maximum: 1440 }
+                labels: { type: array, items: { type: string } }
+                assigneeId: { type: [string, "null"] }
+                recurrenceRule: { type: [string, "null"] }
+      responses:
+        "201": { description: Task created, with undo token }
+  /api/tasks/{id}:
+    get:
+      tags: [Tasks]
+      summary: Task detail with subtasks, comments, attachments, dependencies, activity
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Task detail }
+    patch:
+      tags: [Tasks]
+      summary: Update a task (send version for conflict detection)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: Task updated }
+        "409": { description: Version conflict }
+    delete:
+      tags: [Tasks]
+      summary: Soft-delete a task
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Task deleted, with undo token }
+  /api/tasks/{id}/move:
+    patch:
+      tags: [Tasks]
+      summary: Move a task between columns or positions
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [columnId]
+              properties:
+                columnId: { type: string }
+                beforeId: { type: [string, "null"] }
+                afterId: { type: [string, "null"] }
+                version: { type: integer }
+      responses:
+        "200": { description: Task moved }
+        "409": { description: Version conflict }
+        "422": { description: WIP limit or dependency blocked }
+  /api/tasks/bulk:
+    post:
+      tags: [Tasks]
+      summary: Bulk move, complete, archive, label, or delete tasks
+      responses:
+        "200": { description: Bulk result }
+  /api/tasks/{id}/subtasks:
+    post:
+      tags: [Tasks]
+      summary: Add a checklist item
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "201": { description: Subtask created }
+  /api/subtasks/{id}:
+    patch:
+      tags: [Tasks]
+      summary: Rename or toggle a checklist item
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Subtask updated }
+    delete:
+      tags: [Tasks]
+      summary: Delete a checklist item
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Subtask deleted }
+  /api/tasks/{id}/comments:
+    post:
+      tags: [Collaboration]
+      summary: Comment on a task and notify mentioned members
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "201": { description: Comment created }
+  /api/labels:
+    get:
+      tags: [Tasks]
+      summary: List workspace labels
+      responses:
+        "200": { description: Labels }
+    post:
+      tags: [Tasks]
+      summary: Create a label
+      responses:
+        "201": { description: Label created }
+    delete:
+      tags: [Tasks]
+      summary: Delete a workspace label
+      responses:
+        "200": { description: Label deleted }
+  /api/views:
+    get:
+      tags: [Planning]
+      summary: List saved views
+      responses:
+        "200": { description: Saved views }
+    post:
+      tags: [Planning]
+      summary: Save a view
+      responses:
+        "201": { description: View created }
+    delete:
+      tags: [Planning]
+      summary: Delete a saved view
+      responses:
+        "200": { description: View deleted }
+  /api/today:
+    get:
+      tags: [Planning]
+      summary: Capacity-aware Today plan and local suggestions
+      responses:
+        "200": { description: Today payload }
+    post:
+      tags: [Planning]
+      summary: Accept, dismiss, or rebalance a Today suggestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [action, workspaceId, taskId]
+                  properties:
+                    action: { enum: [accept, dismiss] }
+                    workspaceId: { type: string }
+                    taskId: { type: string }
+                - type: object
+                  required: [action, workspaceId]
+                  properties:
+                    action: { enum: [rebalance] }
+                    workspaceId: { type: string }
+      responses:
+        "200": { description: Updated Today payload }
+  /api/insights:
+    get:
+      tags: [Planning]
+      summary: Timeline and workload read model for the Insights view
+      responses:
+        "200": { description: Timeline, workload, and board health }
+  /api/upcoming:
+    get:
+      tags: [Planning]
+      summary: Tasks grouped by the next 14 days
+      responses:
+        "200": { description: Upcoming payload }
+  /api/calendar:
+    get:
+      tags: [Planning]
+      summary: Calendar range query
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: Calendar payload }
+  /api/calendar/ics:
+    get:
+      tags: [Planning]
+      summary: Download an iCalendar feed
+      responses:
+        "200": { description: text/calendar }
+  /api/archive:
+    get:
+      tags: [Planning]
+      summary: Archived tasks and boards
+      responses:
+        "200": { description: Archive payload }
+  /api/search:
+    get:
+      tags: [Planning]
+      summary: Full-text search with LIKE fallback
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Search results }
+  /api/undo/{id}:
+    post:
+      tags: [Tasks]
+      summary: Reverse a recently recorded action
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Action reversed }
+        "410": { description: Undo window expired }
+  /api/notifications:
+    get:
+      tags: [Collaboration]
+      summary: List notifications
+      responses:
+        "200": { description: Notifications }
+    patch:
+      tags: [Collaboration]
+      summary: Mark one or all notifications read
+      responses:
+        "200": { description: Updated }
+  /api/settings:
+    get:
+      tags: [Collaboration]
+      summary: Account preferences and profile
+      responses:
+        "200": { description: Settings }
+    patch:
+      tags: [Collaboration]
+      summary: Update preferences, timezone, capacity, and notifications
+      responses:
+        "200": { description: Settings updated }
+  /api/workspaces:
+    get:
+      tags: [Enterprise]
+      summary: List workspaces for the current user
+      responses:
+        "200": { description: Workspaces }
+    post:
+      tags: [Enterprise]
+      summary: Create a team or organization workspace
+      responses:
+        "201": { description: Workspace created }
+  /api/workspaces/{id}:
+    get:
+      tags: [Enterprise]
+      summary: Workspace detail, members, and policies
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Workspace }
+    patch:
+      tags: [Enterprise]
+      summary: Update workspace metadata or versioned policies
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Workspace updated }
+    delete:
+      tags: [Enterprise]
+      summary: Soft-delete a workspace (owner only)
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Workspace deleted }
+  /api/workspaces/{id}/members:
+    get:
+      tags: [Enterprise]
+      summary: List members
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Members }
+    patch:
+      tags: [Enterprise]
+      summary: Change a member role
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Member updated }
+    delete:
+      tags: [Enterprise]
+      summary: Remove a member
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Member removed }
+  /api/workspaces/{id}/invites:
+    get:
+      tags: [Enterprise]
+      summary: List pending invitations
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Invites }
+    post:
+      tags: [Enterprise]
+      summary: Invite an email address
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "201": { description: Invite created }
+    delete:
+      tags: [Enterprise]
+      summary: Revoke an invitation
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: Invite revoked }
+  /api/invites/{token}:
+    get:
+      tags: [Enterprise]
+      summary: Public invite preview
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Invite preview }
+    post:
+      tags: [Enterprise]
+      summary: Accept an invitation as the matching signed-in user
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Joined workspace }
+  /api/audit:
+    get:
+      tags: [Enterprise]
+      summary: Paginated workspace audit log
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceQuery"
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Audit events }
+  /api/automations:
+    get:
+      tags: [Enterprise]
+      summary: List automation rules and preview matches
+      responses:
+        "200": { description: Rules and preview }
+    post:
+      tags: [Enterprise]
+      summary: Create an automation rule
+      responses:
+        "201": { description: Rule created }
+  /api/automations/preview:
+    post:
+      tags: [Enterprise]
+      summary: Preview rule matches without side effects
+      responses:
+        "200": { description: Dry-run match count and sample tasks }
+  /api/automations/{id}:
+    patch:
+      tags: [Enterprise]
+      summary: Update or toggle a rule
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Rule updated }
+    delete:
+      tags: [Enterprise]
+      summary: Delete a rule
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Rule deleted }
+  /api/tokens:
+    get:
+      tags: [Enterprise]
+      summary: List personal access tokens
+      responses:
+        "200": { description: Tokens }
+    post:
+      tags: [Enterprise]
+      summary: Create a personal access token (shown once)
+      responses:
+        "201": { description: Token created }
+  /api/tokens/{id}:
+    delete:
+      tags: [Enterprise]
+      summary: Revoke a personal access token
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Token revoked }
+  /api/webhooks:
+    get:
+      tags: [Enterprise]
+      summary: List webhooks and delivery counts
+      responses:
+        "200": { description: Webhooks }
+    post:
+      tags: [Enterprise]
+      summary: Create a Slack, Teams, or generic webhook
+      responses:
+        "201": { description: Webhook created }
+  /api/webhooks/{id}:
+    delete:
+      tags: [Enterprise]
+      summary: Delete a webhook
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Webhook deleted }
+  /api/workspaces/{id}/sso:
+    get:
+      tags: [Enterprise]
+      summary: Read OIDC configuration (secret never returned)
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: SSO configuration }
+    put:
+      tags: [Enterprise]
+      summary: Save encrypted OIDC configuration (organization only)
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: SSO saved }
+    delete:
+      tags: [Enterprise]
+      summary: Remove OIDC configuration
+      parameters:
+        - $ref: "#/components/parameters/WorkspacePath"
+      responses:
+        "200": { description: SSO removed }
+  /api/export:
+    get:
+      tags: [Operations]
+      summary: Export workspace JSON or CSV
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceQuery"
+        - { name: format, in: query, schema: { enum: [json, csv], default: json } }
+      responses:
+        "200": { description: Export download }
+  /api/import:
+    post:
+      tags: [Operations]
+      summary: Import up to 1,000 tasks from JSON or CSV
+      responses:
+        "200": { description: Import result }
+  /api/attachments:
+    post:
+      tags: [Collaboration]
+      summary: Upload an attachment (multipart, 10 MB, MIME allowlist)
+      responses:
+        "201": { description: Attachment created }
+  /api/attachments/{id}:
+    get:
+      tags: [Collaboration]
+      summary: Download an attachment with authorization
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: File bytes }
+    delete:
+      tags: [Collaboration]
+      summary: Delete an attachment
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Attachment deleted }
+  /api/share/{token}:
+    get:
+      tags: [Boards]
+      summary: Public read-only shared board
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200": { description: Shared board }
+  /api/account:
+    patch:
+      tags: [Collaboration]
+      summary: Update profile name, avatar, or timezone
+      responses:
+        "200": { description: Account updated }
+    delete:
+      tags: [Collaboration]
+      summary: Delete the account and personal data
+      responses:
+        "200": { description: Account deleted }
+  /api/client-errors:
+    post:
+      tags: [Operations]
+      summary: Record a bounded client-side error
+      security: []
+      responses:
+        "202": { description: Received }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: drift_session
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: drift_pat_
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    WorkspacePath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    WorkspaceQuery:
+      name: workspaceId
+      in: query
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string }
+  schemas:
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: { type: string, example: VALIDATION_ERROR }
+        message: { type: string }
+        details: {}
+        requestId: { type: string, format: uuid }

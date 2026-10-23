@@ -1,0 +1,3 @@
+﻿ALTER TABLE "User" ADD COLUMN "mfaEnabled" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN "mfaSecretEnc" TEXT;
+ALTER TABLE "User" ADD COLUMN "mfaBackupCodesJson" TEXT;

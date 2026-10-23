@@ -1,0 +1,98 @@
+# Local production-style stack. Docker execution is unverified in the delivery
+# environment. Set AUTH_SECRET and APP_ENCRYPTION_KEY in .env before starting.
+services:
+  permissions:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /app/data/attachments /app/data/backups && chown -R 1001:1001 /app/data"]
+    volumes:
+      - drift-data:/app/data
+    restart: "no"
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    user: "1001:1001"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: file:/app/data/drift.db
+    volumes:
+      - drift-data:/app/data
+    depends_on:
+      permissions:
+        condition: service_completed_successfully
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/app/data/drift.db
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      SMTP_URL: ${SMTP_URL:-}
+      SMTP_FROM: ${SMTP_FROM:-Drift <hello@drift.local>}
+    ports:
+      - "3000:3000"
+    volumes:
+      - drift-data:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  jobs:
+    profiles: ["jobs"]
+    build:
+      context: .
+      target: tools
+    user: "1001:1001"
+    command: ["npx", "tsx", "scripts/jobs.ts"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/app/data/drift.db
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      SMTP_URL: ${SMTP_URL:-}
+    volumes:
+      - drift-data:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      target: tools
+    user: "1001:1001"
+    command: ["npx", "tsx", "prisma/seed.ts"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/app/data/drift.db
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      SEED_DEMO: "true"
+    volumes:
+      - drift-data:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+volumes:
+  drift-data:
