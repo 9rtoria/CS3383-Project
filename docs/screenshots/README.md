@@ -19,7 +19,7 @@ ProjectA2 states `10`–`23` were captured on 2026-10-24 from the same seeded de
 - `13-focus-running.png` — Focus Mode running with pause/complete controls.
 - `14-sound-settings.png` — Sound Lab section with palettes, volume, typing texture, and previews.
 - `15-voice-capture.png` — Quick Capture with voice input and the browser-service disclosure.
-- `16-mobile-today.png` — A2 mobile Today with Day Flow.
+- `16-mobile-today.png` — A2 mobile Today with Day Flow centered on the current block.
 - `17-dark-today.png` — A2 dark theme Today.
 - `18-appearance.png` — theme cards, accent, display type, reading size, density, motion, and live preview.
 - `19-language-region.png` — language preview, time zone, time format, week start, and date preview.

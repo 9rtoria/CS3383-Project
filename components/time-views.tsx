@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Plus, SunMedium } from "lucide-react";
 import { EmptyState, PriorityBadge } from "@/components/ui";
 import { api, formatApiError } from "@/lib/client";
-import { formatTime, parseDateOnly, priorityLabel } from "@/lib/format";
-import type { Task, UpcomingPayload, Workspace } from "@/lib/types";
+import { appLocale, formatTime, parseDateOnly } from "@/lib/format";
+import type { UpcomingPayload, Workspace } from "@/lib/types";
 
 export function UpcomingView({ workspace, refreshKey, onOpenTask, onQuickCapture }: {
   workspace: Workspace;
@@ -62,8 +62,8 @@ export function UpcomingView({ workspace, refreshKey, onOpenTask, onQuickCapture
             return (
               <section className="upcoming-day" key={date}>
                 <div className="upcoming-day-label">
-                  <strong>{isToday ? "Today" : parsed.toLocaleDateString(undefined, { day: "numeric" })}</strong>
-                  {parsed.toLocaleDateString(undefined, { weekday: "long", month: "short" })}
+                  <strong>{isToday ? "Today" : parsed.toLocaleDateString(appLocale(), { day: "numeric" })}</strong>
+                  {parsed.toLocaleDateString(appLocale(), { weekday: "long", month: "short" })}
                   <div style={{ color: "var(--faint)", marginTop: 3 }}>{tasks.length} task{tasks.length === 1 ? "" : "s"}</div>
                 </div>
                 <div className="upcoming-tasks">
@@ -83,7 +83,7 @@ export function UpcomingView({ workspace, refreshKey, onOpenTask, onQuickCapture
             );
           })}
           <div className="inline" style={{ marginTop: 20 }}>
-            <span className="field-hint">Showing tasks due through {parseDateOnly(data?.end ?? "").toLocaleDateString(undefined, { month: "long", day: "numeric" })}. Overdue work lives in Today and Search.</span>
+            <span className="field-hint">Showing tasks due through {parseDateOnly(data?.end ?? "").toLocaleDateString(appLocale(), { month: "long", day: "numeric" })}. Overdue work lives in Today and Search.</span>
             <button type="button" className="btn ghost sm" onClick={() => setDays((value) => (value === 14 ? 30 : 14))}>Change range <ArrowRight size={12} /></button>
           </div>
         </div>
@@ -136,13 +136,15 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
     });
   }, [month, weekStartsOn]);
   const weekdayLabels = useMemo(() => {
-    const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return Array.from({ length: 7 }, (_, index) => names[(weekStartsOn + index) % 7]);
+    const formatter = new Intl.DateTimeFormat(appLocale(), { weekday: "short" });
+    return Array.from({ length: 7 }, (_, index) =>
+      formatter.format(new Date(2024, 0, 7 + weekStartsOn + index, 12)),
+    );
   }, [weekStartsOn]);
 
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const selectedTasks = selected ? data?.byDate[selected] ?? [] : [];
-  const monthLabel = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1).toLocaleDateString(appLocale(), { month: "long", year: "numeric" });
 
   function shift(delta: number) {
     const [year, monthNumber] = month.split("-").map(Number);
@@ -179,7 +181,7 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
           <div className="calendar-grid">
             {cells.map((cell) => {
               const tasks = data?.byDate[cell.key] ?? [];
-              const dayLabel = cell.date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+              const dayLabel = cell.date.toLocaleDateString(appLocale(), { weekday: "long", month: "long", day: "numeric" });
               return (
                 <div
                   key={cell.key}
@@ -216,7 +218,7 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
         <aside className="today-side calendar-side">
           <div className="card side-card">
             <div className="section-head" style={{ marginBottom: 8 }}>
-              <h2 className="section-title">{selected ? parseDateOnly(selected).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }) : "Pick a day"}</h2>
+              <h2 className="section-title">{selected ? parseDateOnly(selected).toLocaleDateString(appLocale(), { weekday: "long", month: "long", day: "numeric" }) : "Pick a day"}</h2>
             </div>
             {selected ? (
               selectedTasks.length ? (

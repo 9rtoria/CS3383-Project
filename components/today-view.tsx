@@ -7,7 +7,7 @@ import { DayFlow } from "@/components/day-flow";
 import { SmartPlanModal, type SmartPlanPreview } from "@/components/smart-plan";
 import { useToast } from "@/components/toast";
 import { api, formatApiError } from "@/lib/client";
-import { formatDue, memberName } from "@/lib/format";
+import { formatDate, formatDue, memberName } from "@/lib/format";
 import { playSound } from "@/lib/sound";
 import { translateReason, useI18n } from "@/lib/i18n";
 import type { Preferences } from "@/lib/preferences";
@@ -206,7 +206,7 @@ export function TodayView({ workspace, refreshKey, userName, preferences, onOpen
     }
   }
 
-  const todayLabel = new Date().toLocaleDateString(preferences.locale === "zh-TW" ? "zh-TW" : undefined, { weekday: "long", month: "long", day: "numeric" });
+  const todayLabel = formatDate(new Date(), { weekday: "long", month: "long", day: "numeric" });
   const capacityPercent = data ? Math.min(100, Math.round((data.capacity.selectedMinutes / Math.max(1, data.capacity.totalMinutes)) * 100)) : 0;
   const over = data?.capacity.overbooked ?? false;
   const acceptedCount = data?.suggestions.filter((task) => task.accepted).length ?? 0;

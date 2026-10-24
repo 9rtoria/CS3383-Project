@@ -24,6 +24,7 @@ ProjectA2 keeps Drift's calm, keyboard-first identity and adds a focused set of 
 - A block can be dragged to **Later**, which clears `focusDate` for today and records a `TodayDismissal` — the task is not completed.
 - Accepted tasks also have a **Later** action in the list below, so touch and keyboard users are not forced to drag.
 - The capacity ring reads `selectedMinutes / capacityMinutes`; the rail shows chosen blocks as solid and suggestions as dashed.
+- On narrow screens the rail scrolls horizontally and starts centered on the current block, so the first view is not an empty morning.
 
 ### Smart Plan
 
@@ -66,6 +67,14 @@ The UI states “Preview first — local rules only” and “No model call” i
 - The hint explicitly says the browser's speech service is used, so the demo does not imply on-device recognition.
 - Voice is a shortcut, not the only way to capture. The text field remains the primary reliable path.
 
+### Settings
+
+- Preferences are stored in `UserSettings`, applied optimistically, and saved through a merge queue with rollback on failure.
+- Theme, accent, display type, reading size, density, and motion are real document-level changes, not static mock controls.
+- Dates and times follow the **app language**, not the operating system. An English UI on a Traditional Chinese machine stays English instead of showing `10月24日星期六` beside English labels.
+- The Done column count includes completed cards; other columns keep their open-task count for WIP visibility.
+- Language is a core-surface preview: app shell, Today, planning, capture, and Settings; workspace admin remains English.
+
 ## Verification
 
 Run against the seeded demo workspace on `http://localhost:3000`.
@@ -73,10 +82,10 @@ Run against the seeded demo workspace on `http://localhost:3000`.
 | Check | Result |
 |---|---|
 | `npm run typecheck` | Pass |
-| `npm run lint` | Pass, 0 errors, 42 warnings (baseline warnings) |
-| `npm test` | **90/90** in 12 files |
+| `npm run lint` | Pass, 0 errors, 40 warnings (baseline warnings) |
+| `npm test` | **91/91** in 13 files |
 | `npm run build` | Pass |
-| Playwright | **26/26 journeys × 3 engines = 78 executions** (12 baseline + 14 A2/settings) |
+| Playwright | **27/27 journeys × 3 engines = 81 executions** (12 baseline + 15 A2/settings) |
 | axe serious/critical | 0 on Today, Board, Insights, all checked Settings sections, auth |
 | Responsive | 390 px Today and mobile Settings checked |
 | Dark theme | Today and Settings checked |

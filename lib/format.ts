@@ -12,12 +12,17 @@ export function memberName(member: { name?: string | null; email?: string | null
 
 const DAY_MS = 86_400_000;
 
-function uiLocale(): string | undefined {
-  if (typeof window === "undefined") return undefined;
+/**
+ * Dates follow the app's language, not the operating system. Without this,
+ * an English UI on a Traditional Chinese machine renders dates such as
+ * "10月24日星期六" beside English labels.
+ */
+export function appLocale(): string {
+  if (typeof window === "undefined") return "en-US";
   try {
-    return localStorage.getItem("drift-locale") === "zh-TW" ? "zh-TW" : undefined;
+    return localStorage.getItem("drift-locale") === "zh-TW" ? "zh-TW" : "en-US";
   } catch {
-    return undefined;
+    return "en-US";
   }
 }
 
@@ -36,7 +41,7 @@ function capitalize(value: string): string {
 }
 
 function relativeDay(diff: number): string {
-  return capitalize(new Intl.RelativeTimeFormat(uiLocale(), { numeric: "auto" }).format(diff, "day"));
+  return capitalize(new Intl.RelativeTimeFormat(appLocale(), { numeric: "auto" }).format(diff, "day"));
 }
 
 export function startOfDay(value: Date): Date {
@@ -49,14 +54,14 @@ export function formatDate(value: string | Date | null | undefined, options: Int
   if (!value) return "";
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(uiLocale(), options).format(date);
+  return new Intl.DateTimeFormat(appLocale(), options).format(date);
 }
 
 export function formatTime(value: string | Date | null | undefined): string {
   if (!value) return "";
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(uiLocale(), { hour: "numeric", minute: "2-digit", ...timeFormatOptions() }).format(date);
+  return new Intl.DateTimeFormat(appLocale(), { hour: "numeric", minute: "2-digit", ...timeFormatOptions() }).format(date);
 }
 
 export function formatDue(value: string | Date | null | undefined, allDay = true): string {
@@ -71,9 +76,9 @@ export function formatDue(value: string | Date | null | undefined, allDay = true
   if (diff === -1) return relativeDay(-1);
   if (diff < -1 && diff >= -7) return relativeDay(diff);
   if (diff > 1 && diff < 7) {
-    return new Intl.DateTimeFormat(uiLocale(), { weekday: "long", ...(allDay ? {} : { hour: "numeric", minute: "2-digit", ...timeFormatOptions() }) }).format(date);
+    return new Intl.DateTimeFormat(appLocale(), { weekday: "long", ...(allDay ? {} : { hour: "numeric", minute: "2-digit", ...timeFormatOptions() }) }).format(date);
   }
-  return new Intl.DateTimeFormat(uiLocale(), {
+  return new Intl.DateTimeFormat(appLocale(), {
     month: "short",
     day: "numeric",
     ...(date.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {}),

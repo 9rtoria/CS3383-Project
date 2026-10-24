@@ -14,13 +14,13 @@ Two credential types are accepted:
 | Credential | Header / cookie | Notes |
 |---|---|---|
 | Browser session | `drift_session` HttpOnly cookie | Created by guest, sign-up, sign-in, magic link, OAuth, or SSO |
-| Personal access token | `Authorization: Bearer drift_pat_?¦` | Created in Settings ??Integrations; bound to one user and workspace |
+| Personal access token | `Authorization: Bearer drift_pat_...` | Created in Settings â†’ Integrations; bound to one user and workspace |
 
 Rules:
 
 - Cookie-authenticated **mutations** must send `Origin` matching `APP_URL` or the request origin. Missing or foreign origins return `403 CSRF_FAILED`.
 - Bearer requests skip the Origin check but still resolve the token owner and workspace. A token for workspace A cannot read or write workspace B.
-- API tokens currently inherit the owner?™s workspace role. There are **no per-token scopes**; create tokens only for trusted integrations. This is a documented limitation, not a claim of least privilege.
+- API tokens currently inherit the owner's workspace role. There are **no per-token scopes**; create tokens only for trusted integrations. This is a documented limitation, not a claim of least privilege.
 - Workspace-scoped routes require `X-Workspace-Id` (preferred) or `?workspaceId=`.
 - Public routes: `/api/health`, `/api/openapi`, `/api/auth/*` endpoints that begin a flow, `/api/share/[token]`, and `/api/calendar/ics` with a valid token.
 
@@ -79,7 +79,7 @@ Errors are uniform:
 
 Common codes: `UNAUTHORIZED`, `FORBIDDEN`, `WORKSPACE_NOT_FOUND`, `TASK_NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `VERSION_CONFLICT`, `RATE_LIMITED`, `CSRF_FAILED`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `MFA_REQUIRED`, `INTERNAL_ERROR`.
 
-`VERSION_CONFLICT` includes the current server entity in `details.current` so the client can offer ?œKeep mine / Use server??
+`VERSION_CONFLICT` includes the current server entity in `details.current` so the client can offer "Keep mine / Use server".
 
 ## 4. Endpoint index
 
@@ -256,7 +256,7 @@ The response reports how many existing tasks would change and a sample diff. Pre
 
 ### Export
 
-`GET /api/export?format=csv&workspaceId=ws_123` streams a CSV with a header row. JSON export returns boards, columns, tasks, labels, and comments. Exports are scoped to the caller?™s workspace and role.
+`GET /api/export?format=csv&workspaceId=ws_123` streams a CSV with a header row. JSON export returns boards, columns, tasks, labels, and comments. Exports are scoped to the caller's workspace and role.
 
 ### Import
 

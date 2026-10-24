@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Check, Clock3, Play, RefreshCw, Sparkles, Timer } from "lucide-react";
 import { playSound } from "@/lib/sound";
 import { useI18n } from "@/lib/i18n";
@@ -61,6 +61,8 @@ export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd,
   const [anchorMinutes] = useState(() => Math.max(6 * 60, roundUp(minutesOfDay(new Date()), 15)));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [laterOver, setLaterOver] = useState(false);
+  const railWrapRef = useRef<HTMLDivElement | null>(null);
+  const didScrollRail = useRef(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -92,6 +94,17 @@ export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd,
   );
 
   const nowMinutes = minutesOfDay(now);
+
+  useEffect(() => {
+    if (didScrollRail.current) return;
+    const wrap = railWrapRef.current;
+    if (!wrap || wrap.scrollWidth <= wrap.clientWidth + 1) return;
+    const focusMinutes = blocks[0]?.start ?? nowMinutes;
+    const target = (focusMinutes / DAY_MINUTES) * wrap.scrollWidth - wrap.clientWidth / 2;
+    wrap.scrollLeft = Math.max(0, Math.min(wrap.scrollWidth - wrap.clientWidth, target));
+    didScrollRail.current = true;
+  }, [blocks, nowMinutes]);
+
   const rawPercent = capacity.totalMinutes > 0 ? (capacity.selectedMinutes / capacity.totalMinutes) * 100 : 0;
   const ringPercent = Math.min(100, Math.max(0, rawPercent));
   const over = capacity.overbooked;
@@ -148,7 +161,7 @@ export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd,
         </div>
       </div>
 
-      <div className="day-flow-rail-wrap">
+      <div className="day-flow-rail-wrap" ref={railWrapRef}>
         <div className="day-flow-rail" role="group" aria-label="A 24 hour timeline of today's selected tasks">
           <div className="day-flow-grid" aria-hidden>
             {workdayStart > 0 ? (

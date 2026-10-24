@@ -66,12 +66,12 @@ erDiagram
 | `Task` | Unit of work | title, description, priority, start/due, all-day flag, estimate, **tracked `actualMinutes`**, recurrence, focus date, assignee, creator, `version`, archive/soft delete |
 | `Subtask` | Checklist item | ordered, completed flag |
 | `Label` / `TaskLabel` | Workspace label taxonomy | unique label name per workspace; join table |
-| `TaskDependency` | ?�blocked by??edge | composite PK; both sides cascade |
+| `TaskDependency` | "blocked by" edge | composite PK; both sides cascade |
 | `Comment` | Task discussion | soft delete; author nullable after account deletion |
 | `Attachment` | File metadata | random `storageName`; MIME, size; bytes live in `data/attachments` |
 | `ActivityEvent` | Task feed | action, entity, metadata, request ID |
 | `Reminder` | Per-user alert | `remindAt`, `sentAt`, channel; indexed by due time |
-| `TodayDismissal` | ?�Not today??decisions | composite PK `(userId, taskId, date)` |
+| `TodayDismissal` | "Not today" decisions | composite PK `(userId, taskId, date)` |
 | `View` | Saved board/list view | unique `(userId, workspaceId, name)`; filters JSON; favorite flag |
 
 ## 5. Automation, notifications, integrations
@@ -99,12 +99,12 @@ erDiagram
 
 ## 7. Invariants enforced in code
 
-- A task?�s `columnId` must belong to its `boardId`; the task service re-checks this on create and move.
+- A task's `columnId` must belong to its `boardId`; the task service re-checks this on create and move.
 - Moving to a done column sets `completedAt`; moving out clears it. Completing a recurring task creates the next occurrence.
 - `actualMinutes` is accumulated Focus Mode time, independent of `estimateMinutes`. It is written through the versioned task update path and is serialized to the board, Today, calendar, upcoming, and JSON/CSV export surfaces.
 - A workspace must retain at least one `OWNER`; ownership transfer and member removal enforce this.
 - Private boards are visible only to their creator and workspace admins/owners.
-- A task assignee must be a member of the task?�s workspace.
+- A task assignee must be a member of the task's workspace.
 - A reminder belongs to one user; the task title and board name are read at delivery time.
 - `shareToken` is random and only resolves when `shareEnabled` is true.
 - Deleting an account anonymizes the user row and removes credentials; authored content remains for workspace integrity.

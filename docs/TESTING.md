@@ -8,10 +8,10 @@
 | Layer | Tool | Result | Evidence |
 |---|---|---|---|
 | Type safety | `tsc --noEmit` (strict) | Pass, 0 errors | `typecheck-output.txt` |
-| Lint | ESLint 9 + Next config | Pass, 0 errors, 42 triaged warnings | `lint-output.txt` |
-| Unit | Vitest 5 | **90/90** in 12 files (ProjectA2 included) | `test-output.txt` |
+| Lint | ESLint 9 + Next config | Pass, 0 errors, 40 triaged warnings | `lint-output.txt` |
+| Unit | Vitest 5 | **91/91** in 13 files (ProjectA2 included) | `test-output.txt` |
 | Production build | `next build` | Pass, 44 static pages + route table | `build-output.txt` |
-| End-to-end | Playwright 1.64 (Chromium, Firefox, WebKit) | **26/26** journeys, 78 executions | `e2e-output.txt` |
+| End-to-end | Playwright 1.64 (Chromium, Firefox, WebKit) | **27/27** journeys, 81 executions | `e2e-output.txt` |
 | Accessibility | axe-core via Playwright | 0 serious/critical on Today, Board, Insights, all checked Settings sections, both auth states | included in E2E run |
 | Performance | Lighthouse 13.5 | 94/97/95 performance latest; 100 accessibility | `docs/performance/summary.json` |
 | Dependencies | `npm audit --omit=dev --audit-level=high` | 0 high/critical | final QA output |
@@ -37,6 +37,7 @@ npm test
 | `tests/unit/webhooks.test.ts` | Orphaned delivery stops retrying instead of crashing the job |
 | `tests/unit/preferences.test.ts` | Defaults, clamping, feature JSON, theme resolution, locale time previews |
 | `tests/unit/i18n.test.ts` | Dictionary completeness, fallback, placeholders, planner-reason translation |
+| `tests/unit/format.test.ts` | App-language dates/time, preventing OS-locale leakage |
 
 The AI evaluation is a fixture-based regression test, not a model benchmark. It asserts exact parses and plan ordering for 40 scenarios total. See [AI_GOVERNANCE.md](AI_GOVERNANCE.md).
 
@@ -81,8 +82,9 @@ Playwright starts a dev server on port 3100 only when `E2E_BASE_URL` is unset. U
 | 24 | `settings-experience.spec.ts` | A2 planning effects | Workday shading, plan buffer, block buffer, and start view reach Today |
 | 25 | `settings-experience.spec.ts` | A2 save failure | Failed save shows error, rolls back, and re-reads server state |
 | 26 | `settings-experience.spec.ts` | A2 settings UX | Search works and mobile uses the section picker |
+| 27 | `core.spec.ts` | A2 board count | A completed card in Done updates the visible column count |
 
-The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual. The default Playwright config runs the same 26 journeys on Chromium, Firefox, and WebKit (78 executions). `E2E=true` also raises the request-rate ceiling for the test harness; it does not bypass authorization or CSRF.
+The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual. The default Playwright config runs the same 27 journeys on Chromium, Firefox, and WebKit (81 executions). `E2E=true` also raises the request-rate ceiling for the test harness; it does not bypass authorization or CSRF.
 
 ## 4. Accessibility testing
 
@@ -161,4 +163,4 @@ npm run test:perf
 npm run audit
 ```
 
-Expected: typecheck clean, lint 0 errors, 90 unit tests pass, build succeeds, 26 journeys × 3 engines (78 executions) pass, Lighthouse accessibility 100, audit 0 high/critical.
+Expected: typecheck clean, lint 0 errors, 91 unit tests pass, build succeeds, 27 journeys × 3 engines (81 executions) pass, Lighthouse accessibility 100, audit 0 high/critical.

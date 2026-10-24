@@ -365,6 +365,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
           {columns.map((column) => {
             const list = grouped.get(column.id) ?? [];
             const open = list.filter((task) => !task.completedAt).length;
+            const columnCount = column.isDone ? list.length : open;
             const wipOver = Boolean(column.wipEnforced && column.wipLimit && open > column.wipLimit);
             const wipNear = Boolean(column.wipEnforced && column.wipLimit && open === column.wipLimit);
             return (
@@ -378,7 +379,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
                   <span className={`column-dot${column.isDone ? " done" : ""}`} aria-hidden />
                   <h2 className="column-title">
                     {column.name}
-                    <span className="column-count">{open}</span>
+                    <span className="column-count">{columnCount}</span>
                     {column.wipEnforced && column.wipLimit ? <span className={`wip-label${wipOver ? " rose" : ""}`}>WIP {open}/{column.wipLimit}</span> : null}
                   </h2>
                   <div className="column-head-actions">

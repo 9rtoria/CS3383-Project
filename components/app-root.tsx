@@ -816,7 +816,7 @@ export function AppRoot() {
                       <strong style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{write.label}</strong>
                     </div>
                     <div className="field-hint" style={{ marginTop: 4 }}>
-                      {write.kind.replace(".", " · ")} · {new Date(write.createdAt).toLocaleString()}
+                      {write.kind.replace(".", " · ")} · {formatDate(write.createdAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                       {write.error ? ` — ${write.error}` : ""}
                     </div>
                   </div>

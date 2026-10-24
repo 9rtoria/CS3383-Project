@@ -54,7 +54,7 @@ Workspace settings, people, policies, automations, integrations, audit, export, 
 
 ## Verification
 
-- `npm test`: 90 unit tests.
-- Playwright: 26 journeys across Chromium, Firefox, and WebKit (78 executions).
+- `npm test`: 91 unit tests.
+- Playwright: 27 journeys across Chromium, Firefox, and WebKit (81 executions).
 - The settings journey checks appearance, theme system, density/reading size, capacity, week start, language, notification queueing, feature toggles, focus/capture defaults, workday/buffer/start view, save failure rollback, search, and mobile navigation.
 - Production build and strict TypeScript pass.

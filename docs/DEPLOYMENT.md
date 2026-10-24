@@ -163,9 +163,9 @@ The E2E step starts the production server and points Playwright at `http://local
 - [ ] `npx prisma migrate deploy` applied
 - [ ] `npm run typecheck` 0 errors
 - [ ] `npm run lint` 0 errors
-- [ ] `npm test` 90/90
+- [ ] `npm test` 91/91
 - [ ] `npm run build` succeeds
-- [ ] `npm run test:e2e` 26 journeys × Chromium/Firefox/WebKit
+- [ ] `npm run test:e2e` 27 journeys × Chromium/Firefox/WebKit
 - [ ] `/api/health` 200
 - [ ] Guest capture works in a private window
 - [ ] Sign-in, sign-out, and MFA challenge work

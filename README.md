@@ -45,8 +45,8 @@ npm run start
 | `npm run start` | Start the production build |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm run lint` | ESLint (0 errors; warnings are triaged) |
-| `npm test` | 90 Vitest unit tests |
-| `npm run test:e2e` | 26 Playwright journeys across Chromium, Firefox, and WebKit (78 executions) |
+| `npm test` | 91 Vitest unit tests |
+| `npm run test:e2e` | 27 Playwright journeys across Chromium, Firefox, and WebKit (81 executions) |
 | `npm run test:a11y` | axe-core serious/critical scan |
 | `npm run test:perf` | Authenticated Lighthouse smoke (requires a running server) |
 | `npm run screenshots` | Regenerate `docs/screenshots/` |
