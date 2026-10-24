@@ -1,18 +1,18 @@
 # Testing
 
-**Status:** all automated suites green on 2026-10-23  
-**Last updated:** 2026-10-23
+**Status:** all automated suites green on 2026-10-24
+**Last updated:** 2026-10-24
 
 ## 1. What is verified
 
 | Layer | Tool | Result | Evidence |
 |---|---|---|---|
 | Type safety | `tsc --noEmit` (strict) | Pass, 0 errors | `typecheck-output.txt` |
-| Lint | ESLint 9 + Next config | Pass, 0 errors, 44 triaged warnings | `lint-output.txt` |
-| Unit | Vitest 5 | **79/79** in 10 files (ProjectA2 included) | `test-output.txt` |
+| Lint | ESLint 9 + Next config | Pass, 0 errors, 42 triaged warnings | `lint-output.txt` |
+| Unit | Vitest 5 | **90/90** in 12 files (ProjectA2 included) | `test-output.txt` |
 | Production build | `next build` | Pass, 44 static pages + route table | `build-output.txt` |
-| End-to-end | Playwright 1.64 (Chromium) | **16/16** (12 baseline + 4 A2) | `e2e-output.txt` |
-| Accessibility | axe-core via Playwright | 0 serious/critical on 6 surfaces | included in E2E run |
+| End-to-end | Playwright 1.64 (Chromium, Firefox, WebKit) | **26/26** journeys, 78 executions | `e2e-output.txt` |
+| Accessibility | axe-core via Playwright | 0 serious/critical on Today, Board, Insights, all checked Settings sections, both auth states | included in E2E run |
 | Performance | Lighthouse 13.5 | 94/97/95 performance latest; 100 accessibility | `docs/performance/summary.json` |
 | Dependencies | `npm audit --omit=dev --audit-level=high` | 0 high/critical | final QA output |
 | API contract | `js-yaml` parse + route count | 63 paths, valid YAML | unit/CI check |
@@ -35,6 +35,8 @@ npm test
 | `tests/unit/ai-eval.test.ts` | Two deterministic 20-case regression tables |
 | `tests/unit/openapi.test.ts` | YAML parse, 60+ path check, every route handler path/method documented |
 | `tests/unit/webhooks.test.ts` | Orphaned delivery stops retrying instead of crashing the job |
+| `tests/unit/preferences.test.ts` | Defaults, clamping, feature JSON, theme resolution, locale time previews |
+| `tests/unit/i18n.test.ts` | Dictionary completeness, fallback, placeholders, planner-reason translation |
 
 The AI evaluation is a fixture-based regression test, not a model benchmark. It asserts exact parses and plan ordering for 40 scenarios total. See [AI_GOVERNANCE.md](AI_GOVERNANCE.md).
 
@@ -69,8 +71,18 @@ Playwright starts a dev server on port 3100 only when `E2E_BASE_URL` is unset. U
 | 14 | `day-flow.spec.ts` | A2 Smart Plan | Preview, apply, and undo restore the prior plan |
 | 15 | `day-flow.spec.ts` | A2 Focus | Start, complete, and persist `actualMinutes` through the versioned task API |
 | 16 | `day-flow.spec.ts` | A2 Day Flow | HTML5 drag/drop moves a block to Later and clears it from the rail |
+| 17 | `settings-experience.spec.ts` | A2 appearance | Theme, accent, font, reading size, density, motion change the document and persist |
+| 18 | `settings-experience.spec.ts` | A2 system theme | OS light/dark changes the resolved theme while the preference stays System |
+| 19 | `settings-experience.spec.ts` | A2 planning | Capacity reaches Today; week start reaches Calendar |
+| 20 | `settings-experience.spec.ts` | A2 language | Core chrome and date language switch and persist |
+| 21 | `settings-experience.spec.ts` | A2 notification queue | Rapid toggles/changes are merged and persisted |
+| 22 | `settings-experience.spec.ts` | A2 features | Day Flow/voice toggles remove UI without hiding text capture |
+| 23 | `settings-experience.spec.ts` | A2 focus/capture | Focus length/auto-start and capture-close defaults reach the real screens |
+| 24 | `settings-experience.spec.ts` | A2 planning effects | Workday shading, plan buffer, block buffer, and start view reach Today |
+| 25 | `settings-experience.spec.ts` | A2 save failure | Failed save shows error, rolls back, and re-reads server state |
+| 26 | `settings-experience.spec.ts` | A2 settings UX | Search works and mobile uses the section picker |
 
-The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual.
+The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual. The default Playwright config runs the same 26 journeys on Chromium, Firefox, and WebKit (78 executions). `E2E=true` also raises the request-rate ceiling for the test harness; it does not bypass authorization or CSRF.
 
 ## 4. Accessibility testing
 
@@ -130,8 +142,8 @@ The workflow uses SQLite and a disposable database file. It does not run Docker,
 | No malware scanner | Uploaded files are not scanned | MIME/size checks + disable attachments for untrusted users |
 | No manual screen-reader pass | Unknown SR-specific issues | axe + keyboard tests; schedule manual audit |
 | No 10k-user load test | SQLite write contention untested at scale | PostgreSQL rollout; k6 plan in BACKLOG |
-| One browser engine | WebKit/Firefox regressions possible | Chromium only in CI; expand matrix |
-| Shared SQLite in E2E | Serial execution required | Unique fixtures; workers=1 |
+| Visual matrix not pixel-diffed | Theme/locale/zoom combinations can drift without a golden image | Screenshot fixtures reviewed manually; add Playwright `toHaveScreenshot` baselines next |
+| Shared SQLite in E2E | Serial execution required | Unique fixtures; workers=1; `E2E=true` raises the test-only rate ceiling |
 | Time-dependent Today tests | Clock edges can flake near midnight | Tests compute local day keys; rerun if near midnight |
 
 ## 9. Reproducing a clean run
@@ -149,4 +161,4 @@ npm run test:perf
 npm run audit
 ```
 
-Expected: typecheck clean, lint 0 errors, 79 unit tests pass, build succeeds, 16 E2E pass, Lighthouse accessibility 100, audit 0 high/critical.
+Expected: typecheck clean, lint 0 errors, 90 unit tests pass, build succeeds, 26 journeys × 3 engines (78 executions) pass, Lighthouse accessibility 100, audit 0 high/critical.

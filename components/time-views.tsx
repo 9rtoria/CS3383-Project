@@ -96,9 +96,10 @@ export function UpcomingView({ workspace, refreshKey, onOpenTask, onQuickCapture
   );
 }
 
-export function CalendarView({ workspace, refreshKey, onOpenTask, onQuickCapture }: {
+export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, onQuickCapture }: {
   workspace: Workspace;
   refreshKey: number;
+  weekStartsOn: number;
   onOpenTask: (taskId: string) => void;
   onQuickCapture: () => void;
 }) {
@@ -126,14 +127,18 @@ export function CalendarView({ workspace, refreshKey, onOpenTask, onQuickCapture
   const cells = useMemo(() => {
     const [year, monthNumber] = month.split("-").map(Number);
     const first = new Date(year!, monthNumber! - 1, 1);
-    const startOffset = (first.getDay() + 6) % 7;
+    const startOffset = (first.getDay() - weekStartsOn + 7) % 7;
     const start = new Date(year!, monthNumber! - 1, 1 - startOffset);
     return Array.from({ length: 42 }, (_, index) => {
       const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
       return { date, key, outside: date.getMonth() !== monthNumber! - 1 };
     });
-  }, [month]);
+  }, [month, weekStartsOn]);
+  const weekdayLabels = useMemo(() => {
+    const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return Array.from({ length: 7 }, (_, index) => names[(weekStartsOn + index) % 7]);
+  }, [weekStartsOn]);
 
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const selectedTasks = selected ? data?.byDate[selected] ?? [] : [];
@@ -169,7 +174,7 @@ export function CalendarView({ workspace, refreshKey, onOpenTask, onQuickCapture
             <span className="badge slate">{data?.total ?? 0} dated</span>
           </div>
           <div className="calendar-weekdays" aria-hidden>
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}
+            {weekdayLabels.map((day) => <span key={day}>{day}</span>)}
           </div>
           <div className="calendar-grid">
             {cells.map((cell) => {

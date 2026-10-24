@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   boardCreateSchema,
   passwordSchema,
+  settingsSchema,
   signupSchema,
   taskCreateSchema,
   taskUpdateSchema,
@@ -51,5 +52,34 @@ describe("Zod input validation (NFR-001, error contract)", () => {
   it("only accepts HTTPS webhook URLs", () => {
     expect(webhookSchema.safeParse({ workspaceId: "w1", kind: "slack", url: "http://example.com/hook", events: ["task.created"] }).success).toBe(false);
     expect(webhookSchema.safeParse({ workspaceId: "w1", kind: "slack", url: "https://example.com/hook", events: ["task.created"] }).success).toBe(true);
+  });
+
+  it("guards every personalization field at the API boundary", () => {
+    expect(settingsSchema.safeParse({
+      theme: "system",
+      density: "compact",
+      locale: "zh-TW",
+      timeFormat: "24",
+      readingSize: "large",
+      displayFont: "modern",
+      accent: "ink",
+      motion: "reduced",
+      startView: "board",
+      capacityMinutes: 480,
+      planBufferPercent: 20,
+      workdayStart: 8,
+      workdayEnd: 18,
+      blockBufferMinutes: 10,
+      focusMinutes: 45,
+      focusAutoStart: true,
+      captureCloseAfterAdd: false,
+      featuresJson: JSON.stringify({ dayFlow: true, smartPlan: false, voice: true }),
+    }).success).toBe(true);
+    expect(settingsSchema.safeParse({ theme: "neon" }).success).toBe(false);
+    expect(settingsSchema.safeParse({ locale: "fr" }).success).toBe(false);
+    expect(settingsSchema.safeParse({ planBufferPercent: 51 }).success).toBe(false);
+    expect(settingsSchema.safeParse({ focusMinutes: 4 }).success).toBe(false);
+    expect(settingsSchema.safeParse({ workdayEnd: 25 }).success).toBe(false);
+    expect(settingsSchema.safeParse({ capacityMinutes: 14 }).success).toBe(false);
   });
 });

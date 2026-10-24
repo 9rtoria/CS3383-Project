@@ -574,7 +574,7 @@ paths:
         "200": { description: Settings }
     patch:
       tags: [Collaboration]
-      summary: Update preferences, timezone, capacity, and notifications
+      summary: Update appearance, language/region, planning, focus, sound-adjacent preferences, and notifications
       responses:
         "200": { description: Settings updated }
   /api/workspaces:

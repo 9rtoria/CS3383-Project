@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Check, Clock3, Play, RefreshCw, Sparkles, Timer } from "lucide-react";
 import { playSound } from "@/lib/sound";
+import { useI18n } from "@/lib/i18n";
 import type { TodayPayload } from "@/lib/types";
 
 type Suggestion = TodayPayload["suggestions"][number];
@@ -12,6 +13,10 @@ type Props = {
   capacity: TodayPayload["capacity"];
   busy?: string | null;
   note?: string | null;
+  workdayStart: number;
+  workdayEnd: number;
+  blockBufferMinutes: number;
+  timeFormat: "auto" | "12" | "24";
   onOpenTask: (taskId: string) => void;
   onFocusTask: (task: Suggestion) => void;
   onDismiss: (taskId: string) => void;
@@ -21,10 +26,11 @@ type Props = {
 const DAY_MINUTES = 24 * 60;
 const HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 
-function formatClock(minutes: number): string {
+function formatClock(minutes: number, timeFormat: "auto" | "12" | "24"): string {
   const normalized = ((Math.round(minutes) % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
   const hour24 = Math.floor(normalized / 60);
   const minute = normalized % 60;
+  if (timeFormat === "24") return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
   const suffix = hour24 >= 12 ? "PM" : "AM";
   const hour12 = hour24 % 12 || 12;
   return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
@@ -46,7 +52,8 @@ function taskStart(task: Suggestion, cursor: number): number {
   return dueMinutes >= cursor ? dueMinutes : cursor;
 }
 
-export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, onDismiss, onRebalance }: Props) {
+export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd, blockBufferMinutes, timeFormat, onOpenTask, onFocusTask, onDismiss, onRebalance }: Props) {
+  const { t } = useI18n();
   const [now, setNow] = useState(() => new Date());
   // Freeze the layout anchor when the view opens. The "now" marker updates
   // every minute, but the plan itself should not slide down the rail while
@@ -74,14 +81,14 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
             const rawStart = taskStart(task, state.cursor);
             const start = rawStart + duration > DAY_MINUTES ? Math.max(0, DAY_MINUTES - duration) : rawStart;
             return {
-              cursor: Math.max(state.cursor, start + duration),
+              cursor: Math.max(state.cursor, start + duration + Math.max(0, blockBufferMinutes)),
               blocks: [...state.blocks, { task, start, duration }],
             };
           },
           { cursor: anchorMinutes, blocks: [] },
         )
         .blocks,
-    [anchorMinutes, selected],
+    [anchorMinutes, blockBufferMinutes, selected],
   );
 
   const nowMinutes = minutesOfDay(now);
@@ -112,12 +119,12 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
     <section className="day-flow" aria-labelledby="day-flow-title">
       <div className="day-flow-head">
         <div>
-          <div className="eyebrow"><Sparkles size={12} aria-hidden /> Signature view</div>
-          <h2 className="section-title" id="day-flow-title">Day flow</h2>
-          <p className="section-subtitle">Your chosen work laid across the day. Blocks breathe when the plan changes.</p>
+          <div className="eyebrow"><Sparkles size={12} aria-hidden /> {t("Signature view")}</div>
+          <h2 className="section-title" id="day-flow-title">{t("Day flow")}</h2>
+          <p className="section-subtitle">{t("Your chosen work laid across the day. Blocks breathe when the plan changes.")}</p>
           <div className="day-flow-legend" aria-hidden>
-            <span><i className="chosen" /> chosen</span>
-            <span><i className="suggested" /> suggestion</span>
+            <span><i className="chosen" /> {t("chosen")}</span>
+            <span><i className="suggested" /> {t("suggestion")}</span>
           </div>
         </div>
         <div className={`day-flow-ring${over ? " over" : ""}`} role="img" aria-label={`${Math.round(rawPercent)}% of daily capacity planned`}>
@@ -136,7 +143,7 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
           </svg>
           <div className="day-flow-ring-copy">
             <strong>{Math.round(rawPercent)}%</strong>
-            <span>{over ? "over" : "planned"}</span>
+            <span>{over ? t("over") : t("planned")}</span>
           </div>
         </div>
       </div>
@@ -144,13 +151,19 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
       <div className="day-flow-rail-wrap">
         <div className="day-flow-rail" role="group" aria-label="A 24 hour timeline of today's selected tasks">
           <div className="day-flow-grid" aria-hidden>
+            {workdayStart > 0 ? (
+              <span className="day-flow-outside" style={{ left: 0, width: `${(workdayStart / 24) * 100}%` }} />
+            ) : null}
+            {workdayEnd < 24 ? (
+              <span className="day-flow-outside" style={{ left: `${(workdayEnd / 24) * 100}%`, width: `${((24 - workdayEnd) / 24) * 100}%` }} />
+            ) : null}
             {HOURS.map((hour) => (
               <span key={hour} className="day-flow-grid-line" style={{ left: `${(hour / 24) * 100}%` }} />
             ))}
             <span className="day-flow-night" aria-hidden />
             {nowMinutes >= 0 && nowMinutes <= DAY_MINUTES ? (
               <span className="day-flow-now" style={{ left: `${(nowMinutes / 1440) * 100}%` }}>
-                <span>now</span>
+                <span>{t("now")}</span>
               </span>
             ) : null}
           </div>
@@ -169,28 +182,28 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
                   onDragStart={(event) => onBlockDragStart(event, task)}
                   onDragEnd={() => setDraggingId(null)}
                   onClick={() => onOpenTask(task.id)}
-                  title={`${formatClock(start)}–${formatClock(start + duration)} · ${task.title}${task.accepted ? " · chosen" : " · suggested"}`}
-                  aria-label={`${task.title}, ${formatClock(start)} to ${formatClock(start + duration)}${task.accepted ? ", chosen for today" : ", suggested"}`}
+                  title={`${formatClock(start, timeFormat)}–${formatClock(start + duration, timeFormat)} · ${task.title}${task.accepted ? ` · ${t("chosen")}` : ` · ${t("suggestion")}`}`}
+                  aria-label={`${task.title}, ${formatClock(start, timeFormat)} to ${formatClock(start + duration, timeFormat)}${task.accepted ? `, ${t("chosen")}` : `, ${t("suggestion")}`}`}
                 >
                   <span className="day-flow-block-mark" aria-hidden>
                     {task.accepted ? <Check size={10} /> : <span />}
                   </span>
                   {wide ? <span className="day-flow-block-title">{task.title}</span> : null}
-                  {wide ? <span className="day-flow-block-time">{formatClock(start)} · {duration}m</span> : null}
+                  {wide ? <span className="day-flow-block-time">{formatClock(start, timeFormat)} · {duration}m</span> : null}
                 </button>
               );
             })
           ) : (
             <div className="day-flow-empty">
               <span className="day-flow-empty-mark"><Clock3 size={16} aria-hidden /></span>
-              <span>Nothing on the rail yet. Choose one task below and watch the day take shape.</span>
+              <span>{t("Nothing on the rail yet. Choose one task below and watch the day take shape.")}</span>
             </div>
           )}
         </div>
 
         <div className="day-flow-hours" aria-hidden>
           {[0, 6, 12, 18, 24].map((hour) => (
-            <span key={hour} style={{ left: `${(hour / 24) * 100}%` }}>{hour === 24 ? "12 AM" : formatClock(hour * 60)}</span>
+            <span key={hour} style={{ left: `${(hour / 24) * 100}%` }}>{hour === 24 ? (timeFormat === "24" ? "24:00" : "12 AM") : formatClock(hour * 60, timeFormat)}</span>
           ))}
         </div>
       </div>
@@ -200,23 +213,23 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
           {next ? (
             <>
               <span className="day-flow-next-dot" aria-hidden />
-              <span><strong>{next.task.title}</strong><span>{formatClock(next.start)} · {next.duration}m{next.task.accepted ? " · chosen" : " · suggested"}</span></span>
+              <span><strong>{next.task.title}</strong><span>{formatClock(next.start, timeFormat)} · {next.duration}m{next.task.accepted ? ` · ${t("chosen")}` : ` · ${t("suggestion")}`}</span></span>
             </>
           ) : (
             <span>
-              <strong>{blocks.length ? "The rail is behind you." : "The rail is clear."}</strong>
-              <span>{blocks.length ? "Pick one small thing for the rest of the day, or stop here." : "Protect the empty space, or add one small thing."}</span>
+              <strong>{blocks.length ? t("The rail is behind you.") : t("The rail is clear.")}</strong>
+              <span>{blocks.length ? t("Pick one small thing for the rest of the day, or stop here.") : t("Protect the empty space, or add one small thing.")}</span>
             </span>
           )}
         </div>
         <div className="day-flow-actions">
           {next ? (
             <button type="button" className="btn ghost sm" onClick={() => onFocusTask(next.task)}>
-              <Play size={12} aria-hidden /> Focus next
+              <Play size={12} aria-hidden /> {t("Focus next")}
             </button>
           ) : null}
           <button type="button" className="btn soft sm" onClick={onRebalance} disabled={busy === "rebalance"}>
-            <RefreshCw size={12} className={busy === "rebalance" ? "spin" : undefined} aria-hidden /> Rebalance
+            <RefreshCw size={12} className={busy === "rebalance" ? "spin" : undefined} aria-hidden /> {t("Rebalance")}
           </button>
         </div>
       </div>
@@ -232,7 +245,7 @@ export function DayFlow({ tasks, capacity, busy, note, onOpenTask, onFocusTask, 
         onDrop={onLaterDrop}
       >
         <Timer size={13} aria-hidden />
-        <span>Drag a block here — or use Later on a task below — to let it wait for another day.</span>
+        <span>{t("Drag a block here — or use Later on a task below — to let it wait for another day.")}</span>
         {note ? <span className="day-flow-note">{note}</span> : null}
       </div>
     </section>

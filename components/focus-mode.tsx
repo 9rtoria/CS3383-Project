@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronLeft, Pause, Play, RotateCcw, Sparkles, Timer } from "lucide-react";
 import { playSound } from "@/lib/sound";
+import { useI18n } from "@/lib/i18n";
 import type { Task } from "@/lib/types";
 
 type Phase = "ready" | "running" | "paused" | "done";
@@ -11,6 +12,8 @@ type Phase = "ready" | "running" | "paused" | "done";
 type Props = {
   task: Task | null;
   open: boolean;
+  defaultMinutes: number;
+  autoStart: boolean;
   onClose: () => void;
   onComplete: (minutes: number) => Promise<boolean>;
   onLogTime: (minutes: number) => Promise<void>;
@@ -29,7 +32,8 @@ function minutesLabel(minutes: number): string {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
-export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props) {
+export function FocusMode({ task, open, defaultMinutes, autoStart, onClose, onComplete, onLogTime }: Props) {
+  const { t } = useI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const accumulated = useRef(0);
   const startedAt = useRef<number | null>(null);
@@ -38,7 +42,7 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const targetMinutes = task?.estimateMinutes ?? 25;
+  const targetMinutes = task?.estimateMinutes ?? defaultMinutes;
   const targetSeconds = Math.max(60, targetMinutes * 60);
   const progress = Math.min(1, elapsed / targetSeconds);
   const overEstimate = elapsed > targetSeconds;
@@ -54,7 +58,15 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
     setElapsed(0);
     setBusy(false);
     setError("");
-  }, [open, task?.id]);
+    if (autoStart) {
+      const timer = window.setTimeout(() => {
+        startedAt.current = Date.now();
+        setPhase("running");
+        playSound("focus");
+      }, 220);
+      return () => window.clearTimeout(timer);
+    }
+  }, [autoStart, open, task?.id]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -107,7 +119,7 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
         setPhase("done");
         playSound("complete");
       } else {
-        setError("Could not complete this task. Check its dependencies, then try again.");
+        setError(t("Could not complete this task. Check its dependencies, then try again."));
       }
     } catch (completeError) {
       setError(completeError instanceof Error ? completeError.message : "Could not complete this task.");
@@ -151,23 +163,23 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
         <header className="focus-mode-head">
           <span className="brand"><span className="brand-mark" aria-hidden>≈</span> Drift</span>
           <button type="button" className="btn ghost sm" onClick={() => void close()} disabled={busy}>
-            <ChevronLeft size={13} aria-hidden /> Leave focus
+            <ChevronLeft size={13} aria-hidden /> {t("Leave focus")}
           </button>
         </header>
 
         {phase === "done" ? (
           <div className="focus-done" role="status">
             <span className="focus-done-mark"><Check size={28} aria-hidden /></span>
-            <div className="eyebrow"><Sparkles size={12} aria-hidden /> Session complete</div>
-            <h1 id="focus-mode-title">That&apos;s enough.</h1>
-            <p>{clock(elapsed)} of attention for <strong>{task.title}</strong>. The estimate was {targetMinutes} minutes; the point was to begin.</p>
+            <div className="eyebrow"><Sparkles size={12} aria-hidden /> {t("Session complete")}</div>
+            <h1 id="focus-mode-title">{t("That's enough.")}</h1>
+            <p>{clock(elapsed)} {t("of attention for")} <strong>{task.title}</strong>. {t("The estimate was {{minutes}} minutes; the point was to begin.", { minutes: targetMinutes })}</p>
             <div className="focus-done-stats">
-              <span><strong>{actualMinutes}m</strong> tracked</span>
-              <span><strong>{minutesLabel(targetMinutes)}</strong> estimated</span>
-              <span><strong>{Math.abs(deltaMinutes)}m</strong> {deltaMinutes > 0 ? "over" : deltaMinutes < 0 ? "under" : "on estimate"}</span>
+              <span><strong>{actualMinutes}m</strong> {t("tracked")}</span>
+              <span><strong>{minutesLabel(targetMinutes)}</strong> {t("estimated")}</span>
+              <span><strong>{Math.abs(deltaMinutes)}m</strong> {deltaMinutes > 0 ? t("over") : deltaMinutes < 0 ? t("under") : t("on estimate")}</span>
             </div>
             <button type="button" className="btn primary lg" onClick={() => void close()}>
-              Return to Today
+              {t("Return to Today")}
             </button>
           </div>
         ) : (
@@ -187,10 +199,10 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
                 </svg>
                 <div className="focus-ring-copy">
                   <span className="focus-phase" aria-live="polite">
-                    {phase === "ready" ? "Ready when you are" : phase === "running" ? "In focus" : "Paused"}
+                    {phase === "ready" ? t("Ready when you are") : phase === "running" ? t("In focus") : t("Paused")}
                   </span>
                   <strong>{clock(elapsed)}</strong>
-                  <span>{overEstimate ? "past the estimate — still yours" : `of ${minutesLabel(targetMinutes)} estimated`}</span>
+                  <span>{overEstimate ? t("past the estimate — still yours") : `${t("of")} ${minutesLabel(targetMinutes)} ${t("estimated")}`}</span>
                 </div>
               </div>
             </div>
@@ -198,7 +210,7 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
             <div className="focus-task-copy">
               <div className="eyebrow"><Timer size={12} aria-hidden /> {task.board?.name ?? "Task"} · {task.column?.name ?? "Open"}</div>
               <h1 id="focus-mode-title">{task.title}</h1>
-              <p>{phase === "running" ? "The rest can wait. You only need the next small move." : phase === "paused" ? "Paused. Take the breath, then decide." : "One task. One timer. No feed, no backlog, no noise."}</p>
+              <p>{phase === "running" ? t("The rest can wait. You only need the next small move.") : phase === "paused" ? t("Paused. Take the breath, then decide.") : t("One task. One timer. No feed, no backlog, no noise.")}</p>
               <div className="focus-meta">
                 {task.estimateMinutes ? <span className="badge slate"><Timer size={10} aria-hidden /> {task.estimateMinutes}m estimate</span> : null}
                 {task.actualMinutes ? <span className="badge accent">{task.actualMinutes}m tracked before</span> : null}
@@ -209,23 +221,23 @@ export function FocusMode({ task, open, onClose, onComplete, onLogTime }: Props)
 
             <div className="focus-controls">
               {phase === "running" ? (
-                <button type="button" className="btn lg" onClick={pause}><Pause size={15} aria-hidden /> Pause</button>
+                <button type="button" className="btn lg" onClick={pause}><Pause size={15} aria-hidden /> {t("Pause")}</button>
               ) : (
                 <button type="button" className="btn primary lg" onClick={begin} autoFocus>
-                  <Play size={15} aria-hidden /> {phase === "paused" ? "Resume focus" : "Begin focus"}
+                  <Play size={15} aria-hidden /> {phase === "paused" ? t("Resume focus") : t("Begin focus")}
                 </button>
               )}
               <button type="button" className="btn soft lg" onClick={() => void complete()} disabled={busy || elapsed < 1}>
-                <Check size={15} aria-hidden /> {busy ? "Saving…" : "Complete task"}
+                <Check size={15} aria-hidden /> {busy ? t("Saving…") : t("Complete task")}
               </button>
               {elapsed > 0 ? (
                 <button type="button" className="btn ghost sm" onClick={() => void close()} disabled={busy}>
-                  <RotateCcw size={12} aria-hidden /> Log time and leave
+                  <RotateCcw size={12} aria-hidden /> {t("Log time and leave")}
                 </button>
               ) : null}
             </div>
             {error ? <p className="field-error" role="alert">{error}</p> : null}
-            <p className="focus-hint">Time is saved to this task when you complete it or leave. No audio is captured; task text stays in this workspace.</p>
+            <p className="focus-hint">{t("Time is saved to this task when you complete it or leave. No audio is captured; task text stays in this workspace.")}</p>
           </>
         )}
       </div>

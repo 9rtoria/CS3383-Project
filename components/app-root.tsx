@@ -49,6 +49,8 @@ import {
   type QueuedWrite,
 } from "@/lib/offline";
 import { formatDate, roleLabel } from "@/lib/format";
+import { applyPreferencesToDocument, normalizePreferences } from "@/lib/preferences";
+import { setLocale, useI18n } from "@/lib/i18n";
 import type { Bootstrap, Task, Workspace } from "@/lib/types";
 
 const VIEWS: AppView[] = ["today", "upcoming", "calendar", "search", "archive", "insights", "board"];
@@ -76,7 +78,10 @@ function readInitialParams(): { view: AppView | null; boardId: string | null; ta
 
 export function AppRoot() {
   const toast = useToast();
+  const { t } = useI18n();
   const [data, setData] = useState<Bootstrap | null>(null);
+  const preferences = useMemo(() => normalizePreferences(data?.settings), [data?.settings]);
+  const nextTheme = preferences.theme === "dark" ? "light" : preferences.theme === "light" ? "system" : "dark";
   const [error, setError] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
   const [view, setView] = useState<AppView>("today");
@@ -178,6 +183,20 @@ export function AppRoot() {
   }, [refreshBootstrap, syncQueue]);
 
   useEffect(() => {
+    if (!data?.settings) return;
+    applyPreferencesToDocument(preferences);
+    setLocale(preferences.locale);
+  }, [data?.settings, preferences]);
+
+  useEffect(() => {
+    if (preferences.theme !== "system" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemTheme = () => applyPreferencesToDocument(preferences);
+    media.addEventListener("change", onSystemTheme);
+    return () => media.removeEventListener("change", onSystemTheme);
+  }, [preferences]);
+
+  useEffect(() => {
     if (!data || timezoneSynced.current) return;
     const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (!detected || detected === data.user.timezone) return;
@@ -214,7 +233,12 @@ export function AppRoot() {
       } else if (nextWorkspace.boards[0]) {
         setBoardId(nextWorkspace.boards[0].id);
       }
-      if (params.view) setView(params.view);
+      if (params.view) {
+        setView(params.view);
+      } else {
+        const startView = normalizePreferences(data.settings).startView;
+        setView(startView === "board" && nextWorkspace.boards.length ? "board" : startView === "upcoming" ? "upcoming" : "today");
+      }
       if (params.taskId) setTaskId(params.taskId);
     }
   }, [data]);
@@ -248,10 +272,16 @@ export function AppRoot() {
   useEffect(() => {
     if (!data) return;
     const freshReminder = data.notifications.find((notification) => notification.type === "reminder" && !seenNotifications.current.has(notification.id));
+    let browserReminders = true;
+    try {
+      browserReminders = JSON.parse(data.settings.notificationsJson).browser !== false;
+    } catch {
+      // Safe default: browser reminders are allowed unless explicitly disabled.
+    }
     if (notificationsReady.current && freshReminder) {
       if (document.visibilityState === "visible") {
         playSound("reminder");
-      } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      } else if (browserReminders && typeof Notification !== "undefined" && Notification.permission === "granted") {
         try {
           const browserReminder = new Notification(freshReminder.title || "Drift reminder", {
             body: freshReminder.body,
@@ -354,6 +384,21 @@ export function AppRoot() {
     setSoundEnabled(next.enabled);
     if (next.enabled) previewSound("tap");
   }, [soundEnabled]);
+
+  const changeTheme = useCallback(async (next: typeof preferences.theme) => {
+    if (!data) return;
+    const previous = preferences;
+    applyPreferencesToDocument({ ...preferences, theme: next });
+    setData((current) => current ? { ...current, settings: { ...current.settings, theme: next } } : current);
+    try {
+      const result = await api<{ settings: Bootstrap["settings"] }>("/api/settings", { method: "PATCH", body: { theme: next }, keepalive: true });
+      setData((current) => current ? { ...current, settings: result.settings } : current);
+    } catch (themeError) {
+      applyPreferencesToDocument(previous);
+      setData((current) => current ? { ...current, settings: { ...current.settings, theme: previous.theme } } : current);
+      toast.error(formatApiError(themeError));
+    }
+  }, [data, preferences, toast]);
 
   useEffect(() => {
     function isTyping(target: EventTarget | null): boolean {
@@ -459,7 +504,7 @@ export function AppRoot() {
   const unread = data.unreadCount;
   const failedWrites = queuedWrites.filter((write) => write.status === "failed");
   const pendingWrites = queuedWrites.filter((write) => write.status !== "failed");
-  const currentTitle = view === "board" ? boardSummary?.name ?? "Board" : VIEW_TITLES[view];
+  const currentTitle = view === "board" ? boardSummary?.name ?? t("Board") : t(VIEW_TITLES[view]);
 
   return (
     <div className="app-shell">
@@ -478,9 +523,9 @@ export function AppRoot() {
           >
             {(close) => (
               <>
-                <MenuItem icon={<LayoutGrid size={14} />} onClick={() => { close(); setNewBoardOpen(true); }}>New board</MenuItem>
-                <MenuItem icon={<Sparkles size={14} />} onClick={() => { close(); setCaptureOpen(true); }}>Quick capture</MenuItem>
-                <MenuItem icon={<Settings size={14} />} onClick={() => { close(); window.location.assign("/settings"); }}>Workspace settings</MenuItem>
+                <MenuItem icon={<LayoutGrid size={14} />} onClick={() => { close(); setNewBoardOpen(true); }}>{t("New board")}</MenuItem>
+                <MenuItem icon={<Sparkles size={14} />} onClick={() => { close(); setCaptureOpen(true); }}>{t("Quick capture")}</MenuItem>
+                <MenuItem icon={<Settings size={14} />} onClick={() => { close(); window.location.assign("/settings"); }}>{t("Workspace settings")}</MenuItem>
               </>
             )}
           </Menu>
@@ -491,7 +536,7 @@ export function AppRoot() {
             trigger={
               <>
                 <span className="workspace-avatar" aria-hidden>{workspace.name.slice(0, 2).toUpperCase()}</span>
-                <span className="workspace-copy"><strong>{workspace.name}</strong><span>{workspace.type === "personal" ? "Personal workspace" : workspace.type === "team" ? "Team workspace" : "Organization"}</span></span>
+                <span className="workspace-copy"><strong>{workspace.name}</strong><span>{workspace.type === "personal" ? t("Personal workspace") : workspace.type === "team" ? t("Team workspace") : t("Organization")}</span></span>
                 <ChevronDown size={14} aria-hidden style={{ color: "var(--faint)" }} />
               </>
             }
@@ -516,31 +561,31 @@ export function AppRoot() {
         </div>
 
         <nav className="nav-section" aria-label="Views">
-          <div className="nav-label">Plan</div>
+          <div className="nav-label">{t("Plan")}</div>
           <button type="button" className={`nav-item${view === "today" ? " active" : ""}`} onClick={() => navigate("today")} aria-current={view === "today" ? "page" : undefined}>
-            <SunMedium size={16} aria-hidden /> Today <span className="nav-kbd">G T</span>
+            <SunMedium size={16} aria-hidden /> {t("Today")} <span className="nav-kbd">G T</span>
           </button>
           <button type="button" className={`nav-item${view === "upcoming" ? " active" : ""}`} onClick={() => navigate("upcoming")} aria-current={view === "upcoming" ? "page" : undefined}>
-            <CalendarDays size={16} aria-hidden /> Upcoming <span className="nav-kbd">G U</span>
+            <CalendarDays size={16} aria-hidden /> {t("Upcoming")} <span className="nav-kbd">G U</span>
           </button>
           <button type="button" className={`nav-item${view === "calendar" ? " active" : ""}`} onClick={() => navigate("calendar")} aria-current={view === "calendar" ? "page" : undefined}>
-            <CalendarDays size={16} aria-hidden /> Calendar <span className="nav-kbd">G C</span>
+            <CalendarDays size={16} aria-hidden /> {t("Calendar")} <span className="nav-kbd">G C</span>
           </button>
           <button type="button" className={`nav-item${view === "search" ? " active" : ""}`} onClick={() => navigate("search")} aria-current={view === "search" ? "page" : undefined}>
-            <Search size={16} aria-hidden /> Search <span className="nav-kbd">/</span>
+            <Search size={16} aria-hidden /> {t("Search")} <span className="nav-kbd">/</span>
           </button>
           <button type="button" className={`nav-item${view === "archive" ? " active" : ""}`} onClick={() => navigate("archive")} aria-current={view === "archive" ? "page" : undefined}>
-            <Archive size={16} aria-hidden /> Archive
+            <Archive size={16} aria-hidden /> {t("Archive")}
           </button>
           <button type="button" className={`nav-item${view === "insights" ? " active" : ""}`} onClick={() => navigate("insights")} aria-current={view === "insights" ? "page" : undefined}>
-            <BarChart3 size={16} aria-hidden /> Insights <span className="nav-kbd">G I</span>
+            <BarChart3 size={16} aria-hidden /> {t("Insights")} <span className="nav-kbd">G I</span>
           </button>
         </nav>
 
         <nav className="nav-section" aria-label="Boards" style={{ marginTop: 4, minHeight: 0, overflowY: "auto" }}>
           <div className="nav-label" style={{ display: "flex", alignItems: "center" }}>
-            <span style={{ flex: 1 }}>Boards</span>
-            <button type="button" className="icon-btn sm" aria-label="New board" onClick={() => setNewBoardOpen(true)} style={{ width: 22, height: 22, minWidth: 22 }}><Plus size={12} /></button>
+            <span style={{ flex: 1 }}>{t("Boards")}</span>
+            <button type="button" className="icon-btn sm" aria-label={t("New board")} onClick={() => setNewBoardOpen(true)} style={{ width: 22, height: 22, minWidth: 22 }}><Plus size={12} /></button>
           </div>
           {workspace.boards.map((board) => (
             <button type="button" key={board.id} className={`nav-item${view === "board" && board.id === boardSummary?.id ? " active" : ""}`} onClick={() => openBoard(board.id)}>
@@ -577,7 +622,7 @@ export function AppRoot() {
             {workspace.mfaLocked ? <span className="badge amber" title="This workspace requires MFA">MFA locked</span> : null}
           </div>
           <div className="topbar-actions">
-            <button type="button" className="btn soft sm hide-small" onClick={() => setCaptureOpen(true)}><Plus size={13} aria-hidden /> Capture <span className="kbd" style={{ background: "transparent", borderColor: "currentColor", color: "inherit", opacity: 0.6 }}>C</span></button>
+            <button type="button" className="btn soft sm hide-small" onClick={() => setCaptureOpen(true)}><Plus size={13} aria-hidden /> {t("Capture")} <span className="kbd" style={{ background: "transparent", borderColor: "currentColor", color: "inherit", opacity: 0.6 }}>C</span></button>
             <button type="button" className="icon-btn" aria-label="Command palette" title="Command palette (Ctrl K)" onClick={() => setPaletteOpen(true)}><Command size={17} /></button>
             <button type="button" className="icon-btn" aria-label="Search" onClick={() => navigate("search")}><Search size={17} /></button>
             <Menu
@@ -586,7 +631,7 @@ export function AppRoot() {
             >
               {(close) => (
                 <div style={{ minWidth: 295 }}>
-                  <div className="menu-label" style={{ display: "flex", alignItems: "center" }}><span style={{ flex: 1 }}>Notifications</span>{unread ? <button type="button" className="btn ghost sm" style={{ padding: "2px 5px", minHeight: 22 }} onClick={async () => { try { await api("/api/notifications", { method: "PATCH", workspaceId: workspace.id, body: { all: true, read: true } }); await refreshBootstrap(); toast.success("All caught up."); } catch (notifyError) { toast.error(formatApiError(notifyError)); } }}><CheckCheck size={12} /> Mark read</button> : null}</div>
+                  <div className="menu-label" style={{ display: "flex", alignItems: "center" }}><span style={{ flex: 1 }}>{t("Notifications")}</span>{unread ? <button type="button" className="btn ghost sm" style={{ padding: "2px 5px", minHeight: 22 }} onClick={async () => { try { await api("/api/notifications", { method: "PATCH", workspaceId: workspace.id, body: { all: true, read: true } }); await refreshBootstrap(); toast.success("All caught up."); } catch (notifyError) { toast.error(formatApiError(notifyError)); } }}><CheckCheck size={12} /> {t("Mark read")}</button> : null}</div>
                   <div style={{ maxHeight: 360, overflowY: "auto" }}>
                     {data.notifications.length ? data.notifications.map((notification) => (
                       <button key={notification.id} type="button" className={`menu-item${notification.readAt ? "" : " active"}`} onClick={async () => {
@@ -607,10 +652,10 @@ export function AppRoot() {
                           <span style={{ display: "block", fontSize: 9.5, color: "var(--faint)", marginTop: 2 }}>{formatDate(notification.createdAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                         </span>
                       </button>
-                    )) : <div style={{ padding: "18px 10px", textAlign: "center", color: "var(--muted)", fontSize: 12 }}>No notifications. A calm inbox.</div>}
+                    )) : <div style={{ padding: "18px 10px", textAlign: "center", color: "var(--muted)", fontSize: 12 }}>{t("No notifications. A calm inbox.")}</div>}
                   </div>
                   <div className="menu-sep" />
-                  <MenuItem icon={<Bell size={13} />} onClick={() => { close(); window.location.assign("/settings#notifications"); }}>Notification settings</MenuItem>
+                  <MenuItem icon={<Bell size={13} />} onClick={() => { close(); window.location.assign("/settings#notifications"); }}>{t("Notification settings")}</MenuItem>
                 </div>
               )}
             </Menu>
@@ -628,14 +673,12 @@ export function AppRoot() {
               {(close) => (
                 <>
                   <div className="menu-label">{data.user.name}</div>
-                  <MenuItem icon={<UserRound size={14} />} onClick={() => { close(); window.location.assign("/settings"); }}>Account settings</MenuItem>
-                  <MenuItem icon={<Settings size={14} />} onClick={() => { close(); window.location.assign("/settings#workspace"); }}>Workspace settings</MenuItem>
-                  <MenuItem icon={typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? <SunMedium size={14} /> : <Moon size={14} />} onClick={() => {
-                    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-                    localStorage.setItem("drift-theme", next);
-                    window.dispatchEvent(new Event("drift-theme-change"));
+                  <MenuItem icon={<UserRound size={14} />} onClick={() => { close(); window.location.assign("/settings"); }}>{t("Account settings")}</MenuItem>
+                  <MenuItem icon={<Settings size={14} />} onClick={() => { close(); window.location.assign("/settings#workspace"); }}>{t("Workspace settings")}</MenuItem>
+                  <MenuItem icon={nextTheme === "dark" ? <Moon size={14} /> : <SunMedium size={14} />} onClick={() => {
                     close();
-                  }}>Switch to {typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? "light" : "dark"} mode</MenuItem>
+                    void changeTheme(nextTheme);
+                  }}>Switch theme: {nextTheme === "system" ? t("System") : nextTheme === "dark" ? t("Dark") : t("Light")}</MenuItem>
                   <div className="menu-sep" />
                   <MenuItem icon={<LogOut size={14} />} danger onClick={() => { close(); void signOut(); }}>Sign out</MenuItem>
                 </>
@@ -673,11 +716,11 @@ export function AppRoot() {
           {workspace.mfaLocked ? (
             <EmptyState icon={<UserRound size={20} />} title="Multi-factor authentication required" description={`${workspace.name} requires MFA. Enable it in account settings, then reload.`} action={<a className="btn primary" href="/settings#security">Open security settings</a>} />
           ) : view === "today" ? (
-            <TodayView workspace={workspace} refreshKey={refreshKey} userName={data.user.name} onOpenTask={setTaskId} onFocusTask={openFocusTask} onQuickCapture={() => setCaptureOpen(true)} onNavigate={(next) => navigate(next)} onChanged={refreshAll} />
+            <TodayView workspace={workspace} refreshKey={refreshKey} userName={data.user.name} preferences={preferences} onOpenTask={setTaskId} onFocusTask={openFocusTask} onQuickCapture={() => setCaptureOpen(true)} onNavigate={(next) => navigate(next)} onChanged={refreshAll} />
           ) : view === "upcoming" ? (
             <UpcomingView workspace={workspace} refreshKey={refreshKey} onOpenTask={setTaskId} onQuickCapture={() => setCaptureOpen(true)} />
           ) : view === "calendar" ? (
-            <CalendarView workspace={workspace} refreshKey={refreshKey} onOpenTask={setTaskId} onQuickCapture={() => setCaptureOpen(true)} />
+            <CalendarView workspace={workspace} refreshKey={refreshKey} weekStartsOn={data.settings.weekStartsOn} onOpenTask={setTaskId} onQuickCapture={() => setCaptureOpen(true)} />
           ) : view === "search" ? (
             <SearchView workspace={workspace} refreshKey={refreshKey} onOpenTask={setTaskId} onNavigateBoard={openBoard} />
           ) : view === "archive" ? (
@@ -692,11 +735,11 @@ export function AppRoot() {
         </main>
 
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          <button type="button" className={`nav-item${view === "today" ? " active" : ""}`} onClick={() => navigate("today")}><SunMedium size={18} aria-hidden /> Today</button>
-          <button type="button" className={`nav-item${view === "upcoming" ? " active" : ""}`} onClick={() => navigate("upcoming")}><CalendarDays size={18} aria-hidden /> Upcoming</button>
-          <button type="button" className={`nav-item${view === "board" ? " active" : ""}`} onClick={() => navigate("board")}><LayoutGrid size={18} aria-hidden /> Board</button>
-          <button type="button" className={`nav-item${view === "search" ? " active" : ""}`} onClick={() => navigate("search")}><Search size={18} aria-hidden /> Search</button>
-          <button type="button" className="nav-item" onClick={() => window.location.assign("/settings")}><Settings size={18} aria-hidden /> Settings</button>
+          <button type="button" className={`nav-item${view === "today" ? " active" : ""}`} onClick={() => navigate("today")}><SunMedium size={18} aria-hidden /> {t("Today")}</button>
+          <button type="button" className={`nav-item${view === "upcoming" ? " active" : ""}`} onClick={() => navigate("upcoming")}><CalendarDays size={18} aria-hidden /> {t("Upcoming")}</button>
+          <button type="button" className={`nav-item${view === "board" ? " active" : ""}`} onClick={() => navigate("board")}><LayoutGrid size={18} aria-hidden /> {t("Board")}</button>
+          <button type="button" className={`nav-item${view === "search" ? " active" : ""}`} onClick={() => navigate("search")}><Search size={18} aria-hidden /> {t("Search")}</button>
+          <button type="button" className="nav-item" onClick={() => window.location.assign("/settings")}><Settings size={18} aria-hidden /> {t("Settings")}</button>
         </nav>
       </div>
 
@@ -705,6 +748,8 @@ export function AppRoot() {
         workspace={workspace}
         timeZone={data.user.timezone}
         defaultBoardId={view === "board" ? boardSummary?.id : undefined}
+        voiceEnabled={preferences.features.voice}
+        closeAfterAdd={preferences.captureCloseAfterAdd}
         onClose={() => setCaptureOpen(false)}
         onCreated={async (task: Task) => {
           setRefreshKey((value) => value + 1);
@@ -729,6 +774,8 @@ export function AppRoot() {
       <FocusMode
         task={focusTask}
         open={Boolean(focusTask)}
+        defaultMinutes={preferences.focusMinutes}
+        autoStart={preferences.focusAutoStart}
         onClose={() => { setFocusTask(null); refreshAll(); }}
         onComplete={completeFocusTask}
         onLogTime={logFocusTime}

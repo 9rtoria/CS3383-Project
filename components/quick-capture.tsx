@@ -8,6 +8,7 @@ import { enqueueWrite } from "@/lib/offline";
 import { useToast } from "@/components/toast";
 import { parseQuickAdd } from "@/lib/nlq";
 import { playSound } from "@/lib/sound";
+import { useI18n } from "@/lib/i18n";
 import { formatDue, priorityLabel } from "@/lib/format";
 import type { BoardSummary, Task, Workspace } from "@/lib/types";
 
@@ -45,12 +46,15 @@ type Props = {
   workspace: Workspace;
   timeZone: string;
   defaultBoardId?: string | null;
+  voiceEnabled?: boolean;
+  closeAfterAdd?: boolean;
   onClose: () => void;
   onCreated: (task: Task, boardId: string) => void | Promise<void>;
 };
 
-export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClose, onCreated }: Props) {
+export function QuickCapture({ open, workspace, timeZone, defaultBoardId, voiceEnabled = true, closeAfterAdd = true, onClose, onCreated }: Props) {
   const toast = useToast();
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const [boardId, setBoardId] = useState(defaultBoardId ?? workspace.boards[0]?.id ?? "");
   const [columnId, setColumnId] = useState("");
@@ -116,7 +120,7 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
     };
     const Constructor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     if (!Constructor) {
-      setVoiceError("Voice input isn’t available in this browser. The text field is always here.");
+      setVoiceError(t("Voice input isn’t available in this browser. The text field is always here."));
       return;
     }
     setVoiceError("");
@@ -146,10 +150,10 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
     recognition.onerror = (event) => {
       const message =
         event.error === "not-allowed" || event.error === "service-not-allowed"
-          ? "Microphone permission was denied. You can still type the task."
+          ? t("Microphone permission was denied. You can still type the task.")
           : event.error === "no-speech"
-            ? "No speech detected. Try again, or type instead."
-            : "Voice input stopped. You can type the task instead.";
+            ? t("No speech detected. Try again, or type instead.")
+            : t("Voice input stopped. You can type the task instead.");
       setVoiceError(message);
       setListening(false);
       setInterim("");
@@ -166,7 +170,7 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
       recognition.start();
       setListening(true);
     } catch {
-      setVoiceError("Voice input could not start. You can type the task instead.");
+      setVoiceError(t("Voice input could not start. You can type the task instead."));
       recognitionRef.current = null;
     }
   }
@@ -209,7 +213,8 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
       });
       setText("");
       playSound("capture");
-      onClose();
+      if (closeAfterAdd) onClose();
+      else window.setTimeout(() => textareaRef.current?.focus(), 30);
     };
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       queuedOffline();
@@ -236,7 +241,8 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
       await onCreated(result.task, board.id);
       setText("");
       playSound("capture");
-      onClose();
+      if (closeAfterAdd) onClose();
+      else window.setTimeout(() => textareaRef.current?.focus(), 30);
     } catch (error) {
       if (error instanceof ApiClientError && error.code === "NETWORK_ERROR") {
         queuedOffline();
@@ -255,12 +261,12 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
   }
 
   return (
-    <Modal open={open} onClose={close} className="capture-dialog" eyebrow="Quick capture" width={620}>
+    <Modal open={open} onClose={close} className="capture-dialog" eyebrow={t("Quick capture")} width={620}>
       <textarea
         ref={textareaRef}
         className="capture-input"
-        aria-label="What needs doing?"
-        placeholder="What needs doing? Try “Draft launch note tomorrow 2pm !high #Work ~45m”"
+        aria-label={t("What needs doing?")}
+        placeholder={t("What needs doing? Try “Draft launch note tomorrow 2pm !high #Work ~45m”")}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
@@ -271,30 +277,34 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
         }}
         rows={3}
       />
-      <div className={`capture-voice${listening ? " listening" : ""}`}>
-        <button
-          type="button"
-          className={`btn ghost sm${listening ? " listening" : ""}`}
-          onClick={toggleVoice}
-          aria-pressed={listening}
-          aria-label={listening ? "Stop voice capture" : "Speak a task"}
-          title={voiceSupported ? "Speak a task" : "Voice input isn’t available in this browser"}
-        >
-          {listening ? <MicOff size={13} aria-hidden /> : <Mic size={13} aria-hidden />}
-          {listening ? "Stop listening" : "Speak"}
-        </button>
-        <span className="field-hint" aria-live="polite">
-          {listening
-            ? interim
-              ? `“${interim}”`
-              : "Listening… speak now. You can edit the words before adding."
-            : voiceSupported
-              ? "Uses your browser’s speech service. Edit the words before adding; typing always works too."
-              : "Voice isn’t available in this browser — type instead."}
-        </span>
-        {interim && !listening ? <span className="badge accent">Heard</span> : null}
-      </div>
-      {voiceError ? <p className="field-error" role="alert">{voiceError}</p> : null}
+      {voiceEnabled ? (
+        <>
+          <div className={`capture-voice${listening ? " listening" : ""}`}>
+            <button
+              type="button"
+              className={`btn ghost sm${listening ? " listening" : ""}`}
+              onClick={toggleVoice}
+              aria-pressed={listening}
+              aria-label={listening ? "Stop voice capture" : "Speak a task"}
+              title={voiceSupported ? "Speak a task" : "Voice input isn’t available in this browser"}
+            >
+              {listening ? <MicOff size={13} aria-hidden /> : <Mic size={13} aria-hidden />}
+              {listening ? t("Stop listening") : t("Speak")}
+            </button>
+            <span className="field-hint" aria-live="polite">
+              {listening
+                ? interim
+                  ? `“${interim}”`
+                  : t("Listening… speak now. You can edit the words before adding.")
+                : voiceSupported
+                  ? t("Uses your browser’s speech service. Edit the words before adding; typing always works too.")
+                  : t("Voice isn’t available in this browser — type instead.")}
+            </span>
+            {interim && !listening ? <span className="badge accent">Heard</span> : null}
+          </div>
+          {voiceError ? <p className="field-error" role="alert">{voiceError}</p> : null}
+        </>
+      ) : null}
       <div className="capture-preview" aria-live="polite">
         {parsed.title && text.trim() ? <span className="badge accent">New task</span> : null}
         {parsed.dueDate ? (
@@ -326,8 +336,8 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
       </div>
       <div className="capture-options">
         <label className="field" style={{ flex: 1, minWidth: 150 }}>
-          <span className="label">Board</span>
-          <select className="select" value={board?.id ?? ""} onChange={(event) => setBoardId(event.target.value)} aria-label="Board">
+          <span className="label">{t("Board")}</span>
+          <select className="select" value={board?.id ?? ""} onChange={(event) => setBoardId(event.target.value)} aria-label={t("Board")}>
             {workspace.boards.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}
@@ -336,8 +346,8 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
           </select>
         </label>
         <label className="field" style={{ flex: 1, minWidth: 140 }}>
-          <span className="label">Column</span>
-          <select className="select" value={columnId} onChange={(event) => setColumnId(event.target.value)} aria-label="Column">
+          <span className="label">{t("Column")}</span>
+          <select className="select" value={columnId} onChange={(event) => setColumnId(event.target.value)} aria-label={t("Column")}>
             {columns.map((column) => (
               <option key={column.id} value={column.id}>
                 {column.name}
@@ -347,14 +357,14 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
         </label>
         <button type="button" className="btn primary" onClick={() => void submit()} disabled={!text.trim() || !columnId || saving}>
           <Zap size={14} aria-hidden />
-          {saving ? "Adding…" : "Add task"}
+          {saving ? t("Adding…") : t("Add task")}
           <span className="kbd" style={{ marginLeft: 3, background: "transparent", color: "inherit", borderColor: "currentColor", opacity: 0.7 }}>
             <CornerDownLeft size={9} aria-hidden />
           </span>
         </button>
       </div>
       <p className="capture-tip" style={{ marginBottom: 0 }}>
-        Keep it small. You can add details, checklists and people later — or press Esc and come back.
+        {t("Keep it small. You can add details, checklists and people later — or press Esc and come back.")}
       </p>
     </Modal>
   );

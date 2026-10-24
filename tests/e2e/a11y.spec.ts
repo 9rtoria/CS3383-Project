@@ -41,8 +41,15 @@ test("a11y: Today, board, Insights, settings, and auth", async ({ page }) => {
   await page.keyboard.press("Escape");
 
   await page.goto("/settings#notifications");
-  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
-  await scan(page, "Settings");
+  await expect(page.getByRole("heading", { level: 1, name: /Settings|設定/ })).toBeVisible();
+  await scan(page, "Settings (notifications)");
+
+  for (const section of ["account", "appearance", "language", "planning", "focus", "sound", "keyboard", "features"]) {
+    await page.goto(`/settings#${section}`);
+    await expect(page.getByRole("heading", { level: 1, name: /Settings|設定/ })).toBeVisible();
+    await page.waitForTimeout(250);
+    await scan(page, `Settings (${section})`);
+  }
 
   await page.goto("/auth?mode=signin");
   await expect(page.getByRole("heading", { name: /Keep this workspace|Welcome back/ })).toBeVisible();

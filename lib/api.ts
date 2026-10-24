@@ -77,7 +77,9 @@ export async function handleApi(
   let viewer: Viewer | null = null;
 
   try {
-    const limit = options.rateLimit ?? (url.pathname.startsWith("/api/auth") ? 20 : 180);
+    // The browser suite creates a fresh guest per test. Keep production limits
+    // strict while giving the E2E harness enough headroom for three engines.
+    const limit = process.env.E2E === "true" ? 10_000 : options.rateLimit ?? (url.pathname.startsWith("/api/auth") ? 20 : 180);
     const limited = rateLimited(`${options.public ? "anon" : "ip"}:${ip}:${url.pathname}`, limit);
     if (limited.limited) {
       const response = errorResponse(new ApiError("RATE_LIMITED"), requestId);

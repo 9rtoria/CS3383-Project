@@ -3,7 +3,7 @@
 **Base URL:** `http://localhost:3000`  
 **Contract:** [`docs/openapi.yaml`](openapi.yaml), also served at `GET /api/openapi`  
 **Version:** 1.0.0  
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-24
 
 The API is a JSON REST surface implemented by Next.js route handlers. It is the same surface the web client uses; there is no private browser-only backend.
 
@@ -14,13 +14,13 @@ Two credential types are accepted:
 | Credential | Header / cookie | Notes |
 |---|---|---|
 | Browser session | `drift_session` HttpOnly cookie | Created by guest, sign-up, sign-in, magic link, OAuth, or SSO |
-| Personal access token | `Authorization: Bearer drift_pat_…` | Created in Settings → Integrations; bound to one user and workspace |
+| Personal access token | `Authorization: Bearer drift_pat_?�` | Created in Settings ??Integrations; bound to one user and workspace |
 
 Rules:
 
 - Cookie-authenticated **mutations** must send `Origin` matching `APP_URL` or the request origin. Missing or foreign origins return `403 CSRF_FAILED`.
 - Bearer requests skip the Origin check but still resolve the token owner and workspace. A token for workspace A cannot read or write workspace B.
-- API tokens currently inherit the owner’s workspace role. There are **no per-token scopes**; create tokens only for trusted integrations. This is a documented limitation, not a claim of least privilege.
+- API tokens currently inherit the owner?�s workspace role. There are **no per-token scopes**; create tokens only for trusted integrations. This is a documented limitation, not a claim of least privilege.
 - Workspace-scoped routes require `X-Workspace-Id` (preferred) or `?workspaceId=`.
 - Public routes: `/api/health`, `/api/openapi`, `/api/auth/*` endpoints that begin a flow, `/api/share/[token]`, and `/api/calendar/ics` with a valid token.
 
@@ -29,7 +29,7 @@ Rules:
 ```http
 GET /api/today?workspaceId=ws_123 HTTP/1.1
 Origin: http://localhost:3000
-Cookie: drift_session=…
+Cookie: drift_session=??
 X-Workspace-Id: ws_123
 ```
 
@@ -57,7 +57,7 @@ Exceeding a limit returns `429 RATE_LIMITED` with `Retry-After`.
 Success bodies are **domain-keyed**, not wrapped in `data`:
 
 ```json
-{ "task": { "id": "tsk_…", "title": "Shape the launch story", "version": 3 } }
+{ "task": { "id": "tsk_??, "title": "Shape the launch story", "version": 3 } }
 ```
 
 Lists use the plural key and, where paginated, a cursor:
@@ -73,13 +73,13 @@ Errors are uniform:
   "code": "VALIDATION_ERROR",
   "message": "Choose a board.",
   "details": { "fieldErrors": { "boardId": ["Required"] } },
-  "requestId": "2f1c9b1e-…"
+  "requestId": "2f1c9b1e-??
 }
 ```
 
 Common codes: `UNAUTHORIZED`, `FORBIDDEN`, `WORKSPACE_NOT_FOUND`, `TASK_NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `VERSION_CONFLICT`, `RATE_LIMITED`, `CSRF_FAILED`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `MFA_REQUIRED`, `INTERNAL_ERROR`.
 
-`VERSION_CONFLICT` includes the current server entity in `details.current` so the client can offer “Keep mine / Use server”.
+`VERSION_CONFLICT` includes the current server entity in `details.current` so the client can offer ?�Keep mine / Use server??
 
 ## 4. Endpoint index
 
@@ -189,7 +189,7 @@ POST /api/tasks
 Origin: http://localhost:3000
 X-Workspace-Id: ws_123
 Content-Type: application/json
-Idempotency-Key: 5b0d…
+Idempotency-Key: 5b0d??
 
 {
   "boardId": "brd_123",
@@ -202,7 +202,7 @@ Idempotency-Key: 5b0d…
 }
 ```
 
-`201` returns `{ "task": { … } }`.
+`201` returns `{ "task": { ??} }`.
 
 `actualMinutes` is an optional integer on create/update, independent of `estimateMinutes`. Focus Mode completes a task with a versioned `PATCH /api/tasks/{id}` carrying `{ "completed": true, "actualMinutes": 42, "version": 7 }`; leaving early writes `actualMinutes` without `completed`.
 
@@ -213,7 +213,7 @@ POST /api/today
 Origin: http://localhost:3000
 X-Workspace-Id: ws_123
 Content-Type: application/json
-Idempotency-Key: 8f2c…
+Idempotency-Key: 8f2c??
 
 {
   "workspaceId": "ws_123",
@@ -256,7 +256,7 @@ The response reports how many existing tasks would change and a sample diff. Pre
 
 ### Export
 
-`GET /api/export?format=csv&workspaceId=ws_123` streams a CSV with a header row. JSON export returns boards, columns, tasks, labels, and comments. Exports are scoped to the caller’s workspace and role.
+`GET /api/export?format=csv&workspaceId=ws_123` streams a CSV with a header row. JSON export returns boards, columns, tasks, labels, and comments. Exports are scoped to the caller?�s workspace and role.
 
 ### Import
 

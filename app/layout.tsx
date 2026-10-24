@@ -41,6 +41,12 @@ const themeBootstrap = `
     var stored = localStorage.getItem("drift-theme");
     var dark = stored === "dark" || ((!stored || stored === "system") && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.documentElement.dataset.themeMode = stored || "system";
+    var locale = localStorage.getItem("drift-locale");
+    if (locale === "zh-TW") {
+      document.documentElement.lang = "zh-TW";
+      document.documentElement.dataset.locale = "zh-TW";
+    }
   } catch (error) {
     document.documentElement.dataset.theme = "light";
   }

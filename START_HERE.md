@@ -49,11 +49,12 @@ A longer script with exact expected text is in [docs/DEMO.md](docs/DEMO.md).
 | Build output | `build-output.txt` |
 | Typecheck output | `typecheck-output.txt` |
 | Lint output (0 errors, warnings triaged) | `lint-output.txt` |
-| Unit test output (79/79) | `test-output.txt` |
-| E2E output (16/16) | `e2e-output.txt` |
+| Unit test output (90/90) | `test-output.txt` |
+| E2E output (26 journeys × 3 engines = 78 executions) | `e2e-output.txt` |
 | Lighthouse summary and reports | `perf-output.txt`, `perf-run-1.txt`, `perf-run-2.txt`, `perf-run-early-outlier.txt`, `docs/performance/` |
-| Screenshots (9 baseline + 8 A2) | `docs/screenshots/` |
+| Screenshots (9 baseline + 14 A2) | `docs/screenshots/` |
 | A2 design rationale and limits | [docs/A2_EXPERIMENT.md](docs/A2_EXPERIMENT.md) |
+| Settings IA and behavior | [docs/SETTINGS.md](docs/SETTINGS.md) |
 | Dependency audit | `audit-output.txt` |
 | Background jobs | `jobs-output.txt` |
 | Health/OpenAPI/metrics smoke | `smoke-output.txt` |

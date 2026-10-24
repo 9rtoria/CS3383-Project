@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, Check, Keyboard, Music2, Play, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { Toggle } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 import {
   DEFAULT_SOUND_PREFS,
   getSoundPrefs,
@@ -30,13 +31,12 @@ const PREVIEWS: { name: SoundName; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function SoundSettings() {
+  const { t } = useI18n();
   const [prefs, setPrefs] = useState<SoundPrefs>(DEFAULT_SOUND_PREFS);
   const [ready, setReady] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
 
   useEffect(() => {
     setPrefs(getSoundPrefs());
-    setNotificationPermission(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
     setReady(true);
     return subscribeSoundPrefs(setPrefs);
   }, []);
@@ -45,32 +45,24 @@ export function SoundSettings() {
     setPrefs(setSoundPrefs(patch));
   }
 
-  async function requestNotifications() {
-    try {
-      setNotificationPermission(await Notification.requestPermission());
-    } catch {
-      setNotificationPermission("unsupported");
-    }
-  }
-
   if (!ready) return null;
 
   return (
     <div className="settings-card sound-settings" aria-label="Sound preferences">
       <div className="settings-row">
         <div className="settings-copy">
-          <strong>Interface sounds</strong>
-          <span>Quiet feedback for captures, completions, moves, and reminders. Generated locally; nothing is downloaded.</span>
+          <strong>{t("Interface sounds")}</strong>
+          <span>{t("Quiet feedback for captures, completions, moves, and reminders. Generated locally; nothing is downloaded.")}</span>
         </div>
         <div className="settings-control">
-          <Toggle label="Enable interface sounds" checked={prefs.enabled} onChange={(next) => update({ enabled: next })} />
+          <Toggle label={t("Interface sounds")} checked={prefs.enabled} onChange={(next) => update({ enabled: next })} />
         </div>
       </div>
 
       <div className="settings-row">
         <div className="settings-copy">
-          <strong>Sound character</strong>
-          <span>Try each palette on your laptop speakers and headphones. There is no single right answer.</span>
+          <strong>{t("Sound character")}</strong>
+          <span>{t("Try each palette on your laptop speakers and headphones. There is no single right answer.")}</span>
         </div>
         <div className="settings-control sound-palettes">
           {PALETTES.map((palette) => (
@@ -84,8 +76,8 @@ export function SoundSettings() {
                 previewSound("complete");
               }}
             >
-              <span className="sound-palette-name">{palette.name}</span>
-              <span>{palette.description}</span>
+              <span className="sound-palette-name">{t(palette.name)}</span>
+              <span>{t(palette.description)}</span>
               <span className="sound-palette-dots" aria-hidden>
                 <i /><i /><i />
               </span>
@@ -96,8 +88,8 @@ export function SoundSettings() {
 
       <div className="settings-row">
         <div className="settings-copy">
-          <strong>Volume</strong>
-          <span>{Math.round(prefs.volume * 100)}% · deliberately low by default.</span>
+          <strong>{t("Volume")}</strong>
+          <span>{Math.round(prefs.volume * 100)}% · {t("deliberately low by default.")}</span>
         </div>
         <div className="settings-control inline sound-volume">
           <Volume2 size={15} aria-hidden style={{ color: "var(--muted)" }} />
@@ -116,38 +108,18 @@ export function SoundSettings() {
 
       <div className="settings-row">
         <div className="settings-copy">
-          <strong>Typing texture</strong>
-          <span>An optional, very quiet tick while writing in a field. Off by default so long notes stay calm.</span>
+          <strong>{t("Typing texture")}</strong>
+          <span>{t("An optional, very quiet tick while writing in a field. Off by default so long notes stay calm.")}</span>
         </div>
         <div className="settings-control">
-          <Toggle label="Enable typing sounds" checked={prefs.typing} onChange={(next) => { update({ typing: next }); if (next) previewSound("key"); }} />
+          <Toggle label={t("Typing texture")} checked={prefs.typing} onChange={(next) => { update({ typing: next }); if (next) previewSound("key"); }} />
         </div>
       </div>
 
-      {notificationPermission !== "unsupported" ? (
-        <div className="settings-row">
-          <div className="settings-copy">
-            <strong>Background reminders</strong>
-            <span>When this tab is hidden, a browser notification can use the system notification sound. The in-app chime only plays while the app is visible.</span>
-          </div>
-          <div className="settings-control">
-            {notificationPermission === "granted" ? (
-              <span className="badge moss">Browser enabled</span>
-            ) : notificationPermission === "denied" ? (
-              <span className="field-hint">Blocked in browser settings</span>
-            ) : (
-              <button type="button" className="btn ghost sm" onClick={() => void requestNotifications()}>
-                <Bell size={13} aria-hidden /> Allow notifications
-              </button>
-            )}
-          </div>
-        </div>
-      ) : null}
-
       <div className="settings-row sound-preview-row">
         <div className="settings-copy">
-          <strong>Listen before you choose</strong>
-          <span>Preview the whole kit in the current palette.</span>
+          <strong>{t("Listen before you choose")}</strong>
+          <span>{t("Preview the whole kit in the current palette.")}</span>
         </div>
         <div className="settings-control sound-previews">
           {PREVIEWS.map((preview) => (
@@ -160,7 +132,7 @@ export function SoundSettings() {
                 previewSound(preview.name);
               }}
             >
-              {preview.icon} {preview.label}
+              {preview.icon} {t(preview.label)}
             </button>
           ))}
         </div>
@@ -168,8 +140,8 @@ export function SoundSettings() {
 
       <div className="settings-row">
         <div className="settings-copy">
-          <strong>Keyboard shortcuts</strong>
-          <span>Shortcut feedback is always part of the kit. Typing texture is the only per-key option.</span>
+          <strong>{t("Keyboard shortcuts")}</strong>
+          <span>{t("Shortcut feedback is always part of the kit. Typing texture is the only per-key option.")}</span>
         </div>
         <div className="settings-control">
           <Keyboard size={16} aria-hidden style={{ color: "var(--faint)" }} />

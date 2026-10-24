@@ -7,7 +7,7 @@
 
 The point is not “look at all the features”. It is: **a calm planner can make the day visible, help choose a realistic plan, protect attention, and get out of the way — with honest labels where the intelligence is local.**
 
-The new work is in Day Flow, Smart Plan, Focus Mode, the Sound Lab, and voice capture. The baseline product is still underneath: guest capture, keyboard movement, boards, search, Insights, sharing, offline, and team controls.
+The new work is in Day Flow, Smart Plan, Focus Mode, Settings, the Sound Lab, and voice capture. The baseline product is still underneath: guest capture, keyboard movement, boards, search, Insights, sharing, offline, and team controls.
 
 ## 0:00–0:30 — Start with the shape of the day
 
@@ -27,7 +27,7 @@ The new work is in Day Flow, Smart Plan, Focus Mode, the Sound Lab, and voice ca
 
 **What to notice:** nothing changes until Apply, the diff is legible, and the write is reversible. This is the AI-assisted design story without pretending a model exists.
 
-## 1:20–2:10 — Focus Mode and honest time
+## 1:20–2:00 — Focus Mode and honest time
 
 1. Click **Focus next** on the first block (or **Focus** in the task drawer).
 2. Point at the breathing orb, the estimate (`of 2h estimated`), and the privacy line.
@@ -37,9 +37,20 @@ The new work is in Day Flow, Smart Plan, Focus Mode, the Sound Lab, and voice ca
 
 **What to notice:** completion writes tracked minutes separately from the estimate. The done state compares actual and estimated time; it does not invent a productivity score. Leaving early still records honest time without completing the task.
 
-## 2:10–2:50 — Sound Lab, not notification noise
+## 2:00–2:40 — Settings that actually change the product
 
-1. Go to **Settings → Appearance → Sound**.
+1. Go to **Settings → Appearance**.
+2. Point at the live preview. Switch between **System / Light / Dark**, try the **Ink** accent, switch display type to **Modern**, and choose **Large** reading text. Set density to **Compact** and motion to **Reduced**.
+3. Go to **Language & region**, switch to **繁體中文**, and show the settings labels and Today copy change. Switch back to English.
+4. Go to **Planning**, change daily capacity, add a **20% plan buffer**, set a workday window, and add a 10-minute buffer between Day Flow blocks.
+5. Go to **Notifications** and show the email reminder, browser permission, quiet hours, and **Send test**. Say: “Background reminders are permission-gated; the OS owns the sound.”
+6. Use **Restore defaults** on one section and **Undo** from the toast.
+
+**What to notice:** every control has a visible effect. Theme, accent, type, reading size, density, motion, capacity, week start, workday, plan buffer, focus defaults, notification channels, sound, keyboard, and feature toggles are backed by real preferences. Rapid changes are queued, not dropped.
+
+## 2:40–3:10 — Sound Lab, not notification noise
+
+1. Go to **Settings → Sound**.
 2. Play two or three previews. Switch between **Paper & wood**, **Felt & glass**, and **Hybrid**.
 3. Point at the defaults: enabled, volume `0.32`, **typing texture off**.
 4. Use the top-bar volume button to mute and unmute.
@@ -47,7 +58,7 @@ The new work is in Day Flow, Smart Plan, Focus Mode, the Sound Lab, and voice ca
 
 **What to notice:** the sound is material and quiet, not an alarm. Reminders use an in-app chime while the app is visible; backgrounded tabs use a browser notification after permission, and the operating system decides whether to play its notification sound.
 
-## 2:50–3:30 — Voice capture with a real fallback
+## 3:10–3:40 — Voice capture with a real fallback
 
 1. Press `C` to open **Quick Capture**.
 2. Click **Speak a task**. If the browser supports speech, say: “Draft voice note tomorrow 20 minutes.”
@@ -57,7 +68,7 @@ The new work is in Day Flow, Smart Plan, Focus Mode, the Sound Lab, and voice ca
 
 **What to notice:** voice is a shortcut, not the only highlight. The transcript is editable, and the normal text field remains the reliable path.
 
-## 3:30–4:10 — The baseline is still real
+## 3:40–4:10 — The baseline is still real
 
 1. Open a private window for **guest capture**: type `Draft launch narrative tomorrow 9am high 45m #launch`, press Enter. No signup, no tour.
 2. In **My tasks**, focus a card and press `Alt+ArrowRight`; click **Undo** in the toast.
@@ -76,6 +87,7 @@ The new work is in Day Flow, Smart Plan, Focus Mode, the Sound Lab, and voice ca
 
 - Do **not** call Smart Plan AI, a model, or a recommendation engine that learns. It is local deterministic rules.
 - Do **not** claim voice recognition is on-device. It uses the browser's speech service.
+- Do **not** claim the language preview covers every admin/enterprise string. It covers the app shell, Today, planning, capture, and Settings.
 - Do **not** claim the sound was professionally mastered or tested on every speaker/headphone. It was designed for audition in the Sound Lab.
 - Do **not** claim Docker, live OAuth/SSO, malware scanning, or a 10k-user load test was verified. Those remain unverified in the baseline review.
 - If the demo DB is dirty, reset it with `npm run db:seed` (demo account only). Use `localhost`, not `127.0.0.1`, so the session cookie matches `APP_URL`.
@@ -88,8 +100,10 @@ Use the screenshots in `docs/screenshots/` and the evidence in [`A2_EXPERIMENT.m
 1. `10-day-flow.png`
 2. `11-smart-plan.png`
 3. `12-focus-mode.png` / `13-focus-running.png`
-4. `14-sound-settings.png`
-5. `15-voice-capture.png`
-6. `16-mobile-today.png` / `17-dark-today.png`
+4. `18-appearance.png` / `23-dark-appearance.png`
+5. `19-language-region.png` / `20-planning.png` / `21-notifications.png`
+6. `14-sound-settings.png`
+7. `15-voice-capture.png`
+8. `16-mobile-today.png` / `17-dark-today.png` / `22-mobile-settings.png`
 
 Be explicit that these are fixtures, not customer data.

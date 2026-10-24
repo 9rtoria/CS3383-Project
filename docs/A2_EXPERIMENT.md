@@ -11,8 +11,9 @@ ProjectA2 keeps Drift's calm, keyboard-first identity and adds a focused set of 
 | Area | What a visitor sees | Why it exists |
 |---|---|---|
 | **Day Flow** | A 24-hour rail showing the chosen work as blocks, a “now” marker, capacity ring, focus-next action, and a Later shelf | Makes the day's shape visible before the task list; gives the demo one memorable signature moment |
-| **Smart Plan** | A local-rules preview with Before/After columns, added/waiting counts, apply, toast, and Undo | Shows AI-assisted *design thinking* without pretending a model is connected; nothing changes until Apply |
-| **Focus Mode** | A full-screen, quiet timer with a breathing orb, pause/complete/log-time controls, and an estimate delta | Gives the plan a second act and turns tracked time into a first-class, honest record |
+| **Smart Plan** | A local-rules preview with Before/After columns, added/waiting counts, plan buffer, apply, toast, and Undo | Shows AI-assisted *design thinking* without pretending a model is connected; nothing changes until Apply |
+| **Focus Mode** | A full-screen, quiet timer with a breathing orb, pause/complete/log-time controls, estimate delta, default length, and auto-start | Gives the plan a second act and turns tracked time into a first-class, honest record |
+| **Settings** | Theme System/Light/Dark, accent, display type, reading size, density, motion, language/region preview, capacity, workday, plan buffer, notifications, sound, keyboard, feature toggles, search, live preview, section reset | Makes every preference real and keeps the calm product configurable without a control-panel feel |
 | **Sound Lab** | Three synthesized palettes (Paper & wood, Felt & glass, Hybrid), volume, mute, previews, and optional typing texture | Adds materiality and feedback without alarm beeps, network downloads, or every-keystroke noise |
 | **Voice Capture** | Web Speech API input with a listening state, editable transcript, permission/error fallbacks, and a normal text field | Makes capture feel immediate while keeping typing as the reliable path |
 
@@ -55,7 +56,7 @@ The UI states “Preview first — local rules only” and “No model call” i
 - Default state: enabled, volume `0.32`, typing texture **off**.
 - The top-bar volume button and Settings → Sound both mute/unmute. Settings has six previews (capture, complete, reminder, move, error, focus).
 - Shortcut taps are throttled; typing texture is the only per-key option and stays off by default.
-- Reminders use an in-app chime while the app is visible. If the user allows browser notifications in the Sound Lab, a hidden tab posts a browser notification and lets the operating system decide whether to play its notification sound; the app never tries to play audio from a hidden tab.
+- Reminders use an in-app chime while the app is visible. If the user allows browser notifications in Notifications, a hidden tab posts a browser notification and lets the operating system decide whether to play its notification sound; the app never tries to play audio from a hidden tab.
 
 ### Voice Capture
 
@@ -73,14 +74,14 @@ Run against the seeded demo workspace on `http://localhost:3000`.
 |---|---|
 | `npm run typecheck` | Pass |
 | `npm run lint` | Pass, 0 errors, 42 warnings (baseline warnings) |
-| `npm test` | **79/79** in 10 files |
+| `npm test` | **90/90** in 12 files |
 | `npm run build` | Pass |
-| Playwright | **16/16** (12 baseline journeys + 4 new A2 journeys) |
-| axe serious/critical | 0 on Today, board, Insights, settings, auth |
-| Responsive | 390 px mobile Today checked |
-| Dark theme | Today checked |
-| Reduced motion | Global reduced-motion rule checked |
-| Screenshots | 8 new A2 states in `docs/screenshots/10-*` through `17-*` |
+| Playwright | **26/26 journeys × 3 engines = 78 executions** (12 baseline + 14 A2/settings) |
+| axe serious/critical | 0 on Today, Board, Insights, all checked Settings sections, auth |
+| Responsive | 390 px Today and mobile Settings checked |
+| Dark theme | Today and Settings checked |
+| Reduced motion | Global reduced-motion rule and explicit preference checked |
+| Screenshots | 14 A2 states in `docs/screenshots/10-*` through `23-*` |
 
 New automated journeys cover:
 
@@ -88,6 +89,13 @@ New automated journeys cover:
 2. Smart Plan preview, apply, and Undo.
 3. Focus Mode start, complete, and persisted `actualMinutes`.
 4. Dragging a Day Flow block to Later.
+5. Appearance controls change document attributes and persist, including real density/reading-size effects.
+6. System theme follows `prefers-color-scheme` while keeping the stored preference.
+7. Capacity and week start reach Today and Calendar.
+8. Language changes core chrome and persists, then returns English.
+9. Rapid notification changes are queued and persisted.
+10. Feature toggles remove Day Flow/voice without hiding text capture.
+11. Focus/capture defaults reach the real screens and save failure rolls back; search and mobile settings navigation work.
 
 The sound timbres were designed for audition, not judged by automation. Use Settings → Sound on laptop speakers and headphones; the palettes are intentionally short and quiet, and the typing texture is off by default.
 

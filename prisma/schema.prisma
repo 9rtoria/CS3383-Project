@@ -406,18 +406,33 @@ model Notification {
 }
 
 model UserSettings {
-  userId            String   @id
-  theme             String   @default("system")
-  density           String   @default("comfortable")
-  capacityMinutes   Int      @default(300)
-  emailDigest       Boolean  @default(true)
-  digestHour        Int      @default(8)
-  quietStart        Int?
-  quietEnd          Int?
-  weekStartsOn      Int      @default(1)
-  notificationsJson String   @default("{\"inApp\":true,\"email\":true,\"mentions\":true}")
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  updatedAt         DateTime @updatedAt
+  userId               String   @id
+  theme                String   @default("system")
+  density              String   @default("comfortable")
+  locale               String   @default("en")
+  timeFormat           String   @default("auto")
+  readingSize          String   @default("default")
+  displayFont          String   @default("editorial")
+  accent               String   @default("moss")
+  motion               String   @default("system")
+  startView            String   @default("today")
+  capacityMinutes      Int      @default(300)
+  planBufferPercent    Int      @default(0)
+  workdayStart         Int      @default(9)
+  workdayEnd           Int      @default(18)
+  blockBufferMinutes   Int      @default(0)
+  focusMinutes         Int      @default(25)
+  focusAutoStart       Boolean  @default(false)
+  captureCloseAfterAdd Boolean  @default(true)
+  featuresJson         String   @default("{\"dayFlow\":true,\"smartPlan\":true,\"voice\":true}")
+  emailDigest          Boolean  @default(true)
+  digestHour           Int      @default(8)
+  quietStart           Int?
+  quietEnd             Int?
+  weekStartsOn         Int      @default(1)
+  notificationsJson    String   @default("{\"inApp\":true,\"email\":true,\"mentions\":true,\"browser\":true}")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt            DateTime @updatedAt
 }
 
 model TodayDismissal {
