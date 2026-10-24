@@ -2,7 +2,20 @@
 
 > Start: **2026-10-23 19:11 +08:00**. Actuals are wall-clock effort reconstructed from artifact timestamps and command logs, rounded to 0.01 h; they are not stopwatch measurements. Estimates are in `PLAN.md`. Categories: BUILD / DESIGN / VERIFY / OPTIMIZE / OVERHEAD.
 
-## Current state
+## ProjectA2 extension — 2026-10-24
+
+This is an independent clone for a school-demo extension. `ProjectA` remains the untouched baseline at `6876db1`; the v1.3 delivery evidence below is preserved.
+
+- **Added:** Day Flow (24-hour rail, stable anchor, drag-to-Later), Smart Plan (local-rules preview, apply, undo), Focus Mode (timer, completion, `actualMinutes`), Sound Lab (three synthesized palettes, volume, mute, optional typing), and voice capture with a text fallback.
+- **Data:** nullable `Task.actualMinutes`, migration `20261024140000_task_actual_minutes`, validation, API serialization, exports, and Focus persistence.
+- **Honesty boundary:** Smart Plan is labeled local rules, not AI; no model call is made. Voice uses the browser speech service and is disclosed in the capture modal.
+- **Last verified commands:** `npm run typecheck` pass; `npm run lint` 0 errors / 42 baseline warnings; `npm test` **79/79** in 10 files; `npm run build` pass; Playwright **16/16** (12 baseline + 4 A2); axe serious/critical 0 on the checked pages.
+- **New A2 journeys:** voice capture + mute toggle, Smart Plan apply/undo, Focus completion with persisted tracked time, and Day Flow drag-to-Later.
+- **Screenshots:** `docs/screenshots/10-day-flow.png` through `17-dark-today.png`.
+- **Open items:** human listening pass for the sound palettes; real-microphone testing across browsers; Smart Plan remains deterministic and non-learning; Day Flow has no manual block resizing.
+- **Delivery:** [`docs/A2_EXPERIMENT.md`](docs/A2_EXPERIMENT.md) has the design rationale, verification, and limits; [`docs/DEMO.md`](docs/DEMO.md) has the updated five-minute script.
+
+## Baseline v1.3 state
 
 - **Phase:** M7 complete — final QA and delivery review.
 - **Application status:** runnable; production build verified; guest, board, Today, Insights, search, offline, sharing, automation, and settings flows browser-tested.
@@ -67,13 +80,13 @@ Documentation now covers architecture, flows, design, motion, accessibility, sec
 | `build-output.txt` | Production build route table |
 | `typecheck-output.txt` | Strict TypeScript result |
 | `lint-output.txt` | ESLint result and warnings |
-| `test-output.txt` | Vitest 78/78 |
-| `e2e-output.txt` | Playwright 12/12 |
-| `perf-output.txt` | Latest Lighthouse run log; `perf-run-1.txt`/`perf-run-2.txt` stable repeats; `perf-run-early-outlier.txt` earlier outlier |
-| `screenshots-output.txt` | Screenshot capture log |
+| `test-output.txt` | Vitest **79/79** (A2 run) |
+| `e2e-output.txt` | Playwright **16/16** (A2 run) |
+| `perf-output.txt` | Baseline v1.3 Lighthouse run log; not re-run after the A2 UI additions |
+| `screenshots-output.txt` | Baseline screenshot capture log; A2 states captured separately |
 | `migrate-output.txt` | Prisma migrate deploy result |
-| `audit-output.txt` | Production dependency audit |
-| `jobs-output.txt` | Background job dispatcher result |
-| `smoke-output.txt` | Health, OpenAPI, metrics, and header smoke |
-| `docs/performance/summary.json` | Lighthouse metrics |
-| `docs/screenshots/` | Nine production screenshots |
+| `audit-output.txt` | Baseline production dependency audit |
+| `jobs-output.txt` | Baseline background job dispatcher result |
+| `smoke-output.txt` | Baseline health, OpenAPI, metrics, and header smoke |
+| `docs/performance/summary.json` | Baseline Lighthouse metrics |
+| `docs/screenshots/` | Nine baseline screenshots plus eight A2 states (`10`–`17`) |

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast";
 import { Runtime } from "@/components/runtime";
+import { SoundLayer } from "@/components/sound-layer";
 
 export const metadata: Metadata = {
   title: {
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <ToastProvider>
           <Runtime />
+          <SoundLayer />
           {children}
         </ToastProvider>
       </body>

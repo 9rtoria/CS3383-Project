@@ -9,9 +9,9 @@
 |---|---|---|---|
 | Type safety | `tsc --noEmit` (strict) | Pass, 0 errors | `typecheck-output.txt` |
 | Lint | ESLint 9 + Next config | Pass, 0 errors, 44 triaged warnings | `lint-output.txt` |
-| Unit | Vitest 5 | **78/78** in 10 files | `test-output.txt` |
+| Unit | Vitest 5 | **79/79** in 10 files (ProjectA2 included) | `test-output.txt` |
 | Production build | `next build` | Pass, 44 static pages + route table | `build-output.txt` |
-| End-to-end | Playwright 1.64 (Chromium) | **12/12** | `e2e-output.txt` |
+| End-to-end | Playwright 1.64 (Chromium) | **16/16** (12 baseline + 4 A2) | `e2e-output.txt` |
 | Accessibility | axe-core via Playwright | 0 serious/critical on 6 surfaces | included in E2E run |
 | Performance | Lighthouse 13.5 | 94/97/95 performance latest; 100 accessibility | `docs/performance/summary.json` |
 | Dependencies | `npm audit --omit=dev --audit-level=high` | 0 high/critical | final QA output |
@@ -65,8 +65,12 @@ Playwright starts a dev server on port 3100 only when `E2E_BASE_URL` is unset. U
 | 10 | `core.spec.ts` | FR-024 | Offline capture queues and syncs after reconnect |
 | 11 | `core.spec.ts` | FR-022 | Public read-only share opens without a session |
 | 12 | `core.spec.ts` | FR-017 | Capacity, digest, quiet hours persist |
+| 13 | `day-flow.spec.ts` | A2 voice | Fake browser recognizer fills the composer; text fallback and mute toggle work |
+| 14 | `day-flow.spec.ts` | A2 Smart Plan | Preview, apply, and undo restore the prior plan |
+| 15 | `day-flow.spec.ts` | A2 Focus | Start, complete, and persist `actualMinutes` through the versioned task API |
+| 16 | `day-flow.spec.ts` | A2 Day Flow | HTML5 drag/drop moves a block to Later and clears it from the rail |
 
-The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions.
+The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual.
 
 ## 4. Accessibility testing
 
@@ -145,4 +149,4 @@ npm run test:perf
 npm run audit
 ```
 
-Expected: typecheck clean, lint 0 errors, 78 unit tests pass, build succeeds, 12 E2E pass, Lighthouse accessibility 100, audit 0 high/critical.
+Expected: typecheck clean, lint 0 errors, 79 unit tests pass, build succeeds, 16 E2E pass, Lighthouse accessibility 100, audit 0 high/critical.

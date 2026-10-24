@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         dueDate: task.dueDate,
         dueAllDay: task.dueAllDay,
         estimateMinutes: task.estimateMinutes,
+        actualMinutes: task.actualMinutes,
         completedAt: task.completedAt,
         focusDate: task.focusDate,
         version: task.version,

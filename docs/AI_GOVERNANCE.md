@@ -2,16 +2,19 @@
 
 **Scope:** Drift’s local assist features  
 **Model provider:** none  
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-24 (ProjectA2 addendum)
 
 ## 1. What “AI” means in v1
 
 Drift v1 ships **deterministic, explainable assistance**, not a generative model. There is no model SDK, no prompt, no external inference call, and no customer data sent to a third party.
 
+ProjectA2's **Smart Plan** follows the same boundary. The UI says “Preview first — local rules only” and “No model call”; it does not call itself AI. The plan is computed in the browser from the Today payload, previewed before any write, and reversible with Undo. Voice capture is separately disclosed as using the browser's speech service; the task text and transcript are not sent to an external model by Drift.
+
 | Feature | Mechanism | User-visible output |
 |---|---|---|
 | Quick-add parsing | Regex/grammar rules over the capture text | Parsed date, time, priority, labels, estimate, recurrence |
 | Today plan | Weighted ranking over due date, priority, effort, focus date, and capacity | Ordered tasks with a short reason per task |
+| Smart Plan (ProjectA2) | Deterministic selection over priority, due date, estimates, dependencies, and remaining capacity | Before/After preview, added/waiting counts, explicit Apply, and Undo |
 | Checklist suggestions | Small template library keyed by task verbs | Suggested subtasks, never auto-applied |
 | Board health | Counts and aging thresholds | WIP/aging hints in Insights |
 

@@ -7,6 +7,8 @@
 **Demo:** `demo@drift.local` / `DriftDemo123!`  
 **Verdict:** **Delivered for evaluation and small-team use.** Production rollout requires the items in §4 and §8; this is not a claim of 10k-user readiness.
 
+> **ProjectA2 extension (2026-10-24).** This working tree is an independent clone used for a school-demo extension. `ProjectA` remains the untouched baseline at `6876db1`; the v1.3 evidence below is preserved as delivered. ProjectA2 adds Day Flow, Smart Plan (explicitly local rules, not AI), Focus Mode with tracked `actualMinutes`, a Web Audio Sound Lab, and voice capture with a text fallback. Verification after the extension: strict TypeScript pass; ESLint 0 errors / 42 baseline warnings; **79/79** unit tests in 10 files; production build pass; **16/16** Playwright journeys (12 baseline + 4 new); axe serious/critical 0 on the checked pages. Details, design rationale, and honest limits are in [`docs/A2_EXPERIMENT.md`](docs/A2_EXPERIMENT.md) and the updated [`docs/DEMO.md`](docs/DEMO.md). The production gaps in this review still apply to ProjectA2.
+
 ---
 
 ## 1. Summary

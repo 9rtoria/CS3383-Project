@@ -109,6 +109,7 @@ All paths are relative to the base URL. `W` means workspace-scoped.
 |---|---|---|
 | GET | `/api/bootstrap` | Viewer, workspaces, boards, labels, settings, inbox, flags |
 | GET | `/api/today` | Ranked plan, capacity contract, suggestions |
+| POST | `/api/today` | `accept`, `dismiss`, or `applyPlan` actions for the day |
 | GET | `/api/upcoming` | Next 14 days grouped by local date |
 | GET | `/api/calendar` | Tasks in a date range |
 | GET | `/api/calendar/ics` | Tokenized ICS subscription |
@@ -202,6 +203,26 @@ Idempotency-Key: 5b0d…
 ```
 
 `201` returns `{ "task": { … } }`.
+
+`actualMinutes` is an optional integer on create/update, independent of `estimateMinutes`. Focus Mode completes a task with a versioned `PATCH /api/tasks/{id}` carrying `{ "completed": true, "actualMinutes": 42, "version": 7 }`; leaving early writes `actualMinutes` without `completed`.
+
+### Apply a Smart Plan
+
+```http
+POST /api/today
+Origin: http://localhost:3000
+X-Workspace-Id: ws_123
+Content-Type: application/json
+Idempotency-Key: 8f2c…
+
+{
+  "workspaceId": "ws_123",
+  "action": "applyPlan",
+  "taskIds": ["tsk_123", "tsk_456"]
+}
+```
+
+Smart Plan is a client-side deterministic preview; the server validates board access, dependencies, and board membership before replacing the user's `focusDate` set for today and logging activity. `accept` and `dismiss` use the same workspace-scoped handler.
 
 ### Move a task
 

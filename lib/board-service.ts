@@ -245,6 +245,7 @@ export async function duplicateBoard(viewer: Viewer, workspaceId: string, boardI
           dueDate: task.dueDate,
           dueAllDay: task.dueAllDay,
           estimateMinutes: task.estimateMinutes,
+          actualMinutes: task.actualMinutes,
           position: taskPositions[index]!,
           recurrenceRule: task.recurrenceRule,
           completedAt: task.completedAt,

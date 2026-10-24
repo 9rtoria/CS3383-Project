@@ -171,6 +171,7 @@ model Task {
   dueDate          DateTime?
   dueAllDay        Boolean          @default(true)
   estimateMinutes  Int?
+  actualMinutes    Int? // time tracked in Focus mode
   position         String
   completedAt      DateTime?
   recurrenceRule   String?

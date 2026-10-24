@@ -1,14 +1,44 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, CornerDownLeft, Hash, Repeat2, Sparkles, Timer, Zap } from "lucide-react";
+import { CalendarDays, CornerDownLeft, Hash, Mic, MicOff, Repeat2, Sparkles, Timer, Zap } from "lucide-react";
 import { Modal } from "@/components/ui";
 import { ApiClientError, api, newIdempotencyKey } from "@/lib/client";
 import { enqueueWrite } from "@/lib/offline";
 import { useToast } from "@/components/toast";
 import { parseQuickAdd } from "@/lib/nlq";
+import { playSound } from "@/lib/sound";
 import { formatDue, priorityLabel } from "@/lib/format";
 import type { BoardSummary, Task, Workspace } from "@/lib/types";
+
+type SpeechResult = {
+  isFinal: boolean;
+  [index: number]: { transcript: string } | undefined;
+};
+
+type SpeechResultEvent = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: SpeechResult | undefined;
+  };
+};
+
+type SpeechErrorEvent = { error: string };
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechResultEvent) => void) | null;
+  onerror: ((event: SpeechErrorEvent) => void) | null;
+  onend: (() => void) | null;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 type Props = {
   open: boolean;
@@ -25,7 +55,12 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
   const [boardId, setBoardId] = useState(defaultBoardId ?? workspace.boards[0]?.id ?? "");
   const [columnId, setColumnId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [interim, setInterim] = useState("");
+  const [voiceError, setVoiceError] = useState("");
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const board = useMemo<BoardSummary | undefined>(
     () => workspace.boards.find((item) => item.id === boardId) ?? workspace.boards[0],
@@ -35,12 +70,106 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
   const parsed = useMemo(() => parseQuickAdd(text, new Date(), timeZone), [text, timeZone]);
 
   useEffect(() => {
-    if (!open) return;
+    const speechWindow = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    setVoiceSupported(Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition));
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      recognitionRef.current?.abort();
+      recognitionRef.current = null;
+      setListening(false);
+      setInterim("");
+      return;
+    }
     setBoardId(defaultBoardId && workspace.boards.some((item) => item.id === defaultBoardId) ? defaultBoardId : workspace.boards[0]?.id ?? "");
     setText("");
+    setVoiceError("");
+    setInterim("");
     const timer = setTimeout(() => textareaRef.current?.focus(), 30);
     return () => clearTimeout(timer);
   }, [open, defaultBoardId, workspace.boards]);
+
+  useEffect(() => () => {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+  }, []);
+
+  function stopVoice() {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setListening(false);
+    setInterim("");
+  }
+
+  function toggleVoice() {
+    if (listening) {
+      stopVoice();
+      return;
+    }
+    const speechWindow = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const Constructor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    if (!Constructor) {
+      setVoiceError("Voice input isn’t available in this browser. The text field is always here.");
+      return;
+    }
+    setVoiceError("");
+    setInterim("");
+    const recognition = new Constructor();
+    recognition.lang = navigator.language || "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (!result) continue;
+        if (result.isFinal) finalText += transcript;
+        else interimText += transcript;
+      }
+      if (finalText.trim()) {
+        setText((current) => {
+          const separator = current && !/\s$/.test(current) ? " " : "";
+          return `${current}${separator}${finalText.trim()}`;
+        });
+      }
+      setInterim(interimText.trim());
+    };
+    recognition.onerror = (event) => {
+      const message =
+        event.error === "not-allowed" || event.error === "service-not-allowed"
+          ? "Microphone permission was denied. You can still type the task."
+          : event.error === "no-speech"
+            ? "No speech detected. Try again, or type instead."
+            : "Voice input stopped. You can type the task instead.";
+      setVoiceError(message);
+      setListening(false);
+      setInterim("");
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setListening(false);
+      setInterim("");
+      recognitionRef.current = null;
+      window.setTimeout(() => textareaRef.current?.focus(), 30);
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setListening(true);
+    } catch {
+      setVoiceError("Voice input could not start. You can type the task instead.");
+      recognitionRef.current = null;
+    }
+  }
 
   useEffect(() => {
     const nextColumns = workspace.boards.find((item) => item.id === boardId)?.columns ?? [];
@@ -49,6 +178,7 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
 
   async function submit() {
     if (!text.trim() || !board || !columnId || saving) return;
+    if (listening) stopVoice();
     setSaving(true);
     const draft = {
       workspaceId: workspace.id,
@@ -78,6 +208,7 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
         duration: 5000,
       });
       setText("");
+      playSound("capture");
       onClose();
     };
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -104,20 +235,27 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
       });
       await onCreated(result.task, board.id);
       setText("");
+      playSound("capture");
       onClose();
     } catch (error) {
       if (error instanceof ApiClientError && error.code === "NETWORK_ERROR") {
         queuedOffline();
         return;
       }
+      playSound("error");
       toast.error(error instanceof Error ? error.message : "Could not add that task.");
     } finally {
       setSaving(false);
     }
   }
 
+  function close() {
+    if (listening) stopVoice();
+    onClose();
+  }
+
   return (
-    <Modal open={open} onClose={onClose} className="capture-dialog" eyebrow="Quick capture" width={620}>
+    <Modal open={open} onClose={close} className="capture-dialog" eyebrow="Quick capture" width={620}>
       <textarea
         ref={textareaRef}
         className="capture-input"
@@ -133,6 +271,30 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, onClos
         }}
         rows={3}
       />
+      <div className={`capture-voice${listening ? " listening" : ""}`}>
+        <button
+          type="button"
+          className={`btn ghost sm${listening ? " listening" : ""}`}
+          onClick={toggleVoice}
+          aria-pressed={listening}
+          aria-label={listening ? "Stop voice capture" : "Speak a task"}
+          title={voiceSupported ? "Speak a task" : "Voice input isn’t available in this browser"}
+        >
+          {listening ? <MicOff size={13} aria-hidden /> : <Mic size={13} aria-hidden />}
+          {listening ? "Stop listening" : "Speak"}
+        </button>
+        <span className="field-hint" aria-live="polite">
+          {listening
+            ? interim
+              ? `“${interim}”`
+              : "Listening… speak now. You can edit the words before adding."
+            : voiceSupported
+              ? "Uses your browser’s speech service. Edit the words before adding; typing always works too."
+              : "Voice isn’t available in this browser — type instead."}
+        </span>
+        {interim && !listening ? <span className="badge accent">Heard</span> : null}
+      </div>
+      {voiceError ? <p className="field-error" role="alert">{voiceError}</p> : null}
       <div className="capture-preview" aria-live="polite">
         {parsed.title && text.trim() ? <span className="badge accent">New task</span> : null}
         {parsed.dueDate ? (

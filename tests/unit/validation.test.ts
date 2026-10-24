@@ -39,6 +39,15 @@ describe("Zod input validation (NFR-001, error contract)", () => {
     expect(taskUpdateSchema.safeParse({ version: 1, title: "New" }).success).toBe(true);
   });
 
+  it("validates tracked focus minutes independently of estimates", () => {
+    const base = { workspaceId: "w1", boardId: "b1", columnId: "c1", title: "Plan" };
+    expect(taskCreateSchema.safeParse({ ...base, actualMinutes: 90 }).success).toBe(true);
+    expect(taskUpdateSchema.safeParse({ version: 1, actualMinutes: 25 }).success).toBe(true);
+    expect(taskUpdateSchema.safeParse({ version: 1, actualMinutes: null }).success).toBe(true);
+    expect(taskUpdateSchema.safeParse({ version: 1, actualMinutes: -1 }).success).toBe(false);
+    expect(taskUpdateSchema.safeParse({ version: 1, actualMinutes: 60 * 24 * 365 + 1 }).success).toBe(false);
+  });
+
   it("only accepts HTTPS webhook URLs", () => {
     expect(webhookSchema.safeParse({ workspaceId: "w1", kind: "slack", url: "http://example.com/hook", events: ["task.created"] }).success).toBe(false);
     expect(webhookSchema.safeParse({ workspaceId: "w1", kind: "slack", url: "https://example.com/hook", events: ["task.created"] }).success).toBe(true);

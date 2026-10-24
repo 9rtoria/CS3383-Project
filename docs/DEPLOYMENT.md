@@ -163,13 +163,14 @@ The E2E step starts the production server and points Playwright at `http://local
 - [ ] `npx prisma migrate deploy` applied
 - [ ] `npm run typecheck` 0 errors
 - [ ] `npm run lint` 0 errors
-- [ ] `npm test` 78/78
+- [ ] `npm test` 79/79
 - [ ] `npm run build` succeeds
 - [ ] `/api/health` 200
 - [ ] Guest capture works in a private window
 - [ ] Sign-in, sign-out, and MFA challenge work
 - [ ] Board move + undo works
 - [ ] Search returns scoped results
+- [ ] A2 smoke: Day Flow renders, Smart Plan preview/apply/undo works, Focus persists tracked time, Sound Lab previews, voice fallback stays available
 - [ ] Public share opens without a session and is read-only
 - [ ] Export/import round-trip works
 - [ ] Jobs run and write `JobRun`

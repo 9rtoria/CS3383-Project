@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
         dueDate: task.dueDate,
         dueAllDay: task.dueAllDay,
         estimateMinutes: task.estimateMinutes,
+        actualMinutes: task.actualMinutes,
         focusDate: task.focusDate,
         version: task.version,
         labels: task.labels.map((entry) => entry.label),

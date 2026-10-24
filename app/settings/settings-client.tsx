@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar, EmptyState, InlineError, LoadingButton, Menu, Modal, Spinner, Toggle } from "@/components/ui";
+import { SoundSettings } from "@/components/sound-settings";
 import { useToast } from "@/components/toast";
 import { api, formatApiError, newIdempotencyKey } from "@/lib/client";
 import { formatDate, roleLabel } from "@/lib/format";
@@ -836,6 +837,8 @@ export function SettingsClient() {
             <div className="settings-row"><div className="settings-copy"><strong>Density</strong><span>Compact reduces row height in list views.</span></div><div className="settings-control"><select className="select" aria-label="Density" value={settings.density} onChange={(event) => void patchSettings({ density: event.target.value as UserSettings["density"] })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div></div>
             <div className="settings-row"><div className="settings-copy"><strong>Week starts on</strong><span>Calendar and weekly rhythms.</span></div><div className="settings-control"><select className="select" aria-label="Week starts on" value={settings.weekStartsOn} onChange={(event) => void patchSettings({ weekStartsOn: Number(event.target.value) })}><option value={1}>Monday</option><option value={0}>Sunday</option><option value={6}>Saturday</option></select></div></div>
           </div>
+          <div className="section-head" style={{ marginTop: 26 }}><div><h3 className="section-title">Sound</h3><p className="section-subtitle">A quiet material texture, not an alarm. Test it here before turning it on for a demo.</p></div></div>
+          <SoundSettings />
         </section>
 
         {/* Notifications */}

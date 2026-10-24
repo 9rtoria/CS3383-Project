@@ -63,7 +63,7 @@ erDiagram
 |---|---|---|
 | `Board` | Container for columns and tasks | `visibility` workspace/private; `shareToken`; `shareEnabled`; archive/soft delete; `version` |
 | `Column` | Kanban stage | fractional `position`; optional WIP limit; `isDone` marks completion stage |
-| `Task` | Unit of work | title, description, priority, start/due, all-day flag, estimate, recurrence, focus date, assignee, creator, `version`, archive/soft delete |
+| `Task` | Unit of work | title, description, priority, start/due, all-day flag, estimate, **tracked `actualMinutes`**, recurrence, focus date, assignee, creator, `version`, archive/soft delete |
 | `Subtask` | Checklist item | ordered, completed flag |
 | `Label` / `TaskLabel` | Workspace label taxonomy | unique label name per workspace; join table |
 | `TaskDependency` | “blocked by” edge | composite PK; both sides cascade |
@@ -101,6 +101,7 @@ erDiagram
 
 - A task’s `columnId` must belong to its `boardId`; the task service re-checks this on create and move.
 - Moving to a done column sets `completedAt`; moving out clears it. Completing a recurring task creates the next occurrence.
+- `actualMinutes` is accumulated Focus Mode time, independent of `estimateMinutes`. It is written through the versioned task update path and is serialized to the board, Today, calendar, upcoming, and JSON/CSV export surfaces.
 - A workspace must retain at least one `OWNER`; ownership transfer and member removal enforce this.
 - Private boards are visible only to their creator and workspace admins/owners.
 - A task assignee must be a member of the task’s workspace.

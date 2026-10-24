@@ -69,7 +69,7 @@ export function TaskCard({ task, onOpen, onDragStart, onDragEnd, onDragOver, onD
       ) : null}
       <h3 className="task-title">{task.title}</h3>
       {task.description ? <p className="task-desc">{task.description}</p> : null}
-      {task.dueDate || checklist.length || task.openDependencies || task.commentCount || task.attachmentCount || task.assignee || task.recurrenceRule ? (
+      {task.dueDate || checklist.length || task.openDependencies || task.commentCount || task.attachmentCount || task.assignee || task.recurrenceRule || task.actualMinutes ? (
         <div className="task-foot">
           {task.dueDate ? (
             <span className={`task-foot-meta${overdue ? " overdue" : ""}`}>
@@ -92,6 +92,12 @@ export function TaskCard({ task, onOpen, onDragStart, onDragEnd, onDragOver, onD
             <span className="task-foot-meta">
               <Timer size={11} aria-hidden />
               {task.estimateMinutes}m
+            </span>
+          ) : null}
+          {task.actualMinutes ? (
+            <span className="task-foot-meta" title={`${task.actualMinutes} minutes tracked in Focus`}>
+              <Timer size={11} aria-hidden />
+              {task.actualMinutes}m tracked
             </span>
           ) : null}
           <span className="task-foot-right">

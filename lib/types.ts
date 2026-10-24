@@ -130,6 +130,7 @@ export type Task = {
   dueDate: string | null;
   dueAllDay: boolean;
   estimateMinutes: number | null;
+  actualMinutes: number | null;
   position: string;
   completedAt: string | null;
   recurrenceRule: string | null;

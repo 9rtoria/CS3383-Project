@@ -17,6 +17,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Paperclip,
+  Play,
   Plus,
   Repeat2,
   RotateCcw,
@@ -27,6 +28,7 @@ import {
 import { Avatar, InlineError, Menu, MenuItem, Modal, PriorityBadge, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { api, ApiClientError, formatApiError, newIdempotencyKey } from "@/lib/client";
+import { playSound } from "@/lib/sound";
 import { describeRecurrence } from "@/lib/recurrence";
 import {
   dueToIso,
@@ -63,9 +65,10 @@ type Props = {
   onClose: () => void;
   onChanged: () => void;
   onOpenTask: (taskId: string) => void;
+  onFocusTask: (task: Task) => void;
 };
 
-export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask }: Props) {
+export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, onFocusTask }: Props) {
   const toast = useToast();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [board, setBoard] = useState<BoardPayload | null>(null);
@@ -168,6 +171,7 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask }
     if (!task) return;
     const next = !task.completedAt;
     const ok = await patch({ completed: next }, { success: next ? "Task completed." : "Task reopened." });
+    if (ok) playSound(next ? "complete" : "tap");
     if (!ok && next) setError("Could not complete this task. Check dependencies or WIP limits.");
   }
 
@@ -309,6 +313,9 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask }
           <>
             <button type="button" className="btn ghost" onClick={onClose}>Close</button>
             <span style={{ flex: 1 }} />
+            {!task.completedAt ? (
+              <button type="button" className="btn soft sm" onClick={() => onFocusTask(task)}><Play size={12} /> Focus</button>
+            ) : null}
             <button type="button" className="btn ghost sm" onClick={async () => { await navigator.clipboard?.writeText(`${window.location.origin}/?task=${task.id}`); toast.success("Link copied."); }}><Copy size={12} /> Link</button>
             <button type="button" className="btn ghost sm" onClick={() => void archiveTask()}><Archive size={12} /> Archive</button>
             <Menu trigger={<MoreHorizontal size={16} />} triggerLabel="More task actions">
@@ -411,6 +418,12 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask }
                   if (value !== task.estimateMinutes) void patch({ estimateMinutes: value });
                 }} style={{ width: 110 }} />
               <span className="field-hint">minutes</span>
+            </div>
+
+            <div className="property-label"><Clock3 size={13} /> Tracked</div>
+            <div className="property-value inline">
+              <span className={`badge ${task.actualMinutes ? "accent" : "slate"}`}>{task.actualMinutes ? `${task.actualMinutes} minutes` : "No focus time yet"}</span>
+              {task.actualMinutes && task.estimateMinutes ? <span className="field-hint">{Math.round((task.actualMinutes / Math.max(1, task.estimateMinutes)) * 100)}% of estimate</span> : null}
             </div>
 
             <div className="property-label">Priority</div>

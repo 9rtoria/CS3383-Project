@@ -21,6 +21,8 @@ import {
   Sparkles,
   SunMedium,
   UserRound,
+  Volume2,
+  VolumeX,
   WifiOff,
 } from "lucide-react";
 import { Avatar, EmptyState, LoadingButton, Menu, MenuItem, Modal } from "@/components/ui";
@@ -32,7 +34,9 @@ import { CalendarView, UpcomingView } from "@/components/time-views";
 import { ArchiveView, SearchView } from "@/components/search-archive";
 import { TaskDrawer } from "@/components/task-drawer";
 import { InsightsView } from "@/components/insights-view";
+import { FocusMode } from "@/components/focus-mode";
 import { useToast } from "@/components/toast";
+import { getSoundPrefs, playSound, previewSound, setSoundPrefs, subscribeSoundPrefs } from "@/lib/sound";
 import { api, ApiClientError, formatApiError, newIdempotencyKey } from "@/lib/client";
 import {
   cacheBootstrap,
@@ -78,6 +82,8 @@ export function AppRoot() {
   const [view, setView] = useState<AppView>("today");
   const [boardId, setBoardId] = useState<string>("");
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [focusTask, setFocusTask] = useState<Task | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -91,6 +97,8 @@ export function AppRoot() {
   const [syncing, setSyncing] = useState(false);
   const initialized = useRef(false);
   const timezoneSynced = useRef(false);
+  const seenNotifications = useRef<Set<string>>(new Set());
+  const notificationsReady = useRef(false);
   const gPending = useRef(false);
   const gTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncingRef = useRef(false);
@@ -237,6 +245,80 @@ export function AppRoot() {
     void refreshBootstrap();
   }, [refreshBootstrap]);
 
+  useEffect(() => {
+    if (!data) return;
+    const freshReminder = data.notifications.find((notification) => notification.type === "reminder" && !seenNotifications.current.has(notification.id));
+    if (notificationsReady.current && freshReminder) {
+      if (document.visibilityState === "visible") {
+        playSound("reminder");
+      } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try {
+          const browserReminder = new Notification(freshReminder.title || "Drift reminder", {
+            body: freshReminder.body,
+            tag: freshReminder.id,
+          });
+          browserReminder.onclick = () => {
+            window.focus();
+            if (freshReminder.link) window.location.href = freshReminder.link;
+            browserReminder.close();
+          };
+        } catch {
+          // Browser notifications are a progressive enhancement; the inbox remains the source of truth.
+        }
+      }
+    }
+    for (const notification of data.notifications) seenNotifications.current.add(notification.id);
+    notificationsReady.current = true;
+  }, [data]);
+
+  const openFocusTask = useCallback((task: Task) => {
+    setTaskId(null);
+    setFocusTask(task);
+  }, []);
+
+  const completeFocusTask = useCallback(async (minutes: number) => {
+    if (!focusTask) return false;
+    try {
+      const result = await api<{ task: Task }>(`/api/tasks/${focusTask.id}`, {
+        method: "PATCH",
+        workspaceId: focusTask.workspaceId,
+        idempotencyKey: newIdempotencyKey("focus-complete"),
+        body: {
+          completed: true,
+          actualMinutes: (focusTask.actualMinutes ?? 0) + minutes,
+          version: focusTask.version,
+        },
+      });
+      setFocusTask((current) => current ? { ...current, ...result.task, actualMinutes: result.task.actualMinutes } : current);
+      setRefreshKey((value) => value + 1);
+      await refreshBootstrap();
+      toast.success(`Focus complete · ${minutes}m tracked.`);
+      return true;
+    } catch (focusError) {
+      toast.error(formatApiError(focusError));
+      return false;
+    }
+  }, [focusTask, refreshBootstrap, toast]);
+
+  const logFocusTime = useCallback(async (minutes: number) => {
+    if (!focusTask || minutes <= 0) return;
+    try {
+      await api<{ task: Task }>(`/api/tasks/${focusTask.id}`, {
+        method: "PATCH",
+        workspaceId: focusTask.workspaceId,
+        idempotencyKey: newIdempotencyKey("focus-log"),
+        body: {
+          actualMinutes: (focusTask.actualMinutes ?? 0) + minutes,
+          version: focusTask.version,
+        },
+      });
+      setRefreshKey((value) => value + 1);
+      await refreshBootstrap();
+    } catch (focusError) {
+      toast.error(formatApiError(focusError));
+    }
+  }, [focusTask, refreshBootstrap, toast]);
+
   const navigate = useCallback((next: AppView) => {
     if (next === "board" && !boardSummary && workspace?.boards[0]) setBoardId(workspace.boards[0].id);
     setView(next);
@@ -263,6 +345,17 @@ export function AppRoot() {
   }, []);
 
   useEffect(() => {
+    setSoundEnabled(getSoundPrefs().enabled);
+    return subscribeSoundPrefs((prefs) => setSoundEnabled(prefs.enabled));
+  }, []);
+
+  const toggleSound = useCallback(() => {
+    const next = setSoundPrefs({ enabled: !soundEnabled });
+    setSoundEnabled(next.enabled);
+    if (next.enabled) previewSound("tap");
+  }, [soundEnabled]);
+
+  useEffect(() => {
     function isTyping(target: EventTarget | null): boolean {
       if (!(target instanceof HTMLElement)) return false;
       return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
@@ -270,6 +363,7 @@ export function AppRoot() {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        playSound("tap");
         setPaletteOpen((value) => !value);
         return;
       }
@@ -278,20 +372,24 @@ export function AppRoot() {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "c" || event.key === "C") {
         event.preventDefault();
+        playSound("tap");
         setCaptureOpen(true);
         return;
       }
       if (event.key === "/") {
         event.preventDefault();
+        playSound("tap");
         setView("search");
         return;
       }
       if (event.key === "?") {
         event.preventDefault();
+        playSound("tap");
         setShortcutsOpen(true);
         return;
       }
       if (event.key.toLowerCase() === "g") {
+        playSound("tap");
         gPending.current = true;
         if (gTimer.current) clearTimeout(gTimer.current);
         gTimer.current = setTimeout(() => { gPending.current = false; }, 1200);
@@ -302,12 +400,14 @@ export function AppRoot() {
         const map: Record<string, AppView> = { t: "today", u: "upcoming", c: "calendar", a: "archive", s: "search", i: "insights", b: "board" };
         if (map[key]) {
           event.preventDefault();
+          playSound("tap");
           setView(map[key]!);
           gPending.current = false;
         }
       }
       if (event.key.toLowerCase() === "n" && event.shiftKey) {
         event.preventDefault();
+        playSound("tap");
         setNewBoardOpen(true);
       }
     }
@@ -515,6 +615,15 @@ export function AppRoot() {
               )}
             </Menu>
             <button type="button" className="icon-btn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><HelpCircle size={17} /></button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={soundEnabled ? "Mute interface sounds" : "Enable interface sounds"}
+              title={soundEnabled ? "Mute interface sounds" : "Enable interface sounds"}
+              onClick={toggleSound}
+            >
+              {soundEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            </button>
             <Menu trigger={typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? <SunMedium size={17} /> : <Moon size={17} />} triggerLabel="Theme and account">
               {(close) => (
                 <>
@@ -564,7 +673,7 @@ export function AppRoot() {
           {workspace.mfaLocked ? (
             <EmptyState icon={<UserRound size={20} />} title="Multi-factor authentication required" description={`${workspace.name} requires MFA. Enable it in account settings, then reload.`} action={<a className="btn primary" href="/settings#security">Open security settings</a>} />
           ) : view === "today" ? (
-            <TodayView workspace={workspace} refreshKey={refreshKey} userName={data.user.name} onOpenTask={setTaskId} onQuickCapture={() => setCaptureOpen(true)} onNavigate={(next) => navigate(next)} onChanged={refreshAll} />
+            <TodayView workspace={workspace} refreshKey={refreshKey} userName={data.user.name} onOpenTask={setTaskId} onFocusTask={openFocusTask} onQuickCapture={() => setCaptureOpen(true)} onNavigate={(next) => navigate(next)} onChanged={refreshAll} />
           ) : view === "upcoming" ? (
             <UpcomingView workspace={workspace} refreshKey={refreshKey} onOpenTask={setTaskId} onQuickCapture={() => setCaptureOpen(true)} />
           ) : view === "calendar" ? (
@@ -615,7 +724,15 @@ export function AppRoot() {
         onShowShortcuts={() => setShortcutsOpen(true)}
       />
 
-      <TaskDrawer taskId={taskId} workspace={workspace} onClose={() => setTaskId(null)} onChanged={refreshAll} onOpenTask={setTaskId} />
+      <TaskDrawer taskId={taskId} workspace={workspace} onClose={() => setTaskId(null)} onChanged={refreshAll} onOpenTask={setTaskId} onFocusTask={openFocusTask} />
+
+      <FocusMode
+        task={focusTask}
+        open={Boolean(focusTask)}
+        onClose={() => { setFocusTask(null); refreshAll(); }}
+        onComplete={completeFocusTask}
+        onLogTime={logFocusTime}
+      />
 
       <NewBoardModal
         open={newBoardOpen}

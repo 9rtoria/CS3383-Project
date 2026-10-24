@@ -346,6 +346,7 @@ paths:
                 dueDate: { type: [string, "null"], format: date-time }
                 dueAllDay: { type: boolean }
                 estimateMinutes: { type: [integer, "null"], maximum: 1440 }
+                actualMinutes: { type: [integer, "null"], maximum: 525600, description: Time tracked in Focus mode. }
                 labels: { type: array, items: { type: string } }
                 assigneeId: { type: [string, "null"] }
                 recurrenceRule: { type: [string, "null"] }
@@ -475,7 +476,7 @@ paths:
         "200": { description: Today payload }
     post:
       tags: [Planning]
-      summary: Accept, dismiss, or rebalance a Today suggestion
+      summary: Accept, dismiss, rebalance, or apply a previewed Smart Plan
       requestBody:
         required: true
         content:
@@ -493,6 +494,15 @@ paths:
                   properties:
                     action: { enum: [rebalance] }
                     workspaceId: { type: string }
+                - type: object
+                  required: [action, workspaceId, taskIds]
+                  properties:
+                    action: { enum: [applyPlan] }
+                    workspaceId: { type: string }
+                    taskIds:
+                      type: array
+                      maxItems: 50
+                      items: { type: string }
       responses:
         "200": { description: Updated Today payload }
   /api/insights:

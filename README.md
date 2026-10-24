@@ -1,13 +1,17 @@
-# Drift
+# Drift — ProjectA2 experiment
 
-**Drift** is a calm, keyboard-first personal task planner and Kanban board with real team and enterprise foundations. It is the working implementation of the Project A brief v1.3.
+**Drift** is a calm, keyboard-first personal task planner and Kanban board with real team and enterprise foundations. This working tree is **ProjectA2**, an independent school-demo extension of the Project A v1.3 baseline (`ProjectA` remains untouched at `6876db1`).
 
 - Capture a task without creating an account.
 - Plan a realistic day with capacity-aware suggestions.
+- See the day's shape in **Day Flow**, preview a local **Smart Plan**, and protect attention in **Focus Mode**.
+- Capture by voice or keyboard, with a Sound Lab that stays quiet by default.
 - Move work by mouse or keyboard, with undo and conflict handling.
 - Grow into shared boards, roles, audit, SSO, automations, and API tokens without exposing enterprise chrome to solo users.
 
-![Today](docs/screenshots/01-today.png)
+![Day Flow](docs/screenshots/10-day-flow.png)
+
+> **Honesty note:** Smart Plan is deterministic local rules, explicitly labeled as such — not an AI model. Voice recognition uses the browser's speech service. See [docs/A2_EXPERIMENT.md](docs/A2_EXPERIMENT.md) for the A2 design rationale, verification, and limits.
 
 ## Quick start
 
@@ -40,26 +44,29 @@ npm run start
 | `npm run start` | Start the production build |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm run lint` | ESLint (0 errors; warnings are triaged) |
-| `npm test` | 78 Vitest unit tests |
-| `npm run test:e2e` | Playwright journeys (12 tests) |
+| `npm test` | 79 Vitest unit tests |
+| `npm run test:e2e` | Playwright journeys (16 tests: 12 baseline + 4 A2) |
 | `npm run test:a11y` | axe-core serious/critical scan |
 | `npm run test:perf` | Authenticated Lighthouse smoke (requires a running server) |
 | `npm run screenshots` | Regenerate `docs/screenshots/` |
 | `npm run audit` | Production dependency audit |
 | `npm run jobs` | Reminders, digests, retention, webhook retries |
 | `npm run db:deploy` | Apply migrations without generating a new one |
+| `npm run db:seed` | Reset the demo account/workspace and seed fresh fixtures |
 
 ## What is delivered
 
 | Area | Capability |
 |---|---|
-| Capture | Quick capture with natural-language dates, priority, labels, estimates, recurrence; command palette; global shortcuts |
-| Planning | Today capacity plan with reasons and dismissal, Upcoming, Calendar, Archive, Kanban, List, saved views |
+| Capture | Quick capture with natural-language dates, priority, labels, estimates, recurrence; command palette; global shortcuts; **voice input with text fallback** |
+| Planning | Today capacity plan with reasons and dismissal, Upcoming, Calendar, Archive, Kanban, List, saved views; **Day Flow rail**; **Smart Plan preview/apply/undo** |
+| Focus | Full-screen timer, pause/resume, complete, early leave, tracked `actualMinutes`, estimate delta |
+| Sound | Web Audio Sound Lab with three palettes, volume, top-bar mute, six previews, optional typing texture off by default |
 | Tasks | Drawer editor, subtasks, comments, attachments, labels, dependencies, activity, reminders, recurrence, undo |
 | Collaboration | Personal / team / org workspaces, invites, roles (owner/admin/member/guest), public read-only board links |
 | Enterprise | Audit log, retention settings, SSO (OIDC), MFA (TOTP + backup codes), API tokens, webhooks, CSV/JSON import/export, account deletion |
 | Automation | Rule builder, side-effect-free preview, apply, audit, 60-second undo |
-| Assist | Deterministic quick-add parsing, capacity suggestions, checklist suggestions; opt-in and kill switch; no outbound customer data |
+| Assist | Deterministic quick-add parsing, capacity suggestions, checklist suggestions, **local Smart Plan rules**; opt-in and kill switch; no outbound customer data |
 | Offline | PWA install, cached bootstrap, queued capture/move, explicit sync state, conflict 409 and review |
 | Operations | Health, metrics, structured logs, request IDs, migrations, seed, background jobs, Docker/CI artifacts |
 
@@ -94,7 +101,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_MODEL.md](docs/DATA
 | [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md) | Data boundary, evaluation, oversight, kill switch |
 | [docs/PROCUREMENT.md](docs/PROCUREMENT.md) | Security questionnaire and commercial posture |
 | [docs/VPAT.md](docs/VPAT.md) | WCAG 2.2 A/AA conformance report |
-| [docs/DEMO.md](docs/DEMO.md) | Five-minute demo script |
+| [docs/DEMO.md](docs/DEMO.md) | Five-minute ProjectA2 demo script |
+| [docs/A2_EXPERIMENT.md](docs/A2_EXPERIMENT.md) | ProjectA2 feature rationale, verification, and limits |
 | [REVIEW.md](REVIEW.md) | Final delivery review, evidence, limitations, time table |
 
 The live API contract is served at `/api/openapi` and stored in [docs/openapi.yaml](docs/openapi.yaml).
@@ -109,6 +117,16 @@ The live API contract is served at `/api/openapi` and stored in [docs/openapi.ya
 |---|---|---|
 | ![](docs/screenshots/04-calendar.png) | ![](docs/screenshots/05-insights.png) | ![](docs/screenshots/06-command-palette.png) |
 
+### ProjectA2 states
+
+| Day Flow | Smart Plan | Focus Mode |
+|---|---|---|
+| ![](docs/screenshots/10-day-flow.png) | ![](docs/screenshots/11-smart-plan.png) | ![](docs/screenshots/12-focus-mode.png) |
+
+| Sound Lab | Voice Capture | Mobile / dark |
+|---|---|---|
+| ![](docs/screenshots/14-sound-settings.png) | ![](docs/screenshots/15-voice-capture.png) | ![](docs/screenshots/16-mobile-today.png) |
+
 See [docs/screenshots/README.md](docs/screenshots/README.md) for the full manifest.
 
 ## Honest limits
@@ -119,7 +137,10 @@ See [docs/screenshots/README.md](docs/screenshots/README.md) for the full manife
 - Email uses SMTP when configured; otherwise a persisted development outbox is used. Invite/magic-link delivery in production requires SMTP.
 - Automated axe and keyboard testing pass; **manual NVDA/VoiceOver testing was not possible** in this environment.
 - SQLite is appropriate for the demo and small teams, not the 10k-user target. See the PostgreSQL rollout in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-- “AI” in v1 is deterministic, explainable assistance, not an external LLM. See [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md).
+- “AI” in v1 is deterministic, explainable assistance, not an external LLM. **Smart Plan is local rules and is labeled that way**; it does not learn or call a model. See [docs/AI_GOVERNANCE.md](docs/AI_GOVERNANCE.md).
+- Voice capture depends on the browser's speech service; text capture is always available. Automated coverage uses a fake browser recognizer; a real-microphone pass across browsers/devices remains a manual check.
+- The Sound Lab is a designed prototype, not a mastered audio identity. Audition it on the target speakers/headphones; automated checks cannot judge timbre.
+- Focus Mode tracks accumulated `actualMinutes`; it is not a time-entry ledger with edit history.
 
 ## License / status
 
