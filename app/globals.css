@@ -4039,8 +4039,11 @@ dialog.drawer-dialog {
 .day-flow-ring {
   width: 74px;
   height: 74px;
+  max-width: 74px;
+  max-height: 74px;
   flex: 0 0 auto;
   position: relative;
+  overflow: hidden;
   color: var(--accent);
 }
 

@@ -141,13 +141,14 @@ export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd,
           </div>
         </div>
         <div className={`day-flow-ring${over ? " over" : ""}`} role="img" aria-label={`${Math.round(rawPercent)}% of daily capacity planned`}>
-          <svg viewBox="0 0 74 74" aria-hidden>
-            <circle className="day-flow-ring-track" cx="37" cy="37" r="31" />
+          <svg viewBox="0 0 74 74" width="74" height="74" aria-hidden>
+            <circle className="day-flow-ring-track" cx="37" cy="37" r="31" fill="none" />
             <circle
               className="day-flow-ring-value"
               cx="37"
               cy="37"
               r="31"
+              fill="none"
               style={{
                 strokeDasharray: circumference,
                 strokeDashoffset: circumference * (1 - ringPercent / 100),
