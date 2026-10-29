@@ -93,9 +93,10 @@ All paths are relative to the base URL. `W` means workspace-scoped.
 | POST | `/api/auth/signup` | Claim a guest or create an account |
 | POST | `/api/auth/signin` | Password sign-in |
 | POST | `/api/auth/magic` | Request a magic link |
-| POST | `/api/auth/magic/verify` | Verify a magic-link token |
+| GET | `/api/auth/magic/verify` | Verify a browser-bound magic-link token |
 | POST | `/api/auth/mfa/challenge` | Complete a TOTP challenge |
-| POST | `/api/auth/signout` | Revoke the current session |
+| POST | `/api/auth/signout` | Revoke all sessions |
+| DELETE | `/api/auth/signout` | Revoke the current session |
 | GET/POST | `/api/auth/oauth/[provider]` | Start GitHub/Google/Apple OAuth |
 | GET | `/api/auth/oauth/[provider]/callback` | OAuth callback |
 | GET | `/api/auth/sso/[workspaceId]` | Start workspace OIDC SSO |
@@ -112,7 +113,7 @@ All paths are relative to the base URL. `W` means workspace-scoped.
 | POST | `/api/today` | `accept`, `dismiss`, or `applyPlan` actions for the day |
 | GET | `/api/upcoming` | Next 14 days grouped by local date |
 | GET | `/api/calendar` | Tasks in a date range |
-| GET | `/api/calendar/ics` | Tokenized ICS subscription |
+| GET | `/api/calendar/ics` | Authenticated ICS download (not a calendar subscription feed) |
 | GET | `/api/insights` | Timeline, workload, board health, focus suggestion |
 | GET | `/api/archive` | Archived tasks |
 | GET | `/api/search` | Full-text search with filters and cursor |
@@ -285,4 +286,4 @@ The API is versioned by the `info.version` field (`1.0.0`). There is no `/v2` ye
 
 ## 9. Contract validation
 
-`docs/openapi.yaml` documents **63 paths**. It is parsed by `js-yaml` in the test suite and served at `/api/openapi`. The route index above is generated from `app/api/**/route.ts`; if you add a route, update the YAML and this table in the same change.
+`docs/openapi.yaml` documents **64 paths**. It is parsed by `js-yaml` in the test suite and served at `/api/openapi`. The route index above is generated from `app/api/**/route.ts`; if you add a route, update the YAML and this table in the same change.

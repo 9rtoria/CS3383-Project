@@ -1,7 +1,7 @@
 # Security
 
 **Scope:** Drift web application, API, data, and deployment artifacts  
-**Last reviewed:** 2026-10-23  
+**Last reviewed:** 2026-10-30
 **Status:** v1 delivery; production hardening items are listed explicitly
 
 ## 1. Security posture in one page
@@ -18,11 +18,11 @@ Drift uses a first-party, cookie-based session model with server-side authorizat
 | Cookie | `httpOnly`, `SameSite=Lax`, `path=/`, `Secure` in production, 30-day absolute expiry |
 | Rotation | New session on password/magic-link/OAuth sign-in; guest claim keeps user but rotates token |
 | Revocation | Sign-out revokes current session; “sign out everywhere” revokes all; session list exposes device/time |
-| Magic link | Single-use token hash, short expiry, rate-limited request/verify, `next` restricted to same-site paths |
+| Magic link | Single-use token hash, short expiry, rate-limited request/verify, browser-bound state cookie, `next` restricted to same-site paths |
 | MFA | TOTP RFC 6238 (SHA-1, 6 digits, 30 s, ±1 window), encrypted secret, hashed backup codes, challenge token |
-| OAuth | Authorization code + state + PKCE; provider allowlist; verified-email linking; no implicit flow |
-| OIDC SSO | Issuer discovery, state/nonce, PKCE, signed ID token validation via `jose`, encrypted client secret, org-only config |
-| MFA policy | Org can require MFA; login challenge blocks session issuance until verified |
+| OAuth | Authorization code + signed state; provider allowlist; verified-email linking; no implicit flow. PKCE is **not implemented** in this build |
+| OIDC SSO | Issuer discovery, signed state cookie, allowed-domain checks, explicit `email_verified` requirement, encrypted client secret, org-only config. ID-token/nonce/PKCE validation and automatic existing-account linking are **not implemented**; existing accounts must use their current sign-in method |
+| MFA policy | Org can require MFA; the shared access check blocks non-enrolled and unverified sessions |
 | Production secrets | `AUTH_SECRET` and `APP_ENCRYPTION_KEY` required; no runtime generation in production |
 
 **Limitations:** live OAuth/SSO round-trips are unverified in this environment. Password reset is via magic link; there is no separate reset-token flow. Account recovery for a lost MFA device relies on backup codes.
@@ -35,7 +35,7 @@ Drift uses a first-party, cookie-based session model with server-side authorizat
 - Role matrix: OWNER > ADMIN > MEMBER > GUEST. Content writes require MEMBER+; membership/policy/audit require ADMIN+; ownership transfer/delete requires OWNER.
 - UI hiding is cosmetic; every route repeats the check.
 - Public share tokens are read-only and cannot be used on mutation endpoints.
-- API tokens are bound to one user and workspace with an expiry; they inherit the owner’s role and currently have **no per-token scopes**. Bearer requests bypass cookie CSRF but still pass authz.
+- API tokens are bound to one user and workspace with an expiry; they inherit the owner’s role and currently have **no per-token scopes**. `handleApi` rejects a bearer request that omits a workspace or names a different one. Bearer requests bypass cookie CSRF but still pass authz.
 - Invites store only a token hash, bind to an email, expire in 7 days, and are single-use.
 
 ## 4. Request security
@@ -64,7 +64,7 @@ Drift uses a first-party, cookie-based session model with server-side authorizat
 - `X-Content-Type-Options: nosniff`.
 - `X-Frame-Options: DENY`.
 - `Referrer-Policy: strict-origin-when-cross-origin`.
-- `Permissions-Policy` denies camera, microphone, geolocation, payment, USB.
+- `Permissions-Policy` denies camera, geolocation, payment, and USB; microphone is allowed for same-origin voice capture (`microphone=(self)`).
 - `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`.
 - `poweredByHeader: false`.
 
@@ -91,12 +91,12 @@ No outbound AI calls exist. The only outbound traffic is SMTP and configured web
 - Download requires authentication and workspace membership; response uses `Content-Disposition: attachment` and `nosniff`.
 - SVG is served as a download, not inline, to avoid script execution in the app origin.
 - **No malware scanner is integrated.** Do not accept untrusted uploads in production until a scanner/AV service is wired. `DISABLE_ATTACHMENTS=true` is the kill switch.
-- MIME is client-supplied plus a signature sniff for common types; this is not a substitute for content disarm/AV.
+- MIME is checked against a client-supplied allowlist; there is **no magic-byte/signature sniff** in this build, and this is not a substitute for content disarm/AV.
 
 ## 8. Audit and logging
 
 - Audit rows include actor, action, entity type/ID, request ID, timestamp, and bounded metadata.
-- IP addresses are hashed with a server secret; raw IPs are not stored in audit.
+- The audit schema has an `ipHash` column, but current routes do not populate it; raw IPs are not stored in audit, and wiring hashed IPs into every audit write remains a follow-up.
 - No passwords, session tokens, API tokens, TOTP secrets, or attachment bytes are logged.
 - Structured request logs include method, path, status, duration, user ID, request ID; query strings are not logged with sensitive values.
 - Client errors are bounded and do not include task content or credentials.
@@ -105,8 +105,8 @@ No outbound AI calls exist. The only outbound traffic is SMTP and configured web
 ## 9. Data rights and retention
 
 - Export: JSON bundle and CSV tasks, scoped to the viewer.
-- Delete: typed `DELETE` confirmation; revokes sessions, soft-deletes personal workspaces, removes credentials, and retains shared-workspace content with a pseudonymized actor. Shared-workspace owners must transfer ownership first.
-- Retention: org admins can set 7–3650 days; jobs purge expired trash/audit/idempotency/undo/session rows.
+- Delete: typed `DELETE` confirmation; revokes sessions, soft-deletes personal workspaces, removes credentials, and retains shared-workspace content with a pseudonymized actor. Shared-workspace owners must transfer ownership first; a dedicated ownership-transfer endpoint is still backlog.
+- Retention: org admins can set 7–3650 days; jobs currently purge sessions, magic links, idempotency keys, terminal email rows, client errors, and expired undo actions, and soft-delete old archived tasks. Task/board/attachment purge and full retention coverage are not shipped.
 - Backups: operator must define retention and secure deletion consistent with policy.
 - Org-owned content is not deleted by a member’s account deletion; ownership transfer is an admin action.
 

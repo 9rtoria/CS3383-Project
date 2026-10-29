@@ -80,6 +80,7 @@ export function capacitySummary(suggestions: TodaySuggestion[], capacity: number
     capacityMinutes: capacity,
     remainingMinutes: Math.max(0, capacity - minutes),
     utilization: capacity > 0 ? Math.min(100, Math.round((minutes / capacity) * 100)) : 0,
+    overbooked: minutes > capacity,
     overflowCount: suggestions.filter((item) => !item.selected && !item.blocked).length,
     focusScore,
   };

@@ -65,4 +65,18 @@ describe("Today ranking (SX-2, FR-005)", () => {
     expect(summary.overflowCount).toBe(1);
     expect(summary.utilization).toBe(100);
   });
+
+  it("reports an overbooked day when chosen work exceeds capacity", () => {
+    const suggestions = rankTodayTasks(
+      [
+        candidate({ id: "a", estimateMinutes: 120, focusDate: "2026-10-23" }),
+        candidate({ id: "b", estimateMinutes: 120, focusDate: "2026-10-23" }),
+      ],
+      { timeZone: "UTC", capacityMinutes: 120, now: NOW },
+    );
+    const active = suggestions.map((task) => ({ ...task, selected: true }));
+    const summary = capacitySummary(active, 120);
+    expect(summary.selectedMinutes).toBe(240);
+    expect(summary.overbooked).toBe(true);
+  });
 });

@@ -24,6 +24,8 @@ function constraints(overrides: Partial<AutoPlanConstraints> = {}): AutoPlanCons
     horizonDays: 7,
     timeZone: "UTC",
     now: new Date("2026-10-26T08:00:00.000Z"),
+    weekStartsOn: 1,
+    dismissedTodayTaskIds: [],
     workdayStart: 9,
     workdayEnd: 18,
     dailyCapacityMinutes: 600,
@@ -112,6 +114,31 @@ describe("Auto-plan scheduler", () => {
     ], constraints());
     const light = preview.options.find((option) => option.id === "light")!;
     expect(light.blocks.map((block) => block.taskId)).toEqual(["urgent"]);
+  });
+
+  it("does not schedule before a task start date", () => {
+    const preview = buildAutoPlan([
+      task({ id: "later", startDate: "2026-10-28", estimateMinutes: 60 }),
+    ], constraints());
+    const balanced = preview.options.find((option) => option.id === "balanced")!;
+    expect(balanced.blocks[0]).toMatchObject({ date: "2026-10-28", minutes: 60 });
+  });
+
+  it("respects a timed due date and already tracked time", () => {
+    const preview = buildAutoPlan([
+      task({ id: "timed", estimateMinutes: 120, actualMinutes: 70, dueDate: START, dueAllDay: false, dueMinute: 10 * 60 }),
+    ], constraints());
+    const balanced = preview.options.find((option) => option.id === "balanced")!;
+    expect(balanced.blocks).toHaveLength(1);
+    expect(balanced.blocks[0]).toMatchObject({ date: START, startMinute: 9 * 60, minutes: 50 });
+  });
+
+  it("does not schedule a task dismissed for today", () => {
+    const preview = buildAutoPlan([
+      task({ id: "dismissed", estimateMinutes: 30 }),
+    ], constraints({ dismissedTodayTaskIds: ["dismissed"] }));
+    const balanced = preview.options.find((option) => option.id === "balanced")!;
+    expect(balanced.blocks[0]?.date).toBe("2026-10-27");
   });
 
   it("skips weekends unless enabled", () => {

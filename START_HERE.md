@@ -49,8 +49,8 @@ A longer script with exact expected text is in [docs/DEMO.md](docs/DEMO.md).
 | Build output | `build-output.txt` |
 | Typecheck output | `typecheck-output.txt` |
 | Lint output (0 errors, warnings triaged) | `lint-output.txt` |
-| Unit test output (100/100) | `test-output.txt` |
-| E2E output (31 journeys × 3 engines = 93 executions) | `e2e-output.txt` |
+| Unit test output (106/106) | `test-output.txt` |
+| E2E output (35 journeys × 3 engines = 105 executions) | `e2e-output.txt` |
 | Lighthouse summary and reports | `perf-output.txt`, `perf-run-1.txt`, `perf-run-2.txt`, `perf-run-early-outlier.txt`, `docs/performance/` |
 | Screenshots (9 baseline + 17 A2) | `docs/screenshots/` |
 | A2 design rationale and limits | [docs/A2_EXPERIMENT.md](docs/A2_EXPERIMENT.md) |

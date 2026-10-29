@@ -258,7 +258,7 @@ export function TodayView({ workspace, refreshKey, userName, preferences, onOpen
             <span>{Math.max(0, (data?.capacity.totalMinutes ?? 0) - (data?.capacity.selectedMinutes ?? 0))} {t("min left")}</span>
           </div>
           <div className="capacity-actions">
-            {preferences.features.smartPlan ? (
+            {preferences.features.smartPlan && data?.aiEnabled === true ? (
               <button type="button" className="btn soft sm" onClick={openSmartPlan} disabled={!data?.suggestions.length}>
                 <Sparkles size={12} aria-hidden /> {t("Smart Plan")}
               </button>
@@ -274,9 +274,10 @@ export function TodayView({ workspace, refreshKey, userName, preferences, onOpen
 
       <AutoPlanController
         workspaceId={workspace.id}
-        enabled={preferences.autoPlan.enabled}
+        enabled={data?.aiEnabled === true && preferences.autoPlan.enabled}
         mode={preferences.autoPlan.mode}
         refreshMinutes={preferences.autoPlan.refreshMinutes}
+        refreshKey={refreshKey}
         onChanged={onChanged}
       />
 

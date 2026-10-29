@@ -17,7 +17,7 @@ type Params = { params: Promise<{ provider: string }> };
 const STATE_COOKIE = "drift_oauth_state";
 
 function safeNext(value: string | null): string {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  return value && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
 }
 
 function redirect(path: string): NextResponse {

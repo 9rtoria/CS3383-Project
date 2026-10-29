@@ -47,6 +47,7 @@ async function todayPayload(viewer: any, workspaceId: string) {
         completedAt: null,
         deletedAt: null,
         archivedAt: null,
+        board: { deletedAt: null },
       },
       include: {
         labels: { include: { label: true } },
@@ -63,14 +64,30 @@ async function todayPayload(viewer: any, workspaceId: string) {
         userId: viewer.user.id,
         workspaceId,
         date: today,
-        task: { completedAt: null, archivedAt: null, deletedAt: null },
+        task: { completedAt: null, archivedAt: null, deletedAt: null, board: { deletedAt: null } },
       },
-      include: { task: { select: { id: true, title: true, priority: true, estimateMinutes: true, dueDate: true, dueAllDay: true, focusDate: true } } },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            priority: true,
+            estimateMinutes: true,
+            dueDate: true,
+            dueAllDay: true,
+            focusDate: true,
+            board: { select: { visibility: true, createdById: true } },
+          },
+        },
+      },
       orderBy: { startMinute: "asc" },
     }),
   ]);
   const dismissed = new Set(dismissals.map((entry) => entry.taskId));
   const visible = tasks.filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id));
+  const visiblePlanBlocks = planBlocks.filter((block) =>
+    canReadBoard(access.role, block.task.board.visibility, block.task.board.createdById, viewer.user.id),
+  );
   const filtered = visible.filter((task) => !dismissed.has(task.id) || task.focusDate === today);
   const ranked = rankTodayTasks(
     filtered.map((task) => ({
@@ -81,16 +98,20 @@ async function todayPayload(viewer: any, workspaceId: string) {
     })),
     { timeZone: viewer.user.timezone, capacityMinutes: settings.capacityMinutes, now: new Date() },
   );
-  const selectedSet = new Set(ranked.filter((item) => item.selected).map((item) => item.id));
-  const summary = capacitySummary(ranked, settings.capacityMinutes);
+  // A chosen task must count against capacity even when the automatic selection
+  // loop could not fit it. Otherwise Today can show an accepted task while the
+  // ring claims there is still room.
+  const active = ranked.filter((item) => item.selected || item.focusDate === today);
+  const activeSummary = capacitySummary(active.map((item) => ({ ...item, selected: true })), settings.capacityMinutes);
+  const selectedSet = new Set(active.map((item) => item.id));
   return {
     date: today,
     capacity: {
       totalMinutes: settings.capacityMinutes,
-      selectedMinutes: summary.selectedMinutes,
-      remainingMinutes: summary.remainingMinutes,
-      percent: summary.utilization,
-      overbooked: summary.selectedMinutes > settings.capacityMinutes,
+      selectedMinutes: activeSummary.selectedMinutes,
+      remainingMinutes: activeSummary.remainingMinutes,
+      percent: activeSummary.utilization,
+      overbooked: activeSummary.overbooked,
     },
     suggestions: ranked.slice(0, 50).map((item) => ({
       ...taskSummary(filtered.find((task) => task.id === item.id)),
@@ -101,7 +122,7 @@ async function todayPayload(viewer: any, workspaceId: string) {
       blocked: item.blocked,
       accepted: item.focusDate === today,
     })),
-    planBlocks: planBlocks.map((block) => ({
+    planBlocks: visiblePlanBlocks.map((block) => ({
       id: block.id,
       userId: block.userId,
       workspaceId: block.workspaceId,
@@ -183,6 +204,9 @@ export async function POST(req: NextRequest) {
         where: { id: input.taskId, workspaceId: input.workspaceId, focusDate: today },
         data: { focusDate: null, version: { increment: 1 } },
       });
+      await prisma.planBlock.deleteMany({
+        where: { userId: viewer.user.id, workspaceId: input.workspaceId, taskId: input.taskId, date: today, source: "auto", locked: false },
+      });
     } else if (input.action === "applyPlan") {
       const taskIds = [...new Set(input.taskIds)].slice(0, 50);
       const selectedTasks = taskIds.length
@@ -204,12 +228,28 @@ export async function POST(req: NextRequest) {
           throw new ApiError("DEPENDENCY_BLOCKED", `Finish the work before “${task.title}” first.`);
         }
       }
+      const focused = await prisma.task.findMany({
+        where: { workspaceId: input.workspaceId, focusDate: today, deletedAt: null, board: { deletedAt: null } },
+        select: { id: true, board: { select: { visibility: true, createdById: true } } },
+      });
+      const visibleFocusIds = focused
+        .filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id))
+        .map((task) => task.id);
       await prisma.$transaction(async (tx) => {
+        await tx.planBlock.deleteMany({
+          where: {
+            userId: viewer.user.id,
+            workspaceId: input.workspaceId,
+            date: today,
+            source: "auto",
+            locked: false,
+          },
+        });
         await tx.task.updateMany({
           where: {
             workspaceId: input.workspaceId,
             focusDate: today,
-            ...(taskIds.length ? { id: { notIn: taskIds } } : {}),
+            id: { in: visibleFocusIds, ...(taskIds.length ? { notIn: taskIds } : {}) },
           },
           data: { focusDate: null, version: { increment: 1 } },
         });
@@ -236,9 +276,19 @@ export async function POST(req: NextRequest) {
     } else {
       const payload = await todayPayload(viewer, input.workspaceId);
       const selected = payload.suggestions.filter((suggestion) => suggestion.selected && !suggestion.blocked).map((suggestion) => suggestion.id);
+      const focused = await prisma.task.findMany({
+        where: { workspaceId: input.workspaceId, focusDate: today, deletedAt: null, board: { deletedAt: null } },
+        select: { id: true, board: { select: { visibility: true, createdById: true } } },
+      });
+      const visibleFocusIds = focused
+        .filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id))
+        .map((task) => task.id);
       await prisma.$transaction([
+        prisma.planBlock.deleteMany({
+          where: { userId: viewer.user.id, workspaceId: input.workspaceId, date: today, source: "auto", locked: false },
+        }),
         prisma.task.updateMany({
-          where: { workspaceId: input.workspaceId, focusDate: today, id: { notIn: selected } },
+          where: { workspaceId: input.workspaceId, focusDate: today, id: { in: visibleFocusIds, notIn: selected } },
           data: { focusDate: null },
         }),
         ...selected.map((taskId) =>

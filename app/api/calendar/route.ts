@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const end = endOfLocalDayUtc(`${prefix}-${String(last).padStart(2, "0")}`, viewer.user.timezone);
     const [tasks, planBlocks] = await Promise.all([
       prisma.task.findMany({
-        where: { workspaceId, deletedAt: null, archivedAt: null, dueDate: { gte: start, lte: end } },
+        where: { workspaceId, deletedAt: null, archivedAt: null, dueDate: { gte: start, lte: end }, board: { deletedAt: null } },
         include: {
           labels: { include: { label: true } },
           board: { select: { id: true, name: true, visibility: true, createdById: true } },
@@ -39,16 +39,32 @@ export async function GET(req: NextRequest) {
           userId: viewer.user.id,
           workspaceId,
           date: { gte: `${prefix}-01`, lte: `${prefix}-${String(last).padStart(2, "0")}` },
-          task: { completedAt: null, archivedAt: null, deletedAt: null },
+          task: { completedAt: null, archivedAt: null, deletedAt: null, board: { deletedAt: null } },
         },
-        include: { task: { select: { id: true, title: true, priority: true, dueDate: true, dueAllDay: true, estimateMinutes: true, focusDate: true } } },
+        include: {
+          task: {
+            select: {
+              id: true,
+              title: true,
+              priority: true,
+              dueDate: true,
+              dueAllDay: true,
+              estimateMinutes: true,
+              focusDate: true,
+              board: { select: { visibility: true, createdById: true } },
+            },
+          },
+        },
         orderBy: [{ date: "asc" }, { startMinute: "asc" }],
       }),
     ]);
     const visible = tasks.filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id));
+    const visiblePlanBlocks = planBlocks.filter((block) =>
+      canReadBoard(access.role, block.task.board.visibility, block.task.board.createdById, viewer.user.id),
+    );
     const byDate: Record<string, any[]> = {};
     const blocksByDate: Record<string, any[]> = {};
-    for (const block of planBlocks) {
+    for (const block of visiblePlanBlocks) {
       (blocksByDate[block.date] ??= []).push({
         id: block.id,
         userId: block.userId,

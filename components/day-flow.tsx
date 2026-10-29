@@ -80,7 +80,9 @@ export function DayFlow({ tasks, capacity, planBlocks = [], busy, note, workdayS
       planBlocks
         .map((block) => {
           const task = tasks.find((entry) => entry.id === block.taskId);
-          return task
+          // A stale plan block must never hide a task the user has since chosen
+          // (or show one they dismissed through the Today controls).
+          return task && (task.accepted || task.selected)
             ? {
                 task: { ...task, accepted: true },
                 start: block.startMinute,
@@ -93,26 +95,29 @@ export function DayFlow({ tasks, capacity, planBlocks = [], busy, note, workdayS
     [planBlocks, tasks],
   );
 
-  const blocks = useMemo(
-    () =>
-      scheduled.length
-        ? scheduled
-        : selected
-            .reduce<{ cursor: number; blocks: { task: Suggestion; start: number; duration: number; blockId?: string }[] }>(
-              (state, task) => {
-                const duration = Math.max(15, task.suggestedMinutes || task.estimateMinutes || 30);
-                const rawStart = taskStart(task, state.cursor);
-                const start = rawStart + duration > DAY_MINUTES ? Math.max(0, DAY_MINUTES - duration) : rawStart;
-                return {
-                  cursor: Math.max(state.cursor, start + duration + Math.max(0, blockBufferMinutes)),
-                  blocks: [...state.blocks, { task, start, duration }],
-                };
-              },
-              { cursor: anchorMinutes, blocks: [] },
-            )
-            .blocks,
-    [anchorMinutes, blockBufferMinutes, scheduled, selected],
-  );
+  const blocks = useMemo(() => {
+    const scheduledIds = new Set(scheduled.map((block) => block.task.id));
+    const unscheduledSelected = selected.filter((task) => !scheduledIds.has(task.id));
+    const lastScheduledEnd = scheduled.reduce(
+      (end, block) => Math.max(end, block.start + block.duration),
+      anchorMinutes,
+    );
+    const fallback = unscheduledSelected
+      .reduce<{ cursor: number; blocks: { task: Suggestion; start: number; duration: number; blockId?: string }[] }>(
+        (state, task) => {
+          const duration = Math.max(15, task.suggestedMinutes || task.estimateMinutes || 30);
+          const rawStart = taskStart(task, state.cursor);
+          const start = rawStart + duration > DAY_MINUTES ? Math.max(0, DAY_MINUTES - duration) : rawStart;
+          return {
+            cursor: Math.max(state.cursor, start + duration + Math.max(0, blockBufferMinutes)),
+            blocks: [...state.blocks, { task, start, duration }],
+          };
+        },
+        { cursor: scheduled.length ? lastScheduledEnd + Math.max(0, blockBufferMinutes) : anchorMinutes, blocks: [] },
+      )
+      .blocks;
+    return [...scheduled, ...fallback];
+  }, [anchorMinutes, blockBufferMinutes, scheduled, selected]);
 
   const nowMinutes = minutesOfDay(now);
 

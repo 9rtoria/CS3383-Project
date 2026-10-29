@@ -14,6 +14,9 @@ export type AutoPlanTask = {
   title: string;
   priority: string;
   dueDate: string | null;
+  dueMinute?: number | null;
+  dueAllDay?: boolean;
+  startDate?: string | null;
   estimateMinutes: number | null;
   actualMinutes: number | null;
   focusDate: string | null;
@@ -39,6 +42,8 @@ export type AutoPlanConstraints = {
   horizonDays: number;
   timeZone: string;
   now: Date;
+  weekStartsOn: number;
+  dismissedTodayTaskIds: string[];
   workdayStart: number;
   workdayEnd: number;
   dailyCapacityMinutes: number;
@@ -54,6 +59,8 @@ export type AutoPlanConstraints = {
   lunchEnd: number;
   existingBlocks: AutoPlanBlock[];
   actualMinutesByWeek: Record<string, number>;
+  preserveAutoBlocks?: boolean;
+  excludeTaskIds?: string[];
 };
 
 export type AutoPlanUnscheduled = {
@@ -107,9 +114,10 @@ function dateToMinutes(date: Date, timeZone: string): number {
   return hour * 60 + minute;
 }
 
-export function weekStartOf(date: string): string {
+export function weekStartOf(date: string, weekStartsOn = 1): string {
   const weekday = weekdayOfDateString(date);
-  const distance = (weekday + 6) % 7;
+  const start = weekStartsOn === 0 ? 0 : 1;
+  const distance = (weekday - start + 7) % 7;
   return addDaysToDateString(date, -distance);
 }
 
@@ -177,7 +185,10 @@ function scoreTask(task: AutoPlanTask, today: string, variant: AutoPlanOptionId)
 }
 
 function taskChunks(task: AutoPlanTask, constraints: AutoPlanConstraints): number[] {
-  const duration = Math.max(5, task.estimateMinutes ?? constraints.defaultEstimateMinutes);
+  const estimate = Math.max(5, task.estimateMinutes ?? constraints.defaultEstimateMinutes);
+  // Focus time already spent should not be scheduled a second time. A task
+  // with no remaining estimate still gets a short closing block.
+  const duration = Math.max(5, estimate - Math.max(0, task.actualMinutes ?? 0));
   if (!constraints.splitLongTasks || duration <= constraints.deepWorkMinutes) return [duration];
   const chunks: number[] = [];
   let remaining = duration;
@@ -192,6 +203,7 @@ function isFixedBlock(block: AutoPlanBlock, constraints: AutoPlanConstraints): b
   return (
     block.locked ||
     block.source === "manual" ||
+    Boolean(constraints.preserveAutoBlocks && block.source === "auto") ||
     block.date < constraints.startDate ||
     (block.date === constraints.startDate && block.startMinute < dateToMinutes(constraints.now, constraints.timeZone))
   );
@@ -200,7 +212,7 @@ function isFixedBlock(block: AutoPlanBlock, constraints: AutoPlanConstraints): b
 function buildWeekMap(dates: string[], constraints: AutoPlanConstraints): Map<string, MutableWeek> {
   const map = new Map<string, MutableWeek>();
   for (const date of dates) {
-    const key = weekStartOf(date);
+    const key = weekStartOf(date, constraints.weekStartsOn);
     if (!map.has(key)) {
       map.set(key, {
         actualMinutes: constraints.actualMinutesByWeek[key] ?? 0,
@@ -210,16 +222,12 @@ function buildWeekMap(dates: string[], constraints: AutoPlanConstraints): Map<st
     }
   }
   for (const block of constraints.existingBlocks) {
-    if (!dates.includes(block.date) || !isFixedBlock(block, constraints)) continue;
-    const key = weekStartOf(block.date);
-    if (!map.has(key)) {
-      map.set(key, {
-        actualMinutes: constraints.actualMinutesByWeek[key] ?? 0,
-        plannedMinutes: 0,
-        capMinutes: constraints.weeklyCapacityMinutes,
-      });
-    }
-    map.get(key)!.plannedMinutes += block.minutes;
+    // Count fixed work earlier in the current week even though it is outside
+    // the scheduling horizon. Otherwise a mid-week plan forgets Monday/Tuesday.
+    if (!isFixedBlock(block, constraints)) continue;
+    const key = weekStartOf(block.date, constraints.weekStartsOn);
+    const week = map.get(key);
+    if (week) week.plannedMinutes += block.minutes;
   }
   return map;
 }
@@ -260,8 +268,10 @@ function buildOption(
     plannedByDate.set(block.date, (plannedByDate.get(block.date) ?? 0) + block.minutes);
   }
 
+  const dismissedToday = new Set(constraints.dismissedTodayTaskIds);
+  const excluded = new Set(constraints.excludeTaskIds ?? []);
   const candidates = tasks
-    .filter((task) => !task.completedAt)
+    .filter((task) => !task.completedAt && !excluded.has(task.id))
     .filter((task) => {
       if (id !== "light") return true;
       if (task.openDependencies > 0) return false;
@@ -286,7 +296,17 @@ function buildOption(
       for (const date of dates) {
         if (!constraints.includeWeekends && isWeekend(date)) continue;
         if (date < today) continue;
-        const week = weeks.get(weekStartOf(date));
+        if (date === today && dismissedToday.has(task.id)) continue;
+        if (task.startDate && date < task.startDate) continue;
+        if (task.dueDate && task.dueDate >= today && date > task.dueDate) {
+          // Keep the more actionable reason (weekly/daily cap) from the due
+          // date itself instead of overwriting it with a later-date message.
+          if (failedReason === "No room before the horizon") {
+            failedReason = "Due date is before the available horizon";
+          }
+          break;
+        }
+        const week = weeks.get(weekStartOf(date, constraints.weekStartsOn));
         const dailyCap = Math.min(
           constraints.dailyCapacityMinutes,
           Math.max(0, (constraints.workdayEnd - constraints.workdayStart) * 60),
@@ -305,9 +325,15 @@ function buildOption(
           date === today ? dateToMinutes(constraints.now, constraints.timeZone) : 0,
         );
         const end = constraints.workdayEnd * 60;
-        if (start >= end) continue;
+        const dueEnd = task.dueDate === date && task.dueAllDay === false && task.dueMinute != null
+          ? Math.min(end, task.dueMinute)
+          : end;
+        if (start >= dueEnd) {
+          failedReason = "Due time has passed";
+          continue;
+        }
         const after = afterMinuteByDate.get(date) ?? start;
-        const free = freeIntervals(start, end, busyForDate(date, constraints));
+        const free = freeIntervals(start, dueEnd, busyForDate(date, constraints));
         const slot = free.find((interval) => {
           const candidateStart = Math.max(interval.start, after);
           return candidateStart + chunk <= interval.end;

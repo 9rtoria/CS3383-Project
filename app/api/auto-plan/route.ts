@@ -14,7 +14,7 @@ import {
 } from "@/lib/auto-plan";
 import { createUndo } from "@/lib/undo";
 import type { Viewer } from "@/lib/session";
-import { addDaysToDateString, dateStringInTimeZone, endOfLocalDayUtc, startOfLocalDayUtc, todayInTimeZone } from "@/lib/time";
+import { addDaysToDateString, dateStringInTimeZone, endOfLocalDayUtc, partsInTimeZone, startOfLocalDayUtc, todayInTimeZone } from "@/lib/time";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
@@ -29,6 +29,11 @@ const actionSchema = z.discriminatedUnion("action", [
     optionId: z.enum(["balanced", "focus", "light"]),
     safe: z.boolean().optional(),
     delegated: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("clear"),
+    workspaceId: z.string(),
+    horizonDays: z.number().int().min(1).max(31).optional(),
   }),
 ]);
 
@@ -65,12 +70,12 @@ async function loadContext(viewer: Viewer, workspaceId: string, horizonDays = 7)
   const preferences = normalizePreferences(settings);
   const startDate = todayInTimeZone(viewer.user.timezone);
   const endDate = addDaysToDateString(startDate, Math.max(1, horizonDays) - 1);
-  const weekStart = weekStartOf(startDate);
+  const weekStart = weekStartOf(startDate, settings.weekStartsOn);
   const weekRangeStart = startOfLocalDayUtc(weekStart, viewer.user.timezone);
   const weekRangeEnd = endOfLocalDayUtc(endDate, viewer.user.timezone);
-  const [tasks, blocks, completed] = await Promise.all([
+  const [tasks, blocks, completed, dismissals] = await Promise.all([
     prisma.task.findMany({
-      where: { workspaceId, completedAt: null, deletedAt: null, archivedAt: null },
+      where: { workspaceId, completedAt: null, deletedAt: null, archivedAt: null, board: { deletedAt: null } },
       include: {
         board: { select: { visibility: true, createdById: true } },
         dependencies: { include: { dependsOnTask: { select: { completedAt: true } } } },
@@ -78,7 +83,12 @@ async function loadContext(viewer: Viewer, workspaceId: string, horizonDays = 7)
       take: 1000,
     }),
     prisma.planBlock.findMany({
-      where: { userId: viewer.user.id, workspaceId, date: { gte: startDate, lte: endDate } },
+      where: {
+        userId: viewer.user.id,
+        workspaceId,
+        date: { gte: weekStart, lte: endDate },
+        task: { deletedAt: null, archivedAt: null, board: { deletedAt: null } },
+      },
       include: { task: { select: { title: true, priority: true } } },
       orderBy: [{ date: "asc" }, { startMinute: "asc" }],
     }),
@@ -88,35 +98,47 @@ async function loadContext(viewer: Viewer, workspaceId: string, horizonDays = 7)
         completedAt: { gte: weekRangeStart, lte: weekRangeEnd },
         actualMinutes: { not: null },
         deletedAt: null,
+        board: { deletedAt: null },
       },
       select: { completedAt: true, actualMinutes: true },
     }),
+    prisma.todayDismissal.findMany({ where: { userId: viewer.user.id, date: startDate }, select: { taskId: true } }),
   ]);
   const visible = tasks.filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id));
   const actualMinutesByWeek: Record<string, number> = {};
   for (const task of completed) {
     if (!task.completedAt || !task.actualMinutes) continue;
-    const key = weekStartOf(dateStringInTimeZone(task.completedAt, viewer.user.timezone));
+    const key = weekStartOf(dateStringInTimeZone(task.completedAt, viewer.user.timezone), settings.weekStartsOn);
     actualMinutesByWeek[key] = (actualMinutesByWeek[key] ?? 0) + task.actualMinutes;
   }
-  const planTasks: AutoPlanTask[] = visible.map((task) => ({
-    id: task.id,
-    title: task.title,
-    priority: task.priority,
-    dueDate: task.dueDate ? dateStringInTimeZone(task.dueDate, viewer.user.timezone) : null,
-    estimateMinutes: task.estimateMinutes,
-    actualMinutes: task.actualMinutes,
-    focusDate: task.focusDate,
-    completedAt: task.completedAt?.toISOString() ?? null,
-    openDependencies: task.dependencies.filter((entry) => !entry.dependsOnTask.completedAt).length,
-    updatedAt: task.updatedAt.toISOString(),
-  }));
-  const existingBlocks = blocks.map(blockShape);
-  const preview = buildAutoPlan(planTasks, {
+  const planTasks: AutoPlanTask[] = visible.map((task) => {
+    const dueParts = task.dueDate ? partsInTimeZone(task.dueDate, viewer.user.timezone) : null;
+    return {
+      id: task.id,
+      title: task.title,
+      priority: task.priority,
+      dueDate: task.dueDate ? dateStringInTimeZone(task.dueDate, viewer.user.timezone) : null,
+      dueMinute: task.dueDate && !task.dueAllDay && dueParts ? dueParts.hour * 60 + dueParts.minute : null,
+      dueAllDay: task.dueAllDay,
+      startDate: task.startDate ? dateStringInTimeZone(task.startDate, viewer.user.timezone) : null,
+      estimateMinutes: task.estimateMinutes,
+      actualMinutes: task.actualMinutes,
+      focusDate: task.focusDate,
+      completedAt: task.completedAt?.toISOString() ?? null,
+      openDependencies: task.dependencies.filter((entry) => !entry.dependsOnTask.completedAt).length,
+      updatedAt: task.updatedAt.toISOString(),
+    };
+  });
+  const visibleTaskIds = new Set(visible.map((task) => task.id));
+  const visibleBlocks = blocks.filter((block) => visibleTaskIds.has(block.taskId));
+  const existingBlocks = visibleBlocks.map(blockShape);
+  const constraints = {
     startDate,
     horizonDays,
     timeZone: viewer.user.timezone,
     now: new Date(),
+    weekStartsOn: settings.weekStartsOn,
+    dismissedTodayTaskIds: dismissals.map((entry) => entry.taskId),
     workdayStart: preferences.workdayStart,
     workdayEnd: preferences.workdayEnd,
     dailyCapacityMinutes: preferences.capacityMinutes,
@@ -132,7 +154,8 @@ async function loadContext(viewer: Viewer, workspaceId: string, horizonDays = 7)
     lunchEnd: preferences.autoPlan.lunchEnd,
     existingBlocks,
     actualMinutesByWeek,
-  });
+  };
+  const preview = buildAutoPlan(planTasks, constraints);
   return {
     access,
     preferences,
@@ -142,6 +165,9 @@ async function loadContext(viewer: Viewer, workspaceId: string, horizonDays = 7)
     preview,
     existingBlocks,
     blocks,
+    visibleTaskIds,
+    planTasks,
+    constraints,
     today: startDate,
   };
 }
@@ -165,15 +191,54 @@ export async function POST(req: NextRequest) {
     const input = actionSchema.parse(body);
     const workspaceId = input.workspaceId || workspaceHeader(request);
     if (!workspaceId) throw new ApiError("VALIDATION_ERROR", "Choose a workspace.");
+    if (input.action === "clear") {
+      const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
+      const startDate = todayInTimeZone(viewer.user.timezone);
+      const endDate = addDaysToDateString(startDate, Math.max(1, input.horizonDays ?? 7) - 1);
+      const cleared = await prisma.planBlock.deleteMany({
+        where: {
+          userId: viewer.user.id,
+          workspaceId,
+          source: "auto",
+          locked: false,
+          date: { gte: startDate, lte: endDate },
+        },
+      });
+      await recordActivity({
+        workspaceId: access.workspace.id,
+        actorId: viewer.user.id,
+        action: "auto_plan.cleared",
+        entityType: "workspace",
+        entityId: workspaceId,
+        requestId,
+        metadata: { blocks: cleared.count },
+      });
+      return ok({ cleared: cleared.count });
+    }
     const context = await loadContext(viewer, workspaceId, input.horizonDays);
     if (input.action === "preview") {
       return ok({ preview: context.preview });
     }
 
     const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
-    const option = context.preview.options.find((entry) => entry.id === input.optionId);
+    const existingAutoTasks = new Set(
+      context.existingBlocks
+        .filter((block) => block.source === "auto" && !block.locked && block.date >= context.startDate)
+        .map((block) => block.taskId),
+    );
+    let option = context.preview.options.find((entry) => entry.id === input.optionId);
+    if (input.safe) {
+      // Recompute with existing auto blocks treated as fixed. This makes safe
+      // mode honor the real weekly cap and free/busy window instead of applying
+      // a full-horizon plan and then deleting overlaps heuristically.
+      const safePreview = buildAutoPlan(context.planTasks, {
+        ...context.constraints,
+        preserveAutoBlocks: true,
+        excludeTaskIds: [...existingAutoTasks],
+      });
+      option = safePreview.options.find((entry) => entry.id === input.optionId);
+    }
     if (!option) throw new ApiError("VALIDATION_ERROR", "That plan option no longer exists.");
-    const existingAutoTasks = new Set(context.existingBlocks.filter((block) => block.source === "auto" && !block.locked).map((block) => block.taskId));
     const selected = input.safe
       ? option.blocks.filter((block) => !existingAutoTasks.has(block.taskId) && !context.existingBlocks.some((existing) => overlaps(block, existing)))
       : option.blocks;
@@ -186,11 +251,20 @@ export async function POST(req: NextRequest) {
     }
     const todayBlocks = selected.filter((block) => block.date === context.today);
     const todayTaskIds = [...new Set(todayBlocks.map((block) => block.taskId))];
-    const affectedFocus = await prisma.task.findMany({
+    const affectedFocus = (await prisma.task.findMany({
       where: { workspaceId, focusDate: context.today, deletedAt: null, archivedAt: null },
       select: { id: true, focusDate: true },
-    });
-    const previousFocus = affectedFocus.map((task) => ({ taskId: task.id, focusDate: task.focusDate }));
+    })).filter((task) => context.visibleTaskIds.has(task.id));
+    const focusSnapshotIds = [...new Set([...affectedFocus.map((task) => task.id), ...todayTaskIds])];
+    const focusSnapshot = focusSnapshotIds.length
+      ? await prisma.task.findMany({
+          where: { workspaceId, id: { in: focusSnapshotIds }, deletedAt: null },
+          select: { id: true, focusDate: true },
+        })
+      : [];
+    // Include tasks that were not focused before apply (focusDate: null), so
+    // undo can clear the focus that apply newly added.
+    const previousFocus = focusSnapshot.map((task) => ({ taskId: task.id, focusDate: task.focusDate }));
     const selectedTaskIds = new Set(selected.map((block) => block.taskId));
     const staleCutoff = new Date(Date.now() - context.preferences.autoPlan.staleDays * 86_400_000);
     const staleTasks = input.delegated && context.preferences.autoPlan.mode === "delegated" && context.preferences.autoPlan.allowStaleArchive
@@ -203,7 +277,10 @@ export async function POST(req: NextRequest) {
             dueDate: null,
             focusDate: null,
             updatedAt: { lt: staleCutoff },
-            ...(selectedTaskIds.size ? { id: { notIn: [...selectedTaskIds] } } : {}),
+            id: {
+              in: [...context.visibleTaskIds],
+              ...(selectedTaskIds.size ? { notIn: [...selectedTaskIds] } : {}),
+            },
           },
           select: { id: true, archivedAt: true },
           take: 25,
@@ -211,7 +288,7 @@ export async function POST(req: NextRequest) {
       : [];
     const previousArchived = staleTasks.map((task) => ({ taskId: task.id, archivedAt: task.archivedAt?.toISOString() ?? null }));
     const previousBlocks = context.blocks
-      .filter((block) => block.source === "auto" && !block.locked)
+      .filter((block) => block.source === "auto" && !block.locked && context.visibleTaskIds.has(block.taskId) && block.date >= context.startDate)
       .map((block) => ({
         taskId: block.taskId,
         date: block.date,
@@ -228,7 +305,9 @@ export async function POST(req: NextRequest) {
           source: "auto",
           locked: false,
           date: { gte: context.startDate, lte: context.endDate },
-          ...(input.safe ? { taskId: { in: [...new Set(selected.map((block) => block.taskId))] } } : {}),
+          taskId: input.safe
+            ? { in: [...new Set(selected.map((block) => block.taskId))] }
+            : { in: [...context.visibleTaskIds] },
         },
       });
       if (selected.length) {
@@ -258,7 +337,7 @@ export async function POST(req: NextRequest) {
             workspaceId,
             focusDate: context.today,
             deletedAt: null,
-            id: { notIn: todayTaskIds },
+            id: { in: [...context.visibleTaskIds], notIn: todayTaskIds },
           },
           data: { focusDate: null, version: { increment: 1 } },
         });
@@ -283,6 +362,7 @@ export async function POST(req: NextRequest) {
       inverse: {
         startDate: context.startDate,
         endDate: context.endDate,
+        taskIds: [...new Set([...previousBlocks.map((block) => block.taskId), ...selected.map((block) => block.taskId)])],
         previousBlocks,
         previousFocus,
         previousArchived,

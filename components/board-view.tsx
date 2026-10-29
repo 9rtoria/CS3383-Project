@@ -573,7 +573,7 @@ function ColumnComposer({ workspaceId, boardId, columnId, timeZone, onClose, onC
     <div className="quick-composer">
       <textarea ref={ref} value={value} onChange={(event) => setValue(event.target.value)} placeholder="A small next step…" aria-label="New task title" onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
-        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void submit(); }
+        if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); }
       }} />
       <div className="quick-composer-foot">
         <span className="quick-hint">{parsed.dueDate ? formatDue(parsed.dueDate, parsed.dueAllDay) : "↵ to add · Esc to close"}</span>

@@ -96,9 +96,14 @@ export async function getBoardPayload(viewer: Viewer, workspaceId: string, board
       subtasks: { orderBy: { position: "asc" } },
       assignee: { select: { id: true, name: true, email: true, avatarUrl: true } },
       dependencies: { include: { dependsOnTask: { select: { id: true, title: true, completedAt: true } } } },
-      reminders: { orderBy: { remindAt: "asc" } },
+      reminders: { where: { userId: viewer.user.id }, orderBy: { remindAt: "asc" } },
       attachments: { where: { deletedAt: null }, select: { id: true, name: true, mimeType: true, size: true } },
-      _count: { select: { comments: true, attachments: true } },
+      _count: {
+        select: {
+          comments: { where: { deletedAt: null } },
+          attachments: { where: { deletedAt: null } },
+        },
+      },
     },
     orderBy: [{ position: "asc" }, { id: "asc" }],
     take: 1000,
@@ -276,7 +281,15 @@ export async function deleteBoard(viewer: Viewer, workspaceId: string, boardId: 
   if (access.board.deletedAt) throw new ApiError("BOARD_NOT_FOUND");
   const count = await prisma.board.count({ where: { workspaceId, deletedAt: null, archivedAt: null } });
   if (count <= 1) throw new ApiError("CONFLICT", "Keep at least one active board in the workspace.");
-  await prisma.board.update({ where: { id: boardId }, data: { deletedAt: new Date(), version: { increment: 1 } } });
+  const now = new Date();
+  const deletedTasks = await prisma.task.findMany({ where: { boardId, deletedAt: null }, select: { id: true } });
+  await prisma.$transaction([
+    prisma.board.update({ where: { id: boardId }, data: { deletedAt: now, version: { increment: 1 } } }),
+    prisma.task.updateMany({
+      where: { boardId, deletedAt: null },
+      data: { deletedAt: now, version: { increment: 1 } },
+    }),
+  ]);
   await recordAudit({
     workspaceId,
     actorId: viewer.user.id,
@@ -292,7 +305,7 @@ export async function deleteBoard(viewer: Viewer, workspaceId: string, boardId: 
     action: "board.delete",
     entityType: "board",
     entityId: boardId,
-    inverse: { version: access.board.version },
+    inverse: { version: access.board.version, taskIds: deletedTasks.map((task) => task.id) },
     ttlSeconds: 10,
   });
   return { deleted: true, undo };

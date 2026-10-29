@@ -17,6 +17,10 @@ prisma/dev.db-shm
 data/runtime-secrets.json
 data/uploads/*
 !data/uploads/.gitkeep
+data/attachments/*
+!data/attachments/.gitkeep
+data/backups/*
+!data/backups/.gitkeep
 *.log
 .DS_Store
 Thumbs.db

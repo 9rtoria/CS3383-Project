@@ -13,12 +13,14 @@ export function AutoPlanController({
   enabled,
   mode,
   refreshMinutes,
+  refreshKey,
   onChanged,
 }: {
   workspaceId: string;
   enabled: boolean;
   mode: AutoPlanMode;
   refreshMinutes: number;
+  refreshKey: number;
   onChanged: () => void;
 }) {
   const toast = useToast();
@@ -101,6 +103,27 @@ export function AutoPlanController({
     }
   }, [applyOption, enabled, mode, workspaceId]);
 
+  const clearPlan = useCallback(async () => {
+    if (!window.confirm("Clear scheduled Auto-plan blocks? Your today selections will remain.")) return;
+    setLoading(true);
+    try {
+      const result = await api<{ cleared: number }>("/api/auto-plan", {
+        method: "POST",
+        workspaceId,
+        body: { action: "clear", workspaceId, horizonDays: 7 },
+      });
+      setPreview(null);
+      lastAutoApplyAt.current = Date.now();
+      onChanged();
+      toast.success(`${result.cleared} scheduled block${result.cleared === 1 ? "" : "s"} cleared.`);
+      void loadPreview(false);
+    } catch (clearError) {
+      toast.error(formatApiError(clearError));
+    } finally {
+      setLoading(false);
+    }
+  }, [loadPreview, onChanged, toast, workspaceId]);
+
   useEffect(() => {
     if (!enabled) {
       setPreview(null);
@@ -110,7 +133,7 @@ export function AutoPlanController({
     if (!refreshMinutes) return;
     const timer = window.setInterval(() => void loadPreview(true), refreshMinutes * 60_000);
     return () => window.clearInterval(timer);
-  }, [enabled, loadPreview, refreshMinutes]);
+  }, [enabled, loadPreview, refreshKey, refreshMinutes]);
 
   if (!enabled) return null;
 
@@ -126,6 +149,7 @@ export function AutoPlanController({
           if (!preview) void loadPreview(false);
           setOpen(true);
         }}
+        onClear={() => void clearPlan()}
       />
       <AutoPlanModal
         open={open}

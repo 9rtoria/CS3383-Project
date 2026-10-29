@@ -3,6 +3,7 @@ import { handleApi, ok, workspaceHeader } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { requireWorkspace, recordActivity, findTaskInWorkspace } from "@/lib/authz";
+import { canReadBoard } from "@/lib/rbac";
 import { appendAfter } from "@/lib/fractional";
 import { subtaskSchema } from "@/lib/validation";
 
@@ -13,6 +14,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!workspaceId) throw new ApiError("VALIDATION_ERROR", "Choose a workspace.");
     const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
     const task = await findTaskInWorkspace(id, access.workspace.id);
+    if (!canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id)) {
+      throw new ApiError("TASK_NOT_FOUND");
+    }
     const input = subtaskSchema.parse(body);
     const last = await prisma.subtask.findFirst({ where: { taskId: id }, orderBy: { position: "desc" }, select: { position: true } });
     const subtask = await prisma.subtask.create({

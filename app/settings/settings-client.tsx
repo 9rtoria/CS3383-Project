@@ -55,6 +55,7 @@ import {
 import { useToast } from "@/components/toast";
 import { api, formatApiError, newIdempotencyKey } from "@/lib/client";
 import { formatDate, roleLabel } from "@/lib/format";
+import { clearOfflineData } from "@/lib/offline";
 import { applyPreferencesToDocument, normalizePreferences, type SettingsPatch } from "@/lib/preferences";
 import { setLocale, useI18n } from "@/lib/i18n";
 import type { Bootstrap, UserSettings, Workspace } from "@/lib/types";
@@ -876,6 +877,7 @@ export function SettingsClient() {
     if (deleteConfirm !== "DELETE") return;
     try {
       await api("/api/account", { method: "DELETE", body: { confirm: "DELETE" } });
+      clearOfflineData();
       window.location.assign("/auth");
     } catch (deleteError) {
       toast.error(formatApiError(deleteError));

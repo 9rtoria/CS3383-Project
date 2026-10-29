@@ -94,9 +94,9 @@ Run against the seeded demo workspace on `http://localhost:3000`.
 |---|---|
 | `npm run typecheck` | Pass |
 | `npm run lint` | Pass, 0 errors, 40 warnings (baseline warnings) |
-| `npm test` | **100/100** in 14 files |
+| `npm test` | **106/106** in 15 files |
 | `npm run build` | Pass |
-| Playwright | **31/31 journeys × 3 engines = 93 executions** (12 baseline + 19 A2/settings) |
+| Playwright | **35/35 journeys × 3 engines = 105 executions** (12 baseline + 23 A2/settings/security hardening) |
 | axe serious/critical | 0 on Today, Board, Insights, all checked Settings sections, auth |
 | Responsive | 390 px Today and mobile Settings checked |
 | Dark theme | Today and Settings checked |

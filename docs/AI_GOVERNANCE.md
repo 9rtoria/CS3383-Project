@@ -42,8 +42,8 @@ If a future release adds an external provider, it must ship with: explicit opt-i
 
 | Control | Location | Effect |
 |---|---|---|
-| `Workspace.aiEnabled` | Workspace settings / DB | Hides assist suggestions for that workspace |
-| `AI_KILL_SWITCH=true` | Environment | Disables all assist suggestions process-wide |
+| `Workspace.aiEnabled` | Workspace settings / DB | Hides the Smart Plan and Auto-plan controls for that workspace; the core Today list and local quick-add parser remain available |
+| `AI_KILL_SWITCH=true` | Environment | Hides those assist controls process-wide; it does not delete tasks or block normal capture |
 | Capacity setting | Settings → Planning | Changes the minutes available to the Today planner |
 | Dismissal | Today item menu | Removes an item from today’s plan only |
 | Automation preview | Settings → Automations | Side-effect-free diff before apply |
@@ -67,7 +67,7 @@ The test asserts exact parses/order, so a rule change is visible in review. It i
 | Ambiguous priority | Defaults to `none`; the user can set it in the drawer |
 | Invalid timezone | Falls back to UTC for date keys |
 | Capacity zero | Today shows the real total and marks the plan overbooked; it does not divide by zero |
-| Kill switch on | Suggestions are absent, not broken; core capture/planning still works |
+| Kill switch on | Smart Plan/Auto-plan controls disappear; core capture and the basic Today list still work |
 | Recurrence edge (DST) | Next occurrence is computed in the user’s timezone; tests cover spring/fall transitions |
 
 ## 7. Limitations

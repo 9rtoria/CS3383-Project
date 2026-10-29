@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const access = await requireWorkspace(viewer, workspaceId, "GUEST", "board:read");
     const [tasks, boards] = await Promise.all([
       prisma.task.findMany({
-        where: { workspaceId, deletedAt: null, OR: [{ archivedAt: { not: null } }, { completedAt: { not: null } }] },
+        where: { workspaceId, deletedAt: null, board: { deletedAt: null }, OR: [{ archivedAt: { not: null } }, { completedAt: { not: null } }] },
         include: {
           labels: { include: { label: true } },
           board: { select: { id: true, name: true, visibility: true, createdById: true } },

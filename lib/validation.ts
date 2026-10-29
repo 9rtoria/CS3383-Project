@@ -249,7 +249,7 @@ export const ssoConfigSchema = z.object({
   issuer: z.string().url().max(500),
   clientId: z.string().trim().min(1).max(300),
   clientSecret: z.string().trim().max(500).optional().default(""),
-  allowedDomains: z.string().trim().max(1000).optional().default(""),
+  allowedDomains: z.string().trim().min(1).max(1000),
   enabled: z.boolean().optional().default(true),
   enforceSso: z.boolean().optional().default(false),
 });

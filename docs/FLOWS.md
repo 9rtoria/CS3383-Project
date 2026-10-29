@@ -158,7 +158,7 @@ stateDiagram-v2
 3. Audit view is cursor-paginated and filterable; rows show actor, action, entity, time, request ID.
 4. Retention sets the trash/audit window (7–3650 days); the jobs process purges eligible rows.
 5. Integrations → SSO config stores issuer/client ID/secret (secret encrypted) and `requireMfa`; org only.
-6. Members authenticate through `/api/auth/sso/[workspaceId]`; the callback validates state/nonce and links by verified email.
+6. Members authenticate through `/api/auth/sso/[workspaceId]`; the callback validates the signed state cookie and requires an explicitly verified email. Existing accounts are not auto-linked from the IdP; use the current sign-in method for those accounts.
 
 **Failure states:** non-admin → 403 and hidden UI; personal workspace → enterprise sections absent; SSO misconfiguration → explicit error, no fallback to password unless policy allows; provider unreachable → retry guidance.
 

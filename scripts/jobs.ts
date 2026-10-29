@@ -3,6 +3,7 @@ import { prisma } from "../lib/db";
 import { attemptSend, digestEmail, queueEmail, reminderEmail } from "../lib/email";
 import { formatDate } from "../lib/format";
 import { notifyUser } from "../lib/notifications";
+import { canReadBoard, publicRole } from "../lib/rbac";
 import { appUrl } from "../lib/env";
 import { attemptWebhookDelivery } from "../lib/webhooks";
 
@@ -86,6 +87,7 @@ async function dailyDigests(): Promise<Result> {
     });
     if (already) continue;
     const workspaceIds = user.memberships.map((membership) => membership.workspaceId);
+    const rolesByWorkspace = new Map(user.memberships.map((membership) => [membership.workspaceId, membership.role]));
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: user.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
     const tasks = await prisma.task.findMany({
       where: {
@@ -93,15 +95,22 @@ async function dailyDigests(): Promise<Result> {
         deletedAt: null,
         archivedAt: null,
         completedAt: null,
+        board: { deletedAt: null },
         OR: [{ focusDate: today }, { dueDate: { lte: new Date(Date.now() + 86_400_000) } }],
       },
+      include: { board: { select: { visibility: true, createdById: true, deletedAt: true } } },
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
       take: 12,
     });
-    if (!tasks.length) continue;
+    const visibleTasks = tasks.filter((task) => {
+      const board = task.board;
+      const role = publicRole(rolesByWorkspace.get(task.workspaceId) ?? "GUEST");
+      return board.deletedAt === null && canReadBoard(role, board.visibility, board.createdById, user.id);
+    });
+    if (!visibleTasks.length) continue;
     const sections = [
-      { title: "Today", lines: tasks.slice(0, 6).map((task) => `${task.title}${task.dueDate ? ` — due ${formatDate(task.dueDate, { month: "short", day: "numeric" })}` : ""}`) },
-      { title: "Also on the horizon", lines: tasks.slice(6).map((task) => task.title) },
+      { title: "Today", lines: visibleTasks.slice(0, 6).map((task) => `${task.title}${task.dueDate ? ` — due ${formatDate(task.dueDate, { month: "short", day: "numeric" })}` : ""}`) },
+      { title: "Also on the horizon", lines: visibleTasks.slice(6).map((task) => task.title) },
     ].filter((section) => section.lines.length);
     await queueEmail({ ...digestEmail(user.email, user.name, sections), userId: user.id, sendNow: true });
     queued += 1;
@@ -127,7 +136,11 @@ async function dueReminders(): Promise<Result> {
   const reminders = await prisma.reminder.findMany({
     where: { sentAt: null, remindAt: { lte: now } },
     include: {
-      task: { include: { board: { select: { id: true, name: true } } } },
+      task: {
+        include: {
+          board: { select: { id: true, name: true, visibility: true, createdById: true, deletedAt: true } },
+        },
+      },
       user: { include: { settings: true } },
     },
     orderBy: { remindAt: "asc" },
@@ -145,11 +158,18 @@ async function dueReminders(): Promise<Result> {
       continue;
     }
     const settings = reminder.user.settings;
-    const hour = localHour(reminder.user.timezone);
-    if (isQuietHour(hour, settings?.quietStart ?? null, settings?.quietEnd ?? null)) {
-      deferred += 1;
+    const membership = await prisma.membership.findFirst({
+      where: { userId: reminder.userId, workspaceId: task.workspaceId },
+      select: { role: true },
+    });
+    const board = task.board;
+    if (!membership || board.deletedAt || !canReadBoard(publicRole(membership.role), board.visibility, board.createdById, reminder.userId)) {
+      await prisma.reminder.update({ where: { id: reminder.id }, data: { sentAt: now } });
+      skipped += 1;
       continue;
     }
+    const hour = localHour(reminder.user.timezone);
+    const quiet = isQuietHour(hour, settings?.quietStart ?? null, settings?.quietEnd ?? null);
     let preferences: Record<string, boolean> = { inApp: true, email: true };
     try {
       if (settings?.notificationsJson) preferences = { ...preferences, ...JSON.parse(settings.notificationsJson) };
@@ -163,17 +183,18 @@ async function dueReminders(): Promise<Result> {
       taskId: task.id,
       type: "reminder",
       title: task.title,
-      body: `Reminder from ${task.board.name}`,
+      body: `Reminder from ${board.name}`,
       link,
     });
     if (notification) delivered += 1;
-    if (reminder.channel !== "in_app" && reminder.user.email && preferences.email !== false) {
+    if (!quiet && reminder.channel !== "in_app" && reminder.user.email && preferences.email !== false) {
       await queueEmail({
-        ...reminderEmail(reminder.user.email, task.title, task.board.name, `${appUrl().replace(/\/$/, "")}${link}`),
+        ...reminderEmail(reminder.user.email, task.title, board.name, `${appUrl().replace(/\/$/, "")}${link}`),
         userId: reminder.userId,
       });
       emailed += 1;
     }
+    if (quiet) deferred += 1;
     await prisma.reminder.update({ where: { id: reminder.id }, data: { sentAt: now } });
   }
   return { due: reminders.length, delivered, emailed, skipped, deferred };

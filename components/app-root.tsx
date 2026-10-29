@@ -40,6 +40,7 @@ import { getSoundPrefs, playSound, previewSound, setSoundPrefs, subscribeSoundPr
 import { api, ApiClientError, formatApiError, newIdempotencyKey } from "@/lib/client";
 import {
   cacheBootstrap,
+  clearOfflineData,
   listQueuedWrites,
   readCachedBootstrap,
   removeQueuedWrite,
@@ -466,6 +467,7 @@ export function AppRoot() {
     } catch {
       // Session is cleared client-side even if the revoke call races a network issue.
     }
+    clearOfflineData();
     window.location.assign("/auth");
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarRange, RefreshCw, Sparkles } from "lucide-react";
+import { CalendarRange, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { formatDate, parseDateOnly } from "@/lib/format";
 import type { AutoPlanPreview } from "@/lib/auto-plan";
@@ -20,6 +20,7 @@ export function AutoPlanPanel({
   mode,
   onRefresh,
   onPreview,
+  onClear,
 }: {
   preview: AutoPlanPreview | null;
   loading: boolean;
@@ -27,6 +28,7 @@ export function AutoPlanPanel({
   mode: AutoPlanMode;
   onRefresh: () => void;
   onPreview: () => void;
+  onClear: () => void;
 }) {
   const { t } = useI18n();
   const current = preview?.options.find((option) => option.id === "balanced") ?? preview?.options[0] ?? null;
@@ -47,6 +49,9 @@ export function AutoPlanPanel({
           </button>
           <button type="button" className="btn soft sm" onClick={onPreview} disabled={loading || !preview}>
             <CalendarRange size={12} aria-hidden /> {t("Review plans")}
+          </button>
+          <button type="button" className="btn ghost sm" onClick={onClear} disabled={loading || !preview}>
+            <Trash2 size={12} aria-hidden /> {t("Clear plan")}
           </button>
         </div>
       </div>

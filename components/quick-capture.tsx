@@ -270,7 +270,7 @@ export function QuickCapture({ open, workspace, timeZone, defaultBoardId, voiceE
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             void submit();
           }

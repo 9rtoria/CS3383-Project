@@ -1,7 +1,7 @@
 # Testing
 
-**Status:** all automated suites green on 2026-10-24
-**Last updated:** 2026-10-24
+**Status:** all automated suites green on 2026-10-30 after the release-hardening pass
+**Last updated:** 2026-10-30
 
 ## 1. What is verified
 
@@ -9,13 +9,13 @@
 |---|---|---|---|
 | Type safety | `tsc --noEmit` (strict) | Pass, 0 errors | `typecheck-output.txt` |
 | Lint | ESLint 9 + Next config | Pass, 0 errors, 40 triaged warnings | `lint-output.txt` |
-| Unit | Vitest 5 | **100/100** in 14 files (ProjectA2 included) | `test-output.txt` |
+| Unit | Vitest 5 | **106/106** in 15 files (ProjectA2 included) | `test-output.txt` |
 | Production build | `next build` | Pass, 45 static pages + route table | `build-output.txt` |
-| End-to-end | Playwright 1.64 (Chromium, Firefox, WebKit) | **31/31** journeys, 93 executions | `e2e-output.txt` |
+| End-to-end | Playwright 1.64 (Chromium, Firefox, WebKit) | **35/35** journeys, 105 executions | `e2e-output.txt` |
 | Accessibility | axe-core via Playwright | 0 serious/critical on Today, Board, Insights, all checked Settings sections, both auth states | included in E2E run |
 | Performance | Lighthouse 13.5 | 94/97/95 performance latest; 100 accessibility | `docs/performance/summary.json` |
 | Dependencies | `npm audit --omit=dev --audit-level=high` | 0 high/critical | final QA output |
-| API contract | `js-yaml` parse + route count | 63 paths, valid YAML | unit/CI check |
+| API contract | `js-yaml` parse + route count | 64 paths, valid YAML | unit/CI check |
 
 ## 2. Unit tests
 
@@ -88,8 +88,12 @@ Playwright starts a dev server on port 3100 only when `E2E_BASE_URL` is unset. U
 | 29 | `auto-plan.spec.ts` | A2 safe apply | Safe mode applies non-conflicting blocks without a manual click |
 | 30 | `auto-plan.spec.ts` | A2 weekly limit | Weekly capacity refuses work even when a day still has room |
 | 31 | `auto-plan.spec.ts` | A2 Auto-plan settings | Limits and levels persist after reload |
+| 32 | `today-capacity.spec.ts` | Today capacity | Accepted tasks that exceed the day keep their count and mark the day overbooked |
+| 33 | `security-hardening.spec.ts` | Auth hardening | A magic link opened without the requesting browser's state cookie is rejected; the same browser can use it |
+| 34 | `security-hardening.spec.ts` | Token scope | A workspace-bound API token cannot call user-level routes; a scoped workspace request succeeds |
+| 35 | `security-hardening.spec.ts` | Private-board isolation | A workspace member cannot read, edit, or comment on a private-board task by ID |
 
-The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual. The default Playwright config runs the same 31 journeys on Chromium, Firefox, and WebKit (93 executions). `E2E=true` also raises the request-rate ceiling for the test harness; it does not bypass authorization or CSRF.
+The suite is serial (`workers: 1`) because it shares one SQLite database and creates workspaces. Tests use unique names/emails to avoid collisions. The A2 voice journey uses a fake `SpeechRecognition`; a real-microphone pass remains manual. The default Playwright config runs the same 35 journeys on Chromium, Firefox, and WebKit (105 executions). `E2E=true` also raises the request-rate ceiling for the test harness; it does not bypass authorization or CSRF.
 
 ## 4. Accessibility testing
 
@@ -145,7 +149,7 @@ The workflow uses SQLite and a disposable database file. It does not run Docker,
 
 | Gap | Impact | Mitigation |
 |---|---|---|
-| No live OAuth/SSO round-trip | Provider-specific bugs possible | Unit-level state/PKCE review; document as unverified |
+| No live OAuth/SSO round-trip | Provider-specific bugs possible | Unit-level signed-state review; PKCE/nonce/ID-token validation remains backlog; document as unverified |
 | No malware scanner | Uploaded files are not scanned | MIME/size checks + disable attachments for untrusted users |
 | No manual screen-reader pass | Unknown SR-specific issues | axe + keyboard tests; schedule manual audit |
 | No 10k-user load test | SQLite write contention untested at scale | PostgreSQL rollout; k6 plan in BACKLOG |
@@ -168,4 +172,4 @@ npm run test:perf
 npm run audit
 ```
 
-Expected: typecheck clean, lint 0 errors, 100 unit tests pass, build succeeds, 31 journeys × 3 engines (93 executions) pass, Lighthouse accessibility 100, audit 0 high/critical.
+Expected: typecheck clean, lint 0 errors, 106 unit tests pass, build succeeds, 35 journeys × 3 engines (105 executions) pass, Lighthouse accessibility 100, audit 0 high/critical.

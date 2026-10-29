@@ -61,7 +61,15 @@ export function parseCookies(header: string | null): Record<string, string> {
   return Object.fromEntries(
     header.split(";").map((pair) => {
       const index = pair.indexOf("=");
-      return [pair.slice(0, index).trim(), decodeURIComponent(pair.slice(index + 1).trim())];
+      if (index < 0) return [pair.trim(), ""];
+      const raw = pair.slice(index + 1).trim();
+      let value = raw;
+      try {
+        value = decodeURIComponent(raw);
+      } catch {
+        // Malformed cookie encoding must not turn a request into a 500.
+      }
+      return [pair.slice(0, index).trim(), value];
     }),
   );
 }
@@ -84,7 +92,9 @@ async function hydrateSession(tokenHash: string): Promise<Viewer | null> {
       mfaEnabled: session.user.mfaEnabled,
     },
     sessionId: session.id,
-    mfaVerified: Boolean(session.mfaVerifiedAt) || !session.user.mfaEnabled,
+    // A session without MFA enabled is not an MFA-verified session. Workspace
+    // policies must be able to require members to actually enroll a factor.
+    mfaVerified: Boolean(session.mfaVerifiedAt) && Boolean(session.user.mfaEnabled),
     viaApiToken: false,
   };
 }

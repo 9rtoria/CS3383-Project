@@ -1,9 +1,9 @@
 # Data model
 
 **Database:** SQLite (demo / small team) via Prisma 7 and `better-sqlite3`  
-**Schema:** `prisma/schema.prisma` ??36 models
-**Migrations:** four checked-in migrations in `prisma/migrations/`  
-**Last updated:** 2026-10-24
+**Schema:** `prisma/schema.prisma` ??37 models
+**Migrations:** seven checked-in migrations in `prisma/migrations/`
+**Last updated:** 2026-10-30
 
 ## 1. Modeling principles
 
@@ -13,7 +13,7 @@
 4. **Optimistic concurrency.** Boards and tasks carry `version`; task moves and edits compare the client version and return `409 VERSION_CONFLICT` rather than overwriting.
 5. **Ordering is fractional.** `Column.position` and `Task.position` are lexicographic strings generated with `fractional-indexing`, so inserting between neighbors does not renumber the list.
 6. **Idempotency is persisted.** `IdempotencyKey` stores the actor, method, path, status, and response body for 24 hours.
-7. **Secrets are never stored in plaintext.** Session tokens, magic links, invites, API tokens, and backup codes are SHA-256 hashed; TOTP secrets, OIDC client secrets, and webhook secrets use AES-256-GCM.
+7. **Secrets are never stored in plaintext.** Session tokens, magic links, invites, API tokens, and backup codes are SHA-256 hashed; TOTP secrets, OIDC client secrets, webhook secrets, and email outbox bodies use AES-256-GCM. Legacy outbox rows created before this hardening may still be plaintext and should be purged or re-sealed by an operator.
 
 ## 2. Entity map
 
@@ -52,7 +52,7 @@ erDiagram
 | `Membership` | User ??workspace role | unique `(userId, workspaceId)`; role `OWNER/ADMIN/MEMBER/GUEST` |
 | `MagicLinkToken` | One-time email login | unique hash; expiry; `usedAt`; hashed IP |
 | `Invite` | Pending workspace invitation | unique token hash; email; role; expiry; `acceptedAt` |
-| `OidcConfig` | Workspace SSO | one per workspace; encrypted client secret; allowed domains; `enforceSso` |
+| `OidcConfig` | Workspace SSO | one per workspace; encrypted client secret; allowed domains; `enforceSso` is stored but not yet enforced by sign-in policy |
 | `ApiToken` | Bearer credential | unique hash; display prefix; optional expiry/revocation |
 | `OAuthAccount` | Linked external identity | provider + provider account ID; unique per provider |
 | `UserSettings` | Preferences | theme, density, capacity, digest hour, quiet hours, notification JSON |
@@ -66,7 +66,7 @@ erDiagram
 | `Task` | Unit of work | title, description, priority, start/due, all-day flag, estimate, **tracked `actualMinutes`**, recurrence, focus date, assignee, creator, `version`, archive/soft delete |
 | `Subtask` | Checklist item | ordered, completed flag |
 | `Label` / `TaskLabel` | Workspace label taxonomy | unique label name per workspace; join table |
-| `TaskDependency` | "blocked by" edge | composite PK; both sides cascade |
+| `TaskDependency` | "blocked by" edge | composite PK; schema declares cascades, but the current hand-written migration does not add the missing foreign keys on both sides |
 | `Comment` | Task discussion | soft delete; author nullable after account deletion |
 | `Attachment` | File metadata | random `storageName`; MIME, size; bytes live in `data/attachments` |
 | `ActivityEvent` | Task feed | action, entity, metadata, request ID |

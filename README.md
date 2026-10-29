@@ -45,8 +45,8 @@ npm run start
 | `npm run start` | Start the production build |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm run lint` | ESLint (0 errors; warnings are triaged) |
-| `npm test` | 100 Vitest unit tests |
-| `npm run test:e2e` | 31 Playwright journeys across Chromium, Firefox, and WebKit (93 executions) |
+| `npm test` | 106 Vitest unit tests |
+| `npm run test:e2e` | 35 Playwright journeys across Chromium, Firefox, and WebKit (105 executions) |
 | `npm run test:a11y` | axe-core serious/critical scan |
 | `npm run test:perf` | Authenticated Lighthouse smoke (requires a running server) |
 | `npm run screenshots` | Regenerate `docs/screenshots/` |
@@ -60,7 +60,7 @@ npm run start
 | Area | Capability |
 |---|---|
 | Capture | Quick capture with natural-language dates, priority, labels, estimates, recurrence; command palette; global shortcuts; **voice input with text fallback** |
-| Planning | Today capacity plan with reasons and dismissal, Upcoming, Calendar, Archive, Kanban, List, saved views; **Day Flow rail**; **Smart Plan preview/apply/undo**; capacity, buffer, workday, block spacing, and default view settings |
+| Planning | Today capacity plan with reasons and dismissal, Upcoming, Calendar, Archive, Kanban, List; **Day Flow rail**; **Smart Plan preview/apply/undo**; capacity, buffer, workday, block spacing, and default view settings. Saved-view APIs exist; the saved-view management UI remains backlog |
 | Auto-plan | Deterministic weekly scheduler with three plan options, rest intervals, protected lunch, weekly cap, long-task splitting, dependency/deadline awareness, safe/full/delegated automation levels, Today/Day Flow/Calendar writes, and undo |
 | Settings | Theme (System/Light/Dark), accent, display type, reading size, density, motion, language/region, live preview, search, section reset, feature toggles |
 | Focus | Full-screen timer, pause/resume, complete, early leave, tracked `actualMinutes`, estimate delta; default length and auto-start |
@@ -72,6 +72,19 @@ npm run start
 | Assist | Deterministic quick-add parsing, capacity suggestions, checklist suggestions, **local Smart Plan rules**; opt-in and kill switch; no outbound customer data |
 | Offline | PWA install, cached bootstrap, queued capture/move, explicit sync state, conflict 409 and review |
 | Operations | Health, metrics, structured logs, request IDs, migrations, seed, background jobs, Docker/CI artifacts |
+
+## Post-audit hardening
+
+The delivery audit was followed by a release-blocking hardening pass rather than adding more feature surface. The current tree now:
+
+- counts accepted Today tasks even when they overbook capacity, and refuses to hide them behind the automatic selection;
+- treats Auto-plan blocks as a schedule layer: task edits invalidate stale blocks, manual Today/Smart Plan actions clear today's auto blocks, Day Flow shows chosen tasks that have no block, undo restores newly focused tasks, and Safe mode recomputes against existing blocks and the real weekly cap;
+- adds Auto-plan start-date, timed-deadline, remaining-time, dismissal, week-start, pre-horizon, and plan-clear handling;
+- applies private-board visibility checks to task writes, comments, subtasks, attachment uploads, plan blocks, automation previews, digest mail, reminders, and assignment;
+- binds magic links to the requesting browser, removes automatic guest-account merging/claiming from magic links, requires verified SSO email, and disables automatic SSO linking to existing accounts;
+- corrects the MFA policy inversion, requires the current factor to reset MFA, workspace-binds API tokens in the shared request pipeline, clears local cache on sign-out/account deletion, enables same-origin microphone access for voice capture, fixes Today metrics scoping, and neutralizes spreadsheet formulas in CSV export.
+
+**Remaining production work is explicit, not implied:** per-user Today selection (`Task.focusDate` is still workspace-global), full OAuth/OIDC PKCE/nonce/ID-token validation and SSO account-linking UI, PostgreSQL/load testing, a lock-protected jobs worker, outbound webhook SSRF/signing controls, complete retention/purge jobs, manual/locked plan-block editing, saved-view/bulk/column-reorder UI, attachment malware scanning, and a real external-IdP/SMTP acceptance run.
 
 ## Architecture at a glance
 
@@ -149,7 +162,7 @@ See [docs/screenshots/README.md](docs/screenshots/README.md) for the full manife
 ## Honest limits
 
 - Docker is not installed in the delivery environment. The Dockerfile and Compose file are provided and syntax-reviewed, but the image was **not executed** here.
-- OAuth (GitHub/Google/Apple) and OIDC SSO require external provider credentials. Their routes and state/PKCE handling exist; live provider round-trips are **unverified**.
+- OAuth (GitHub/Google/Apple) and OIDC SSO require external provider credentials. Their routes and signed-state handling exist; PKCE/nonce/ID-token validation is not yet implemented, and live provider round-trips are **unverified**.
 - Attachments use MIME/size checks and authenticated download, but **malware scanning is not implemented**. Disable attachments for untrusted uploads.
 - Email uses SMTP when configured; otherwise a persisted development outbox is used. Invite/magic-link delivery in production requires SMTP.
 - Automated axe and keyboard testing pass; **manual NVDA/VoiceOver testing was not possible** in this environment.

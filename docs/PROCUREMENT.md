@@ -31,7 +31,7 @@ Drift is a calm, keyboard-first task planner and Kanban board. A solo user can c
 
 | Question | Answer |
 |---|---|
-| SSO | Workspace OIDC (discovery, authorization code + PKCE, nonce/state); routes implemented, live provider round-trip unverified without credentials |
+| SSO | Workspace OIDC (discovery, authorization code + signed state, explicit verified email, allowed domains); PKCE/nonce/ID-token validation is not implemented; live provider round-trip unverified without credentials |
 | Social login | GitHub, Google, Apple OAuth routes; live round-trip unverified |
 | MFA | TOTP + hashed backup codes; workspace policy can require MFA |
 | Roles | OWNER, ADMIN, MEMBER, GUEST; server-side action matrix |

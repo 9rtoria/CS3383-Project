@@ -7,7 +7,7 @@
 **Demo:** `demo@drift.local` / `DriftDemo123!`  
 **Verdict:** **Delivered for evaluation and small-team use.** Production rollout requires the items in §4 and §8; this is not a claim of 10k-user readiness.
 
-> **ProjectA2 extension (2026-10-24).** This working tree is an independent clone used for a school-demo extension. `ProjectA` remains the untouched baseline at `6876db1`; the v1.3 evidence below is preserved as delivered. ProjectA2 adds Day Flow, Smart Plan (explicitly local rules, not AI), Focus Mode with tracked `actualMinutes`, a Web Audio Sound Lab, voice capture with a text fallback, and a real Settings experience (appearance, typography, motion, language/region preview, planning, focus, notifications, sound, keyboard, and feature toggles). Verification after the extension: strict TypeScript pass; ESLint 0 errors / 40 baseline warnings; **100/100** unit tests in 14 files; production build pass; **31 Playwright journeys across Chromium, Firefox, and WebKit (93 executions)**; axe serious/critical 0 on the checked pages. Details, design rationale, and honest limits are in [`docs/A2_EXPERIMENT.md`](docs/A2_EXPERIMENT.md), [`docs/SETTINGS.md`](docs/SETTINGS.md), and the updated [`docs/DEMO.md`](docs/DEMO.md). The production gaps in this review still apply to ProjectA2.
+> **ProjectA2 extension (2026-10-24).** This working tree is an independent clone used for a school-demo extension. `ProjectA` remains the untouched baseline at `6876db1`; the v1.3 evidence below is preserved as delivered. ProjectA2 adds Day Flow, Smart Plan (explicitly local rules, not AI), Focus Mode with tracked `actualMinutes`, a Web Audio Sound Lab, voice capture with a text fallback, and a real Settings experience (appearance, typography, motion, language/region preview, planning, focus, notifications, sound, keyboard, and feature toggles). Verification after the extension: strict TypeScript pass; ESLint 0 errors / 40 baseline warnings; **106/106** unit tests in 15 files; production build pass; **35 Playwright journeys across Chromium, Firefox, and WebKit (105 executions)**; axe serious/critical 0 on the checked pages. A follow-up release-hardening pass on 2026-10-30 fixed the highest-risk audit findings (Today overbooking, private-board write paths, magic-link browser binding, SSO verified-email/no-auto-link, MFA policy/reset, API-token workspace binding, Auto-plan/Today reconciliation, cache clearing, metrics scope, voice permissions, and CSV injection); current limitations are summarized in the top-level README and `docs/SECURITY.md`. Details, design rationale, and honest limits are in [`docs/A2_EXPERIMENT.md`](docs/A2_EXPERIMENT.md), [`docs/SETTINGS.md`](docs/SETTINGS.md), and the updated [`docs/DEMO.md`](docs/DEMO.md). The production gaps in this review still apply to ProjectA2.
 
 ---
 
@@ -65,7 +65,7 @@ This is a new repository. At the start of the run it contained no application co
 | `app/` | App Router pages and **63 API route files**; `/`, `/auth`, `/settings`, `/invite/[token]`, `/share/[token]`, `/offline` |
 | `components/` | App shell, quick capture, board/list views, Today, Upcoming/Calendar, search/archive, Insights, task drawer, command palette, settings, accessible UI primitives, offline/runtime surfaces |
 | `lib/` | DB, auth/session, crypto, RBAC, API pipeline, validation, time/DST, fractional ordering, NLQ, recurrence, Today ranking, task/board services, automations, email, webhooks, offline queue, formatting |
-| `prisma/` | `schema.prisma`, four checked-in migrations, demo seed |
+| `prisma/` | `schema.prisma`, seven checked-in migrations (including Auto-plan), demo seed |
 | `public/` | Service worker, manifest, icons, offline page assets |
 | `scripts/` | Setup, jobs, Lighthouse, screenshots |
 | `tests/` | 10 Vitest files (78 tests) and 3 Playwright specs (12 journeys) |
@@ -90,7 +90,7 @@ This is a new repository. At the start of the run it contained no application co
 | `docs/SECURITY.md`, `docs/THREAT_MODEL.md` | Controls, threat model, disclosure |
 | `docs/OPERATIONS.md`, `docs/DEPLOYMENT.md` | Runbook, backup/restore, Docker/standalone/PostgreSQL/CI |
 | `docs/PERFORMANCE.md`, `docs/TESTING.md` | Method and measured evidence |
-| `docs/API.md`, `docs/openapi.yaml` | REST contract, 63 paths, served at `/api/openapi` |
+| `docs/API.md`, `docs/openapi.yaml` | REST contract, 64 paths, served at `/api/openapi` |
 | `docs/DATA_MODEL.md`, `docs/AI_GOVERNANCE.md` | Schema/tenancy; data boundary, evaluation, kill switch |
 | `docs/PROCUREMENT.md` | Security questionnaire and commercial posture |
 | `docs/DEMO.md` | Five-minute demo script |
@@ -112,7 +112,7 @@ The following are actual command results from the final build on this machine. L
 $ npx prisma migrate deploy
 Prisma schema loaded from prisma\schema.prisma.
 Datasource "db": SQLite database "dev.db" at "file:./prisma/dev.db"
-4 migrations found in prisma/migrations
+7 migrations found in prisma/migrations
 No pending migrations to apply.
 EXIT_CODE=0
 ```
@@ -294,7 +294,7 @@ EXIT_CODE=0
 | Item | Status | Impact / mitigation |
 |---|---|---|
 | Docker image build/run | **Unverified** — Docker unavailable | Dockerfile/Compose are syntax-valid and reviewed; run `docker compose up --build` in a Docker host before relying on them |
-| Live OAuth (GitHub/Google/Apple) | **Unverified** — no provider credentials | Routes/state/PKCE code exists; live round-trip must be tested |
+| Live OAuth (GitHub/Google/Apple) | **Unverified** — no provider credentials | Routes/signed-state code exists; PKCE/nonce/ID-token validation remains backlog, and live round-trip must be tested |
 | Live OIDC SSO | **Unverified** — no IdP | Workspace config and callback exist; test with a real IdP |
 | SMTP delivery | **Unverified** — no SMTP server | Persisted dev outbox works; configure `SMTP_URL` and test deliverability |
 | Malware scanning | **Not implemented** | MIME/size allowlist, auth checks, `Content-Disposition`; disable attachments for untrusted uploads |
@@ -359,7 +359,7 @@ Actuals are wall-clock effort reconstructed from artifact timestamps and command
 | Milestone | Scope | Start | End | BUILD | DESIGN | VERIFY | OPTIMIZE | OVERHEAD | Notes |
 |---|---|---|---:|---:|---:|---:|---:|---:|---|
 | M0 | Plan, assumptions, risks, backlog, decisions | 19:11 | 19:20 | 0.05 | 0.05 | 0.02 | 0.00 | 0.03 | Artifacts before code |
-| M1 | Scaffold, tokens, Prisma schema/migrations, auth, guest bootstrap, seed | 19:20 | 19:55 | 0.35 | 0.10 | 0.05 | 0.02 | 0.06 | Prisma 7 adapter; four migrations |
+| M1 | Scaffold, tokens, Prisma schema/migrations, auth, guest bootstrap, seed | 19:20 | 19:55 | 0.35 | 0.10 | 0.05 | 0.02 | 0.06 | Prisma 7 adapter; seven migrations |
 | M2 | Boards/columns/tasks, APIs, shell, drawer, comments/checklist | 19:55 | 20:25 | 0.30 | 0.08 | 0.06 | 0.02 | 0.04 | Single-page shell + task service |
 | M3 | Kanban drag, keyboard move, optimistic UI, undo, bulk | 20:25 | 20:40 | 0.12 | 0.04 | 0.05 | 0.02 | 0.02 | Native DnD + Alt+Arrow parity |
 | M4 | Today/Upcoming/Calendar/Archive, search, views, recurrence, reminders, notifications | 20:40 | 21:00 | 0.18 | 0.05 | 0.06 | 0.02 | 0.02 | Capacity contract fixed; FTS5 |

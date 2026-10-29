@@ -135,7 +135,7 @@ export function AutoPlanModal({
       width={980}
       footer={
         <>
-          <span className="field-hint" style={{ marginRight: "auto" }}>{t("Nothing changes until you apply. Every apply can be undone.")}</span>
+          <span className="field-hint" style={{ marginRight: "auto" }}>{t("Nothing changes until you apply. Undo stays available for five minutes.")}</span>
           <button type="button" className="btn ghost" onClick={onClose} disabled={applying}>{t("Cancel")}</button>
           <button type="button" className="btn primary" onClick={() => option && onApply(option.id)} disabled={applying || !option?.blocks.length}>
             <Check size={13} aria-hidden /> {applying ? t("Applying…") : t("Apply this plan")}

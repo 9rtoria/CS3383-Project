@@ -40,7 +40,7 @@ curl -s http://localhost:3000/api/health
 ```
 
 - `503` with `"status":"degraded"` means the DB probe failed. Check disk space, file permissions, and SQLite locks.
-- `/api/metrics` requires a session; with `workspaceId` it requires ADMIN + `audit:read`. It reports uptime, Node version, RSS, task/board/member counts, emails in the last 24 h, and unread notifications.
+- `/api/metrics` requires a session; with `workspaceId` it requires ADMIN + `audit:read` and reports scoped task/board/member counts plus the viewer's recent email count. Without `workspaceId` it returns process metrics and zeros for tenant counters, never cross-tenant aggregates.
 - Logs are JSON lines on stdout: `level`, `requestId`, `method`, `path`, `status`, `durationMs`, `userId`. Ship them to your log platform; do not log request bodies.
 
 ## 4. Background jobs
@@ -136,7 +136,7 @@ SELECT id, to, kind, status, createdAt, error FROM EmailMessage ORDER BY created
 - Stored under `data/attachments/` with random names; metadata in SQLite.
 - Downloads re-check workspace membership and use `Content-Disposition: attachment`.
 - `DISABLE_ATTACHMENTS=true` turns uploads off globally.
-- MIME allowlist + signature checks + size cap are enforced. **No malware scanner.** For untrusted users, disable attachments or scan the volume out-of-band.
+- MIME allowlist + size cap are enforced; magic-byte/signature checks are **not implemented**. **No malware scanner.** For untrusted users, disable attachments or scan the volume out-of-band.
 - Back up the directory with the database; a DB restore without files leaves broken attachments.
 
 ## 9. Webhooks

@@ -89,6 +89,14 @@ export async function handleApi(
 
     viewer = await viewerFromRequest(req);
     if (!viewer && !options.public) throw new ApiError("UNAUTHORIZED");
+    if (viewer?.viaApiToken) {
+      // A personal API token is workspace-bound. Reject user-level endpoints and
+      // any request that tries to use it against a different workspace.
+      const requestedWorkspace = workspaceHeader(req);
+      if (!requestedWorkspace || requestedWorkspace !== viewer.apiWorkspaceId) {
+        throw new ApiError("FORBIDDEN", "This API token belongs to another workspace.");
+      }
+    }
 
     if (method !== "GET" && method !== "HEAD" && !options.skipCsrf) {
       const hasBearer = Boolean(req.headers.get("authorization"));

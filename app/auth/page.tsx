@@ -23,6 +23,8 @@ const AUTH_ERRORS: Record<string, string> = {
   sso_failed: "Single sign-on could not be completed. Contact your workspace admin.",
   domain_not_allowed: "That email domain is not allowed for this workspace.",
   email_required: "The identity provider did not share an email address.",
+  email_unverified: "The identity provider did not verify this email address.",
+  account_link_required: "This email already belongs to a Drift account. Sign in with your existing method; automatic SSO account linking is disabled for safety.",
   account_unavailable: "That account is no longer available.",
 };
 
@@ -31,7 +33,7 @@ export default async function AuthPage({ searchParams }: { searchParams: Search 
   const viewer = await viewerFromCookies();
   const claim = params.claim === "1" || (viewer?.user.isGuest ?? false);
   const challenge = typeof params.challenge === "string" ? params.challenge : "";
-  const nextParam = typeof params.next === "string" && params.next.startsWith("/") && !params.next.startsWith("//") ? params.next : "/";
+  const nextParam = typeof params.next === "string" && params.next.startsWith("/") && !params.next.startsWith("//") && !params.next.startsWith("/\\") ? params.next : "/";
   if (viewer && !viewer.user.isGuest && !challenge && !claim) redirect(nextParam);
   return (
     <AuthClient

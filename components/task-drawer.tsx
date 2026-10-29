@@ -21,6 +21,7 @@ import {
   Plus,
   Repeat2,
   RotateCcw,
+  Sparkles,
   Trash2,
   User2,
   X,
@@ -30,6 +31,7 @@ import { useToast } from "@/components/toast";
 import { api, ApiClientError, formatApiError, newIdempotencyKey } from "@/lib/client";
 import { playSound } from "@/lib/sound";
 import { describeRecurrence } from "@/lib/recurrence";
+import { suggestChecklistItems } from "@/lib/checklist-suggestions";
 import {
   dueToIso,
   formatDate,
@@ -75,6 +77,8 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
+  const [conflictVersion, setConflictVersion] = useState<number | null>(null);
+  const [pendingPatch, setPendingPatch] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [title, setTitle] = useState("");
@@ -82,6 +86,7 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
   const [labelsText, setLabelsText] = useState("");
   const [comment, setComment] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [suggestedSubtasks, setSuggestedSubtasks] = useState<string[]>([]);
   const [dependencyToAdd, setDependencyToAdd] = useState("");
   const [uploading, setUploading] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -93,6 +98,9 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
     setLoading(true);
     setError("");
     setConflict(false);
+    setConflictVersion(null);
+    setPendingPatch(null);
+    setSuggestedSubtasks([]);
     try {
       const payload = await api<TaskDetail>(`/api/tasks/${taskId}?workspaceId=${encodeURIComponent(workspace.id)}`, { workspaceId: workspace.id });
       setDetail(payload);
@@ -143,8 +151,11 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
         method: "PATCH",
         workspaceId: workspace.id,
         idempotencyKey: newIdempotencyKey("task-update"),
-        body: { ...input, version: task.version },
+        body: { ...input, version: conflictVersion ?? task.version },
       });
+      setConflict(false);
+      setConflictVersion(null);
+      setPendingPatch(null);
       setDetail((current) => current ? { ...current, task: { ...result.task, comments: result.task.comments ?? current.task.comments, attachments: result.task.attachments ?? current.task.attachments } } : current);
       setTitle(result.task.title);
       setDescription(result.task.description);
@@ -156,8 +167,11 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
       return true;
     } catch (saveError) {
       if (saveError instanceof ApiClientError && saveError.code === "VERSION_CONFLICT") {
+        const details = saveError.details as { currentVersion?: number } | undefined;
         setConflict(true);
-        setError("Someone changed this task while you were editing. Reload to see the newer version.");
+        setConflictVersion(details?.currentVersion ?? task.version + 1);
+        setPendingPatch(input);
+        setError("Someone changed this task while you were editing. Keep mine to save your version, or use the server version.");
       } else {
         toast.error(formatApiError(saveError));
       }
@@ -191,21 +205,28 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
     }
   }
 
-  async function addSubtask() {
-    if (!task || !subtaskTitle.trim()) return;
+  async function addSubtask(titleOverride?: string) {
+    const value = (titleOverride ?? subtaskTitle).trim();
+    if (!task || !value) return;
     try {
       const result = await api<{ subtask: Subtask }>(`/api/tasks/${task.id}/subtasks`, {
         method: "POST",
         workspaceId: workspace.id,
-        body: { title: subtaskTitle.trim() },
+        body: { title: value },
         idempotencyKey: newIdempotencyKey("subtask"),
       });
       setDetail((current) => current ? { ...current, task: { ...current.task, subtasks: [...current.task.subtasks, result.subtask] } } : current);
       setSubtaskTitle("");
+      setSuggestedSubtasks((current) => current.filter((item) => item !== value));
       onChanged();
     } catch (subtaskError) {
       toast.error(formatApiError(subtaskError));
     }
+  }
+
+  function showSuggestions() {
+    if (!task) return;
+    setSuggestedSubtasks(suggestChecklistItems(task.title, task.description, task.subtasks.map((item) => item.title)));
   }
 
   async function toggleSubtask(subtask: Subtask) {
@@ -340,9 +361,10 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
             <div className="auth-guest-banner" role="alert" style={{ marginBottom: 16 }}>
               <div style={{ flex: 1 }}>
                 <strong style={{ display: "block", marginBottom: 2 }}>A newer version exists</strong>
-                {error || "Reload before editing so you don't overwrite someone else's work."}
+                {error || "Choose which version should win."}
               </div>
-              <button type="button" className="btn sm" onClick={() => void load()}>Reload</button>
+              <button type="button" className="btn sm" disabled={!pendingPatch} onClick={() => pendingPatch && void patch(pendingPatch, { success: "Your version was saved." })}>Keep mine</button>
+              <button type="button" className="btn sm" onClick={() => void load()}>Use server</button>
             </div>
           ) : null}
           {saving ? <div className="field-hint" role="status"><Loader2 size={11} className="spin" /> Saving…</div> : saved ? <div className="field-hint" role="status"><Check size={11} /> Saved</div> : null}
@@ -463,7 +485,10 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
           <section className="drawer-section">
             <div className="drawer-section-head">
               <h3>Checklist {task.subtasks.length ? <span style={{ color: "var(--faint)" }}>· {checklistDone}/{task.subtasks.length}</span> : null}</h3>
-              <div className="progress" style={{ width: 70 }}><span style={{ width: `${task.subtasks.length ? Math.round((checklistDone / task.subtasks.length) * 100) : 0}%` }} /></div>
+              <div className="inline" style={{ gap: 8 }}>
+                <button type="button" className="btn ghost sm" onClick={showSuggestions} disabled={saving}><Sparkles size={12} /> Suggest</button>
+                <div className="progress" style={{ width: 70 }}><span style={{ width: `${task.subtasks.length ? Math.round((checklistDone / task.subtasks.length) * 100) : 0}%` }} /></div>
+              </div>
             </div>
             <div className="checklist">
               {task.subtasks.map((item) => (
@@ -474,6 +499,15 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
                 </div>
               ))}
             </div>
+            {suggestedSubtasks.length ? (
+              <div className="checklist-suggestions" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {suggestedSubtasks.map((suggestion) => (
+                  <button type="button" className="btn ghost sm" key={suggestion} onClick={() => void addSubtask(suggestion)}>
+                    <Plus size={11} /> {suggestion}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="comment-compose" style={{ marginTop: 8 }}>
               <input className="input" value={subtaskTitle} onChange={(event) => setSubtaskTitle(event.target.value)} placeholder="Add a checklist item" aria-label="New checklist item" onKeyDown={(event) => { if (event.key === "Enter") void addSubtask(); }} />
               <button type="button" className="btn sm" onClick={() => void addSubtask()} disabled={!subtaskTitle.trim()}><Plus size={12} /> Add</button>
@@ -514,7 +548,7 @@ export function TaskDrawer({ taskId, workspace, onClose, onChanged, onOpenTask, 
                 <span className="file-mark"><FileText size={13} /></span>
                 <span className="file-name">{attachment.name}</span>
                 <span className="field-hint">{humanFileSize(attachment.size)}</span>
-                <a className="icon-btn sm" href={`/api/attachments/${attachment.id}`} aria-label={`Download ${attachment.name}`}><Download size={13} /></a>
+                <a className="icon-btn sm" href={`/api/attachments/${attachment.id}?workspaceId=${encodeURIComponent(workspace.id)}`} download={attachment.name} aria-label={`Download ${attachment.name}`}><Download size={13} /></a>
               </div>
             )) : <p className="field-hint" style={{ marginTop: 0 }}>PDF, image and plain-text files up to 10 MB. Scanner is not configured; only upload trusted files.</p>}
           </section>

@@ -1,6 +1,18 @@
 import nodemailer from "nodemailer";
 import { prisma } from "./db";
+import { decrypt, encrypt } from "./crypto";
 import { featureFlags, appUrl } from "./env";
+
+const ENCRYPTED_BODY_PREFIX = "enc:v1:";
+
+function sealBody(body: string): string {
+  return `${ENCRYPTED_BODY_PREFIX}${encrypt(body)}`;
+}
+
+function openBody(body: string): string {
+  if (!body.startsWith(ENCRYPTED_BODY_PREFIX)) return body;
+  return decrypt(body.slice(ENCRYPTED_BODY_PREFIX.length));
+}
 
 type MailInput = {
   to: string;
@@ -21,7 +33,9 @@ export async function queueEmail(input: MailInput) {
     data: {
       to: input.to,
       subject: input.subject,
-      body: input.html ?? input.text,
+      // The outbox can contain magic-link/invite tokens; encrypt message bodies
+      // at rest so a database or backup reader cannot replay them.
+      body: sealBody(input.html ?? input.text),
       kind: input.kind ?? "generic",
       userId: input.userId ?? null,
       status: featureFlags.emailConfigured ? "queued" : "preview",
@@ -38,13 +52,14 @@ export async function attemptSend(messageId: string): Promise<boolean> {
   const message = await prisma.emailMessage.findUnique({ where: { id: messageId } });
   if (!message || message.status === "sent") return true;
   try {
+    const body = openBody(message.body);
     const transport = nodemailer.createTransport(process.env.SMTP_URL!);
     await transport.sendMail({
       from: process.env.SMTP_FROM ?? "Drift <hello@drift.local>",
       to: message.to,
       subject: message.subject,
-      html: message.body,
-      text: message.body.replace(/<[^>]+>/g, " "),
+      html: body,
+      text: body.replace(/<[^>]+>/g, " "),
     });
     await prisma.emailMessage.update({ where: { id: message.id }, data: { status: "sent", sentAt: new Date(), error: null } });
     return true;
@@ -57,8 +72,9 @@ export async function attemptSend(messageId: string): Promise<boolean> {
   }
 }
 
-export function magicLinkEmail(email: string, token: string, next = "/") {
-  const url = `${appUrl().replace(/\/$/, "")}/api/auth/magic?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next)}`;
+export function magicLinkEmail(email: string, token: string, next = "/", state = "") {
+  const stateParam = state ? `&state=${encodeURIComponent(state)}` : "";
+  const url = `${appUrl().replace(/\/$/, "")}/api/auth/magic/verify?token=${encodeURIComponent(token)}${stateParam}&next=${encodeURIComponent(next)}`;
   return {
     to: email,
     subject: "Your Drift sign-in link",
@@ -75,7 +91,7 @@ export function inviteEmail(email: string, workspaceName: string, role: string, 
     to: email,
     subject: `You're invited to ${workspaceName} on Drift`,
     text: `Join ${workspaceName} as ${role.toLowerCase()}: ${url}`,
-    html: `<p>You're invited to <strong>${workspaceName}</strong> on Drift as ${role.toLowerCase()}.</p><p><a href="${url}">Join workspace</a></p>`,
+    html: `<p>You're invited to <strong>${escapeHtml(workspaceName)}</strong> on Drift as ${escapeHtml(role.toLowerCase())}.</p><p><a href="${url}">Join workspace</a></p>`,
     kind: "invite",
     sendNow: true,
   };

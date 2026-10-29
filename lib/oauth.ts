@@ -149,7 +149,7 @@ export async function exchangeOAuthCode(provider: OAuthProvider, code: string): 
     if (!profile.sub) throw new Error("Google returned an incomplete profile.");
     return {
       providerAccountId: profile.sub,
-      email: profile.email && profile.email_verified !== false ? profile.email.toLowerCase() : null,
+      email: profile.email && profile.email_verified === true ? profile.email.toLowerCase() : null,
       name: profile.name?.trim() || profile.email?.split("@")[0] || "Google user",
       avatarUrl: profile.picture ?? null,
     };
@@ -169,11 +169,12 @@ export async function exchangeOAuthCode(provider: OAuthProvider, code: string): 
     issuer: "https://appleid.apple.com",
     audience: config.clientId,
   });
-  const claims = verified.payload as { sub?: string; email?: string };
+  const claims = verified.payload as { sub?: string; email?: string; email_verified?: boolean | string };
   if (!claims.sub) throw new Error("Apple returned an incomplete identity token.");
+  const emailVerified = claims.email_verified === true || claims.email_verified === "true";
   return {
     providerAccountId: claims.sub,
-    email: claims.email?.toLowerCase() ?? null,
+    email: claims.email && emailVerified ? claims.email.toLowerCase() : null,
     name: claims.email?.split("@")[0] ?? "Apple user",
     avatarUrl: null,
   };

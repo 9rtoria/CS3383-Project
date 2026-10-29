@@ -11,7 +11,7 @@ import { automationPreviewSchema } from "@/lib/validation";
 export async function POST(req: NextRequest) {
   return handleApi(req, async ({ viewer, body }) => {
     const input = automationPreviewSchema.parse(body);
-    await requireWorkspace(viewer, input.workspaceId, "GUEST", "board:read");
+    await requireWorkspace(viewer, input.workspaceId, "ADMIN", "automation:manage");
     const preview = await previewDraftAutomation(input.workspaceId, {
       boardId: input.boardId ?? null,
       trigger: input.trigger,

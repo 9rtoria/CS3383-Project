@@ -51,7 +51,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         throw new ApiError("CONFLICT", "Bulk moves cannot be undone automatically. Move the tasks back from their current columns.");
       }
     } else if (undo.action === "board.delete") {
-      await prisma.board.update({ where: { id: undo.entityId }, data: { deletedAt: null, version: { increment: 1 } } });
+      await prisma.$transaction([
+        prisma.board.update({ where: { id: undo.entityId }, data: { deletedAt: null, version: { increment: 1 } } }),
+        prisma.task.updateMany({
+          where: { id: { in: Array.isArray(payload.taskIds) ? payload.taskIds.map(String) : [] }, boardId: undo.entityId },
+          data: { deletedAt: null, version: { increment: 1 } },
+        }),
+      ]);
     } else if (undo.action === "auto_plan.apply") {
       const previousBlocks = Array.isArray(payload.previousBlocks) ? payload.previousBlocks as Array<Record<string, any>> : [];
       const previousFocus = Array.isArray(payload.previousFocus) ? payload.previousFocus as Array<Record<string, any>> : [];
@@ -62,6 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             workspaceId,
             source: "auto",
             locked: false,
+            ...(Array.isArray(payload.taskIds) ? { taskId: { in: payload.taskIds.map(String) } } : {}),
             ...(payload.startDate && payload.endDate ? { date: { gte: payload.startDate as string, lte: payload.endDate as string } } : {}),
           },
         });
