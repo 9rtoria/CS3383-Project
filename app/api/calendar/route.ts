@@ -22,19 +22,48 @@ export async function GET(req: NextRequest) {
     const start = startOfLocalDayUtc(`${prefix}-01`, viewer.user.timezone);
     const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const end = endOfLocalDayUtc(`${prefix}-${String(last).padStart(2, "0")}`, viewer.user.timezone);
-    const tasks = await prisma.task.findMany({
-      where: { workspaceId, deletedAt: null, archivedAt: null, dueDate: { gte: start, lte: end } },
-      include: {
-        labels: { include: { label: true } },
-        board: { select: { id: true, name: true, visibility: true, createdById: true } },
-        column: { select: { id: true, name: true, isDone: true } },
-        assignee: { select: { id: true, name: true } },
-      },
-      orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-      take: 1000,
-    });
+    const [tasks, planBlocks] = await Promise.all([
+      prisma.task.findMany({
+        where: { workspaceId, deletedAt: null, archivedAt: null, dueDate: { gte: start, lte: end } },
+        include: {
+          labels: { include: { label: true } },
+          board: { select: { id: true, name: true, visibility: true, createdById: true } },
+          column: { select: { id: true, name: true, isDone: true } },
+          assignee: { select: { id: true, name: true } },
+        },
+        orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
+        take: 1000,
+      }),
+      prisma.planBlock.findMany({
+        where: {
+          userId: viewer.user.id,
+          workspaceId,
+          date: { gte: `${prefix}-01`, lte: `${prefix}-${String(last).padStart(2, "0")}` },
+          task: { completedAt: null, archivedAt: null, deletedAt: null },
+        },
+        include: { task: { select: { id: true, title: true, priority: true, dueDate: true, dueAllDay: true, estimateMinutes: true, focusDate: true } } },
+        orderBy: [{ date: "asc" }, { startMinute: "asc" }],
+      }),
+    ]);
     const visible = tasks.filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id));
     const byDate: Record<string, any[]> = {};
+    const blocksByDate: Record<string, any[]> = {};
+    for (const block of planBlocks) {
+      (blocksByDate[block.date] ??= []).push({
+        id: block.id,
+        userId: block.userId,
+        workspaceId: block.workspaceId,
+        taskId: block.taskId,
+        date: block.date,
+        startMinute: block.startMinute,
+        minutes: block.minutes,
+        source: block.source,
+        locked: block.locked,
+        title: block.task.title,
+        priority: block.task.priority,
+        task: block.task,
+      });
+    }
     for (const task of visible) {
       const date = task.dueDate!.toISOString();
       const key = new Intl.DateTimeFormat("en-CA", { timeZone: viewer.user.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(task.dueDate!);
@@ -57,6 +86,6 @@ export async function GET(req: NextRequest) {
       });
     }
     const total = visible.length;
-    return ok({ month: prefix, byDate, total, start: start.toISOString(), end: end.toISOString() });
+    return ok({ month: prefix, byDate, blocksByDate, total, start: start.toISOString(), end: end.toISOString() });
   });
 }

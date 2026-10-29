@@ -40,7 +40,7 @@ async function todayPayload(viewer: any, workspaceId: string) {
   });
   const workspace = access.workspace;
   const today = todayInTimeZone(viewer.user.timezone);
-  const [tasks, dismissals] = await Promise.all([
+  const [tasks, dismissals, planBlocks] = await Promise.all([
     prisma.task.findMany({
       where: {
         workspaceId,
@@ -58,6 +58,16 @@ async function todayPayload(viewer: any, workspaceId: string) {
       take: 1000,
     }),
     prisma.todayDismissal.findMany({ where: { userId: viewer.user.id, date: today } }),
+    prisma.planBlock.findMany({
+      where: {
+        userId: viewer.user.id,
+        workspaceId,
+        date: today,
+        task: { completedAt: null, archivedAt: null, deletedAt: null },
+      },
+      include: { task: { select: { id: true, title: true, priority: true, estimateMinutes: true, dueDate: true, dueAllDay: true, focusDate: true } } },
+      orderBy: { startMinute: "asc" },
+    }),
   ]);
   const dismissed = new Set(dismissals.map((entry) => entry.taskId));
   const visible = tasks.filter((task) => canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id));
@@ -90,6 +100,20 @@ async function todayPayload(viewer: any, workspaceId: string) {
       selected: item.selected || item.focusDate === today,
       blocked: item.blocked,
       accepted: item.focusDate === today,
+    })),
+    planBlocks: planBlocks.map((block) => ({
+      id: block.id,
+      userId: block.userId,
+      workspaceId: block.workspaceId,
+      taskId: block.taskId,
+      date: block.date,
+      startMinute: block.startMinute,
+      minutes: block.minutes,
+      source: block.source === "manual" ? "manual" as const : "auto" as const,
+      locked: block.locked,
+      title: block.task.title,
+      priority: block.task.priority,
+      task: block.task,
     })),
     counts: {
       open: visible.length,

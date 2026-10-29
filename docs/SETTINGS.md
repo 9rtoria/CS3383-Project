@@ -14,6 +14,7 @@ Settings stays a single page with deep links (`/settings#appearance`) and a stic
 | **Appearance** | Theme (System / Light / Dark), accent (Moss / Ink / Clay), display type (Editorial / Modern / Classic), reading size, density, motion, live preview |
 | **Language & region** | Language (English / 繁體中文 preview), time zone, time format, week start, localized date preview |
 | **Planning** | Daily capacity, Smart Plan buffer, workday window, buffer between Day Flow blocks, default view |
+| **Auto-plan** | Enable, automation level, rest interval, weekly cap, refresh cadence, deep-work length, split long tasks, weekends, default estimate, cap behavior, protected lunch, stale cleanup |
 | **Focus & capture** | Default focus length, auto-start, close capture after adding |
 | **Notifications** | In-app, mentions, email reminders, browser reminders, digest, quiet hours, test notification |
 | **Sound** | Master toggle, palettes, volume, typing texture, six previews (device-local) |
@@ -34,6 +35,7 @@ Workspace settings, people, policies, automations, integrations, audit, export, 
 - **Theme, accent, display type, reading size, density, and motion** are applied to `<html>` data attributes so the whole app changes without a reload.
 - **Language** updates the app shell, Today, the planning surfaces, capture, and Settings. Workspace admin and audit remain English during this preview.
 - **Sound preferences** are device-local; account preferences are stored in `UserSettings` and survive reload and browsers.
+- **Auto-plan** owns only the schedule layer. It writes `PlanBlock` rows and today's selection; it never changes due dates, completion, titles, or deletion. Every apply is undoable.
 - **Background reminders** require browser notification permission. The OS owns the sound; Drift never plays a hidden-tab chime.
 - **Browser notification permission** is displayed honestly as default, granted, or blocked. `Send test` is manual.
 
@@ -54,7 +56,7 @@ Workspace settings, people, policies, automations, integrations, audit, export, 
 
 ## Verification
 
-- `npm test`: 91 unit tests.
-- Playwright: 27 journeys across Chromium, Firefox, and WebKit (81 executions).
-- The settings journey checks appearance, theme system, density/reading size, capacity, week start, language, notification queueing, feature toggles, focus/capture defaults, workday/buffer/start view, save failure rollback, search, and mobile navigation.
+- `npm test`: 100 unit tests.
+- Playwright: 31 journeys across Chromium, Firefox, and WebKit (93 executions).
+- The settings journey checks appearance, theme system, density/reading size, capacity, week start, language, notification queueing, feature toggles, focus/capture defaults, Auto-plan safe apply and weekly limits, workday/buffer/start view, save failure rollback, search, and mobile navigation.
 - Production build and strict TypeScript pass.

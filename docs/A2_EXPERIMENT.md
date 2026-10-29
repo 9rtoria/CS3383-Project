@@ -14,6 +14,7 @@ ProjectA2 keeps Drift's calm, keyboard-first identity and adds a focused set of 
 | **Smart Plan** | A local-rules preview with Before/After columns, added/waiting counts, plan buffer, apply, toast, and Undo | Shows AI-assisted *design thinking* without pretending a model is connected; nothing changes until Apply |
 | **Focus Mode** | A full-screen, quiet timer with a breathing orb, pause/complete/log-time controls, estimate delta, default length, and auto-start | Gives the plan a second act and turns tracked time into a first-class, honest record |
 | **Settings** | Theme System/Light/Dark, accent, display type, reading size, density, motion, language/region preview, capacity, workday, plan buffer, notifications, sound, keyboard, feature toggles, search, live preview, section reset | Makes every preference real and keeps the calm product configurable without a control-panel feel |
+| **Auto-plan** | A deterministic scheduler with three options, rest, lunch, weekly cap, long-task splitting, safe/full/delegated levels, plan blocks, and undo | Turns the task list into a realistic schedule without a model call or silent changes to due dates and completion |
 | **Sound Lab** | Three synthesized palettes (Paper & wood, Felt & glass, Hybrid), volume, mute, previews, and optional typing texture | Adds materiality and feedback without alarm beeps, network downloads, or every-keystroke noise |
 | **Voice Capture** | Web Speech API input with a listening state, editable transcript, permission/error fallbacks, and a normal text field | Makes capture feel immediate while keeping typing as the reliable path |
 
@@ -75,6 +76,16 @@ The UI states “Preview first — local rules only” and “No model call” i
 - The Done column count includes completed cards; other columns keep their open-task count for WIP visibility.
 - Language is a core-surface preview: app shell, Today, planning, capture, and Settings; workspace admin remains English.
 
+### Auto-plan
+
+- **Plan layer, not task truth.** `PlanBlock` owns dates, start minutes, and durations. Due dates, completion, deletion, and user-authored fields are never changed by scheduling.
+- **Options, not a black box.** The scheduler produces Balanced, Focus first, and Light day plans with load, end time, warnings, and unscheduled work.
+- **Real constraints.** Workday, daily capacity, weekly cap, rest between blocks, protected lunch, deep-work limit, long-task splitting, dependencies, due dates, and existing fixed blocks are enforced.
+- **Levels.** Suggest only, safe auto-apply (only non-conflicting additions), full plan-layer auto-apply, and delegated cleanup for stale unscheduled tasks. Every apply is undoable; hard due dates never move.
+- **Writes.** Applied plans set `focusDate` for today's blocks and render exact blocks in Day Flow and Calendar. If a plan has no blocks today, existing today choices are preserved.
+- **Cadence.** Recompute on open, on task changes, and at the configured interval while the app is open. A closed laptop cannot run a background worker.
+- **Honesty.** Local rules only; no model call. No external calendar or email is read in this version.
+
 ## Verification
 
 Run against the seeded demo workspace on `http://localhost:3000`.
@@ -83,14 +94,14 @@ Run against the seeded demo workspace on `http://localhost:3000`.
 |---|---|
 | `npm run typecheck` | Pass |
 | `npm run lint` | Pass, 0 errors, 40 warnings (baseline warnings) |
-| `npm test` | **91/91** in 13 files |
+| `npm test` | **100/100** in 14 files |
 | `npm run build` | Pass |
-| Playwright | **27/27 journeys × 3 engines = 81 executions** (12 baseline + 15 A2/settings) |
+| Playwright | **31/31 journeys × 3 engines = 93 executions** (12 baseline + 19 A2/settings) |
 | axe serious/critical | 0 on Today, Board, Insights, all checked Settings sections, auth |
 | Responsive | 390 px Today and mobile Settings checked |
 | Dark theme | Today and Settings checked |
 | Reduced motion | Global reduced-motion rule and explicit preference checked |
-| Screenshots | 14 A2 states in `docs/screenshots/10-*` through `23-*` |
+| Screenshots | 17 A2 states in `docs/screenshots/10-*` through `26-*` |
 
 New automated journeys cover:
 
@@ -105,6 +116,10 @@ New automated journeys cover:
 9. Rapid notification changes are queued and persisted.
 10. Feature toggles remove Day Flow/voice without hiding text capture.
 11. Focus/capture defaults reach the real screens and save failure rolls back; search and mobile settings navigation work.
+12. Auto-plan previews the three options, applies a real schedule, writes Calendar blocks, and undoes cleanly.
+13. Safe Auto-plan applies non-conflicting additions without opening the review modal.
+14. A weekly limit refuses work even when a day still has room.
+15. Auto-plan settings persist after reload.
 
 The sound timbres were designed for audition, not judged by automation. Use Settings → Sound on laptop speakers and headphones; the palettes are intentionally short and quiet, and the typing texture is off by default.
 
@@ -114,7 +129,9 @@ The sound timbres were designed for audition, not judged by automation. Use Sett
 - Voice recognition depends on the browser's speech service; availability and language support vary.
 - Sound is synthesized and tunable, but this is a prototype, not a mastered audio brand.
 - `actualMinutes` is a simple accumulated integer; there is no time-entry ledger or edit history yet.
-- Day Flow is a single-day view; it does not yet support manual block resizing or multi-day planning.
+- Day Flow is a single-day view; it does not yet support manual block resizing. Auto-plan can schedule across a seven-day horizon.
+- Auto-plan reads only Drift tasks and settings. External calendars, email, and a closed-app background worker are out of scope.
+- Auto-plan is deterministic scheduling, not an AI planner; applying a plan never changes hard due dates or completion.
 - The demo remains SQLite-backed and is not a production-scale deployment.
 - The browser-notification permission path for background reminders is implemented and permission-gated, but it is not covered by an automated test; the operating system still decides whether to play a sound.
 - No claim is made that the sound or voice paths were tested with every browser, microphone, or audio device.

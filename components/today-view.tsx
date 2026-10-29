@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Coffee, Link2, Play, RefreshCw, Sparkles, SunMedium, X } from "lucide-react";
 import { EmptyState, PriorityBadge, Spinner } from "@/components/ui";
+import { AutoPlanController } from "@/components/auto-plan-controller";
 import { DayFlow } from "@/components/day-flow";
 import { SmartPlanModal, type SmartPlanPreview } from "@/components/smart-plan";
 import { useToast } from "@/components/toast";
@@ -271,10 +272,19 @@ export function TodayView({ workspace, refreshKey, userName, preferences, onOpen
 
       {error ? <EmptyState icon={<Coffee size={20} />} title="Today didn’t load" description={error} action={<button type="button" className="btn primary" onClick={() => void load()}>Try again</button>} /> : null}
 
+      <AutoPlanController
+        workspaceId={workspace.id}
+        enabled={preferences.autoPlan.enabled}
+        mode={preferences.autoPlan.mode}
+        refreshMinutes={preferences.autoPlan.refreshMinutes}
+        onChanged={onChanged}
+      />
+
       {preferences.features.dayFlow ? (
         <DayFlow
           tasks={data?.suggestions ?? []}
           capacity={data?.capacity ?? EMPTY_CAPACITY}
+          planBlocks={data?.planBlocks ?? []}
           busy={busy}
           note={rebalanceNote}
           workdayStart={preferences.workdayStart}

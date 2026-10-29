@@ -5127,3 +5127,147 @@ dialog.drawer-dialog {
     flex-basis: 100%;
   }
 }
+
+/* ---------- Auto-plan ---------- */
+
+.auto-plan-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.auto-plan-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.auto-plan-card-head h2 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.4px;
+  margin: 4px 0 5px;
+}
+
+.auto-plan-card-head p {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin: 0;
+}
+
+.auto-plan-card-actions {
+  display: flex;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.auto-plan-card-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.auto-plan-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 16px;
+}
+
+.auto-plan-option {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 11px;
+  padding: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.auto-plan-option.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.auto-plan-option-head,
+.auto-plan-option-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.auto-plan-option-head strong { font-size: 12px; }
+.auto-plan-option-summary { display: block; color: var(--muted); font-size: 10.5px; line-height: 1.45; margin: 6px 0 10px; }
+.auto-plan-option-stats { color: var(--faint); font-size: 10px; }
+
+.auto-plan-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 20px;
+}
+
+.auto-plan-day-list { display: grid; gap: 13px; }
+.auto-plan-day h4 { margin: 0 0 6px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.auto-plan-day { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.auto-plan-day:last-child { border-bottom: 0; }
+
+.auto-plan-block-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+  font-size: 11px;
+}
+.auto-plan-block-row:last-child { border-bottom: 0; }
+.auto-plan-block-time { color: var(--muted); min-width: 84px; display: inline-flex; align-items: center; gap: 4px; }
+.auto-plan-block-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.auto-plan-side { display: grid; align-content: start; gap: 12px; }
+.auto-plan-side-block { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px; }
+.auto-plan-week { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+.auto-plan-week strong { color: var(--text); font-size: 10.5px; }
+.auto-plan-unscheduled { margin-top: 8px; display: grid; gap: 2px; font-size: 10.5px; }
+.auto-plan-unscheduled span { color: var(--faint); font-size: 10px; }
+
+.day-task.scheduled { color: var(--accent-strong); }
+.day-task-time { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; flex: 0 0 auto; min-width: 38px; }
+.slim-task.scheduled { color: var(--accent-strong); }
+
+@media (max-width: 720px) {
+  .auto-plan-card-head { flex-direction: column; }
+  .auto-plan-card-actions { width: 100%; }
+  .auto-plan-card-actions .btn { flex: 1; }
+  .auto-plan-options { grid-template-columns: 1fr; }
+  .auto-plan-detail { grid-template-columns: 1fr; }
+}
+
+.settings-auto-lunch {
+  min-width: 360px;
+  flex-wrap: nowrap;
+}
+.settings-auto-lunch .select {
+  width: 126px;
+}
+.settings-auto-cleanup {
+  min-width: 260px;
+  flex-wrap: nowrap;
+}
+@media (max-width: 720px) {
+  .settings-auto-lunch,
+  .settings-auto-cleanup {
+    min-width: 0;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}

@@ -17,6 +17,26 @@ export type DisplayFont = "editorial" | "modern" | "classic";
 export type Accent = "moss" | "ink" | "clay";
 export type MotionPreference = "system" | "reduced" | "full";
 export type StartView = "today" | "board" | "upcoming";
+export type AutoPlanMode = "suggest" | "safe" | "full" | "delegated";
+export type AutoPlanCapBehavior = "stop" | "warn";
+
+export type AutoPlanPreferences = {
+  enabled: boolean;
+  mode: AutoPlanMode;
+  restMinutes: number;
+  weeklyMinutes: number;
+  refreshMinutes: number;
+  deepWorkMinutes: number;
+  splitLongTasks: boolean;
+  includeWeekends: boolean;
+  defaultEstimateMinutes: number;
+  capBehavior: AutoPlanCapBehavior;
+  lunchEnabled: boolean;
+  lunchStart: number;
+  lunchEnd: number;
+  allowStaleArchive: boolean;
+  staleDays: number;
+};
 
 export type FeaturePreferences = {
   dayFlow: boolean;
@@ -44,6 +64,7 @@ export type Preferences = {
   focusMinutes: number;
   focusAutoStart: boolean;
   captureCloseAfterAdd: boolean;
+  autoPlan: AutoPlanPreferences;
   features: FeaturePreferences;
 };
 
@@ -71,6 +92,23 @@ export const DEFAULT_PREFERENCES: Preferences = {
   focusMinutes: 25,
   focusAutoStart: false,
   captureCloseAfterAdd: true,
+  autoPlan: {
+    enabled: true,
+    mode: "suggest",
+    restMinutes: 10,
+    weeklyMinutes: 1500,
+    refreshMinutes: 30,
+    deepWorkMinutes: 90,
+    splitLongTasks: true,
+    includeWeekends: false,
+    defaultEstimateMinutes: 30,
+    capBehavior: "stop",
+    lunchEnabled: true,
+    lunchStart: 12,
+    lunchEnd: 13,
+    allowStaleArchive: false,
+    staleDays: 30,
+  },
   features: DEFAULT_FEATURES,
 };
 
@@ -114,6 +152,8 @@ export function normalizePreferences(settings: Partial<UserSettings> | null | un
   const source = settings ?? {};
   const workdayStart = intIn(source.workdayStart, 0, 23, DEFAULT_PREFERENCES.workdayStart);
   const workdayEnd = intIn(source.workdayEnd, 1, 24, DEFAULT_PREFERENCES.workdayEnd);
+  const lunchStart = intIn(source.autoPlanLunchStart, 0, 23, DEFAULT_PREFERENCES.autoPlan.lunchStart);
+  const lunchEnd = intIn(source.autoPlanLunchEnd, 1, 24, DEFAULT_PREFERENCES.autoPlan.lunchEnd);
   return {
     theme: oneOf(source.theme, ["light", "dark", "system"] as const, DEFAULT_PREFERENCES.theme),
     density: oneOf(source.density, ["comfortable", "compact"] as const, DEFAULT_PREFERENCES.density),
@@ -132,6 +172,23 @@ export function normalizePreferences(settings: Partial<UserSettings> | null | un
     focusMinutes: intIn(source.focusMinutes, 5, 180, DEFAULT_PREFERENCES.focusMinutes),
     focusAutoStart: typeof source.focusAutoStart === "boolean" ? source.focusAutoStart : DEFAULT_PREFERENCES.focusAutoStart,
     captureCloseAfterAdd: typeof source.captureCloseAfterAdd === "boolean" ? source.captureCloseAfterAdd : DEFAULT_PREFERENCES.captureCloseAfterAdd,
+    autoPlan: {
+      enabled: typeof source.autoPlanEnabled === "boolean" ? source.autoPlanEnabled : DEFAULT_PREFERENCES.autoPlan.enabled,
+      mode: oneOf(source.autoPlanMode, ["suggest", "safe", "full", "delegated"] as const, DEFAULT_PREFERENCES.autoPlan.mode),
+      restMinutes: intIn(source.autoPlanRestMinutes, 0, 60, DEFAULT_PREFERENCES.autoPlan.restMinutes),
+      weeklyMinutes: intIn(source.autoPlanWeeklyMinutes, 60, 10080, DEFAULT_PREFERENCES.autoPlan.weeklyMinutes),
+      refreshMinutes: source.autoPlanRefreshMinutes === 0 ? 0 : intIn(source.autoPlanRefreshMinutes, 15, 60, DEFAULT_PREFERENCES.autoPlan.refreshMinutes),
+      deepWorkMinutes: intIn(source.autoPlanDeepWorkMinutes, 15, 240, DEFAULT_PREFERENCES.autoPlan.deepWorkMinutes),
+      splitLongTasks: typeof source.autoPlanSplitLongTasks === "boolean" ? source.autoPlanSplitLongTasks : DEFAULT_PREFERENCES.autoPlan.splitLongTasks,
+      includeWeekends: typeof source.autoPlanIncludeWeekends === "boolean" ? source.autoPlanIncludeWeekends : DEFAULT_PREFERENCES.autoPlan.includeWeekends,
+      defaultEstimateMinutes: intIn(source.autoPlanDefaultEstimateMinutes, 5, 240, DEFAULT_PREFERENCES.autoPlan.defaultEstimateMinutes),
+      capBehavior: oneOf(source.autoPlanCapBehavior, ["stop", "warn"] as const, DEFAULT_PREFERENCES.autoPlan.capBehavior),
+      lunchEnabled: typeof source.autoPlanLunchEnabled === "boolean" ? source.autoPlanLunchEnabled : DEFAULT_PREFERENCES.autoPlan.lunchEnabled,
+      lunchStart,
+      lunchEnd: Math.max(lunchStart + 1, lunchEnd),
+      allowStaleArchive: typeof source.autoPlanAllowStaleArchive === "boolean" ? source.autoPlanAllowStaleArchive : DEFAULT_PREFERENCES.autoPlan.allowStaleArchive,
+      staleDays: intIn(source.autoPlanStaleDays, 1, 365, DEFAULT_PREFERENCES.autoPlan.staleDays),
+    },
     features: parseFeatures(source.featuresJson),
   };
 }

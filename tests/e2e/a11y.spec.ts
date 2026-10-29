@@ -44,7 +44,7 @@ test("a11y: Today, board, Insights, settings, and auth", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: /Settings|設定/ })).toBeVisible();
   await scan(page, "Settings (notifications)");
 
-  for (const section of ["account", "appearance", "language", "planning", "focus", "sound", "keyboard", "features"]) {
+  for (const section of ["account", "appearance", "language", "planning", "auto-plan", "focus", "sound", "keyboard", "features"]) {
     await page.goto(`/settings#${section}`);
     await expect(page.getByRole("heading", { level: 1, name: /Settings|設定/ })).toBeVisible();
     await page.waitForTimeout(250);

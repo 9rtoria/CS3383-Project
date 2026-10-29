@@ -45,8 +45,8 @@ npm run start
 | `npm run start` | Start the production build |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm run lint` | ESLint (0 errors; warnings are triaged) |
-| `npm test` | 91 Vitest unit tests |
-| `npm run test:e2e` | 27 Playwright journeys across Chromium, Firefox, and WebKit (81 executions) |
+| `npm test` | 100 Vitest unit tests |
+| `npm run test:e2e` | 31 Playwright journeys across Chromium, Firefox, and WebKit (93 executions) |
 | `npm run test:a11y` | axe-core serious/critical scan |
 | `npm run test:perf` | Authenticated Lighthouse smoke (requires a running server) |
 | `npm run screenshots` | Regenerate `docs/screenshots/` |
@@ -61,6 +61,7 @@ npm run start
 |---|---|
 | Capture | Quick capture with natural-language dates, priority, labels, estimates, recurrence; command palette; global shortcuts; **voice input with text fallback** |
 | Planning | Today capacity plan with reasons and dismissal, Upcoming, Calendar, Archive, Kanban, List, saved views; **Day Flow rail**; **Smart Plan preview/apply/undo**; capacity, buffer, workday, block spacing, and default view settings |
+| Auto-plan | Deterministic weekly scheduler with three plan options, rest intervals, protected lunch, weekly cap, long-task splitting, dependency/deadline awareness, safe/full/delegated automation levels, Today/Day Flow/Calendar writes, and undo |
 | Settings | Theme (System/Light/Dark), accent, display type, reading size, density, motion, language/region, live preview, search, section reset, feature toggles |
 | Focus | Full-screen timer, pause/resume, complete, early leave, tracked `actualMinutes`, estimate delta; default length and auto-start |
 | Sound | Web Audio Sound Lab with three palettes, volume, top-bar mute, six previews, optional typing texture off by default |
@@ -106,6 +107,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA_MODEL.md](docs/DATA
 | [docs/DEMO.md](docs/DEMO.md) | Five-minute ProjectA2 demo script |
 | [docs/A2_EXPERIMENT.md](docs/A2_EXPERIMENT.md) | ProjectA2 feature rationale, verification, and limits |
 | [docs/SETTINGS.md](docs/SETTINGS.md) | Settings information architecture, behavior, language/type notes, accessibility |
+| [docs/AUTO_PLAN.md](docs/AUTO_PLAN.md) | Deterministic Auto-plan contract, levels, constraints, write path, limits |
 | [REVIEW.md](REVIEW.md) | Final delivery review, evidence, limitations, time table |
 
 The live API contract is served at `/api/openapi` and stored in [docs/openapi.yaml](docs/openapi.yaml).
@@ -138,6 +140,10 @@ The live API contract is served at `/api/openapi` and stored in [docs/openapi.ya
 |---|---|---|
 | ![](docs/screenshots/21-notifications.png) | ![](docs/screenshots/22-mobile-settings.png) | ![](docs/screenshots/23-dark-appearance.png) |
 
+| Auto-plan Today | Auto-plan review | Auto-plan settings |
+|---|---|---|
+| ![](docs/screenshots/24-auto-plan.png) | ![](docs/screenshots/26-auto-plan-modal.png) | ![](docs/screenshots/25-auto-plan-settings.png) |
+
 See [docs/screenshots/README.md](docs/screenshots/README.md) for the full manifest.
 
 ## Honest limits
@@ -155,6 +161,7 @@ See [docs/screenshots/README.md](docs/screenshots/README.md) for the full manife
 - Language is a **preview**: the app shell, Today, planning surfaces, capture, and Settings are translated. Workspace admin, audit, and some enterprise copy remain English.
 - Type choices use system font stacks, not downloaded web fonts. Chinese typography depends on the fonts available on the demo machine.
 - Browser notification permission is controlled by the browser; the OS decides whether a background notification makes a sound.
+- Auto-plan uses the tasks and settings already inside Drift. It does not read external calendars, email, or a hidden model. Background execution while the app is closed requires an external worker.
 
 ## License / status
 

@@ -20,7 +20,7 @@ type SectionProps = {
   onReset: (section: ResetSection) => void;
 };
 
-export type ResetSection = "appearance" | "language" | "planning" | "focus" | "features";
+export type ResetSection = "appearance" | "language" | "planning" | "auto-plan" | "focus" | "features";
 
 function SectionHeader({ title, description, onReset }: { title: string; description: string; onReset?: () => void }) {
   const { t } = useI18n();
@@ -406,6 +406,112 @@ export function PlanningSettings({ settings, onPatch, onReset }: SectionProps) {
   );
 }
 
+export function AutoPlanSettings({ settings, onPatch, onReset }: SectionProps) {
+  const { t } = useI18n();
+  const preferences = normalizePreferences(settings);
+  const auto = preferences.autoPlan;
+  const hours = Math.round((auto.weeklyMinutes / 60) * 10) / 10;
+  return (
+    <section className="settings-section" id="auto-plan" aria-labelledby="auto-plan-title">
+      <SectionHeader
+        title={t("Auto-plan")}
+        description="Let Drift shape a realistic plan from your tasks and limits. It schedules the plan layer, never your due dates or completed work."
+        onReset={() => onReset("auto-plan")}
+      />
+      <div className="settings-card">
+        <Row title={t("Enable Auto-plan")} description="Generate plans in Today and keep them fresh while the app is open.">
+          <Toggle label={t("Enable Auto-plan")} checked={settings.autoPlanEnabled} onChange={(next) => onPatch({ autoPlanEnabled: next })} />
+        </Row>
+        <Row title={t("Automation level")} description="Start with suggestions. Higher levels may move flexible plan blocks automatically; every apply is undoable.">
+          <select className="select" aria-label={t("Automation level")} value={settings.autoPlanMode} onChange={(event) => onPatch({ autoPlanMode: event.target.value })}>
+            <option value="suggest">{t("Suggest only")}</option>
+            <option value="safe">{t("Safe auto-apply")}</option>
+            <option value="full">{t("Full plan auto-apply")}</option>
+            <option value="delegated">{t("Delegated cleanup")}</option>
+          </select>
+        </Row>
+        <Row title={t("Rest between tasks")} description="Every scheduled block leaves this much space before the next one.">
+          <select className="select" aria-label={t("Rest between tasks")} value={settings.autoPlanRestMinutes} onChange={(event) => onPatch({ autoPlanRestMinutes: Number(event.target.value) })}>
+            {[0, 5, 10, 15, 20, 30].map((minutes) => <option key={minutes} value={minutes}>{minutes ? `${minutes} min` : t("None")}</option>)}
+          </select>
+        </Row>
+        <Row title={t("Weekly work limit")} description={`${hours}h per week. If the limit is reached, Auto-plan stops recommending new work even when a day has free time.`}>
+          <div className="settings-range">
+            <input
+              className="input"
+              type="number"
+              min={60}
+              max={10080}
+              step={30}
+              value={settings.autoPlanWeeklyMinutes}
+              aria-label={t("Weekly work limit minutes")}
+              onChange={(event) => onPatch({ autoPlanWeeklyMinutes: Number(event.target.value) })}
+              style={{ width: 88 }}
+            />
+            <span className="field-hint">{t("minutes")}</span>
+          </div>
+        </Row>
+        <Row title={t("Refresh plan")} description="Recompute while the app is open. The app cannot run a background worker while closed.">
+          <select className="select" aria-label={t("Refresh plan")} value={settings.autoPlanRefreshMinutes} onChange={(event) => onPatch({ autoPlanRefreshMinutes: Number(event.target.value) })}>
+            <option value={0}>{t("Off")}</option>
+            <option value={15}>{t("Every 15 minutes")}</option>
+            <option value={30}>{t("Every 30 minutes")}</option>
+            <option value={60}>{t("Every hour")}</option>
+          </select>
+        </Row>
+        <Row title={t("Longest focus block")} description="Long work can be split into sessions with rest between them.">
+          <select className="select" aria-label={t("Longest focus block")} value={settings.autoPlanDeepWorkMinutes} onChange={(event) => onPatch({ autoPlanDeepWorkMinutes: Number(event.target.value) })}>
+            {[30, 45, 60, 90, 120].map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}
+          </select>
+        </Row>
+        <Row title={t("Split long tasks")} description="When a task is longer than the focus block, schedule it as multiple sessions.">
+          <Toggle label={t("Split long tasks")} checked={settings.autoPlanSplitLongTasks} onChange={(next) => onPatch({ autoPlanSplitLongTasks: next })} />
+        </Row>
+        <Row title={t("Include weekends")} description="Allow Saturday and Sunday in generated plans.">
+          <Toggle label={t("Include weekends")} checked={settings.autoPlanIncludeWeekends} onChange={(next) => onPatch({ autoPlanIncludeWeekends: next })} />
+        </Row>
+        <Row title={t("Default estimate")} description="Used only when a task has no estimate. The plan labels these assumptions.">
+          <select className="select" aria-label={t("Default estimate")} value={settings.autoPlanDefaultEstimateMinutes} onChange={(event) => onPatch({ autoPlanDefaultEstimateMinutes: Number(event.target.value) })}>
+            {[15, 30, 45, 60, 90].map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}
+          </select>
+        </Row>
+        <Row title={t("At the weekly limit")} description="Stop scheduling new work, or keep it visible with a warning.">
+          <select className="select" aria-label={t("At the weekly limit")} value={settings.autoPlanCapBehavior} onChange={(event) => onPatch({ autoPlanCapBehavior: event.target.value })}>
+            <option value="stop">{t("Stop recommending")}</option>
+            <option value="warn">{t("Show warning only")}</option>
+          </select>
+        </Row>
+        <Row title={t("Protected lunch")} description="Reserve a daily break before Auto-plan fills the day.">
+          <div className="settings-inline-controls settings-auto-lunch">
+            <Toggle label={t("Protected lunch")} checked={settings.autoPlanLunchEnabled} onChange={(next) => onPatch({ autoPlanLunchEnabled: next })} />
+            <select className="select" aria-label={t("Lunch start")} value={settings.autoPlanLunchStart} onChange={(event) => {
+              const start = Number(event.target.value);
+              onPatch({ autoPlanLunchStart: start, ...(start >= settings.autoPlanLunchEnd ? { autoPlanLunchEnd: Math.min(24, start + 1) } : {}) });
+            }}>
+              {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{formatHourWithPreference(hour, preferences)}</option>)}
+            </select>
+            <span className="field-hint">{t("to")}</span>
+            <select className="select" aria-label={t("Lunch end")} value={settings.autoPlanLunchEnd} onChange={(event) => {
+              const end = Number(event.target.value);
+              onPatch({ autoPlanLunchEnd: end, ...(end <= settings.autoPlanLunchStart ? { autoPlanLunchStart: Math.max(0, end - 1) } : {}) });
+            }}>
+              {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => <option key={hour} value={hour}>{formatHourWithPreference(hour % 24, preferences)}</option>)}
+            </select>
+          </div>
+        </Row>
+        <Row title={t("Stale task cleanup")} description="Delegated cleanup can archive unscheduled tasks that have not changed for this many days. Hard due dates never move.">
+          <div className="settings-inline-controls settings-auto-cleanup">
+            <Toggle label={t("Stale task cleanup")} checked={settings.autoPlanAllowStaleArchive} onChange={(next) => onPatch({ autoPlanAllowStaleArchive: next })} />
+            <select className="select" aria-label={t("Stale task days")} value={settings.autoPlanStaleDays} onChange={(event) => onPatch({ autoPlanStaleDays: Number(event.target.value) })}>
+              {[14, 30, 60, 90].map((days) => <option key={days} value={days}>{days} days</option>)}
+            </select>
+          </div>
+        </Row>
+      </div>
+    </section>
+  );
+}
+
 export function FocusCaptureSettings({ settings, onPatch, onReset }: SectionProps) {
   const { t } = useI18n();
   return (
@@ -480,6 +586,25 @@ export function resetSectionPatch(section: ResetSection): SettingsPatch {
       workdayEnd: DEFAULT_PREFERENCES.workdayEnd,
       blockBufferMinutes: DEFAULT_PREFERENCES.blockBufferMinutes,
       startView: DEFAULT_PREFERENCES.startView,
+    };
+  }
+  if (section === "auto-plan") {
+    return {
+      autoPlanEnabled: DEFAULT_PREFERENCES.autoPlan.enabled,
+      autoPlanMode: DEFAULT_PREFERENCES.autoPlan.mode,
+      autoPlanRestMinutes: DEFAULT_PREFERENCES.autoPlan.restMinutes,
+      autoPlanWeeklyMinutes: DEFAULT_PREFERENCES.autoPlan.weeklyMinutes,
+      autoPlanRefreshMinutes: DEFAULT_PREFERENCES.autoPlan.refreshMinutes,
+      autoPlanDeepWorkMinutes: DEFAULT_PREFERENCES.autoPlan.deepWorkMinutes,
+      autoPlanSplitLongTasks: DEFAULT_PREFERENCES.autoPlan.splitLongTasks,
+      autoPlanIncludeWeekends: DEFAULT_PREFERENCES.autoPlan.includeWeekends,
+      autoPlanDefaultEstimateMinutes: DEFAULT_PREFERENCES.autoPlan.defaultEstimateMinutes,
+      autoPlanCapBehavior: DEFAULT_PREFERENCES.autoPlan.capBehavior,
+      autoPlanLunchEnabled: DEFAULT_PREFERENCES.autoPlan.lunchEnabled,
+      autoPlanLunchStart: DEFAULT_PREFERENCES.autoPlan.lunchStart,
+      autoPlanLunchEnd: DEFAULT_PREFERENCES.autoPlan.lunchEnd,
+      autoPlanAllowStaleArchive: DEFAULT_PREFERENCES.autoPlan.allowStaleArchive,
+      autoPlanStaleDays: DEFAULT_PREFERENCES.autoPlan.staleDays,
     };
   }
   if (section === "focus") {

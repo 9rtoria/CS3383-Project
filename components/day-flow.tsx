@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Check, Clock3, Play, RefreshCw, Sparkles, Timer } from "lucide-react";
 import { playSound } from "@/lib/sound";
 import { useI18n } from "@/lib/i18n";
-import type { TodayPayload } from "@/lib/types";
+import type { PlanBlock, TodayPayload } from "@/lib/types";
 
 type Suggestion = TodayPayload["suggestions"][number];
 
 type Props = {
   tasks: Suggestion[];
   capacity: TodayPayload["capacity"];
+  planBlocks?: PlanBlock[];
   busy?: string | null;
   note?: string | null;
   workdayStart: number;
@@ -52,7 +53,7 @@ function taskStart(task: Suggestion, cursor: number): number {
   return dueMinutes >= cursor ? dueMinutes : cursor;
 }
 
-export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd, blockBufferMinutes, timeFormat, onOpenTask, onFocusTask, onDismiss, onRebalance }: Props) {
+export function DayFlow({ tasks, capacity, planBlocks = [], busy, note, workdayStart, workdayEnd, blockBufferMinutes, timeFormat, onOpenTask, onFocusTask, onDismiss, onRebalance }: Props) {
   const { t } = useI18n();
   const [now, setNow] = useState(() => new Date());
   // Freeze the layout anchor when the view opens. The "now" marker updates
@@ -74,23 +75,43 @@ export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd,
     [tasks],
   );
 
+  const scheduled = useMemo(
+    () =>
+      planBlocks
+        .map((block) => {
+          const task = tasks.find((entry) => entry.id === block.taskId);
+          return task
+            ? {
+                task: { ...task, accepted: true },
+                start: block.startMinute,
+                duration: block.minutes,
+                blockId: block.id,
+              }
+            : null;
+        })
+        .filter((block): block is { task: Suggestion; start: number; duration: number; blockId: string } => Boolean(block)),
+    [planBlocks, tasks],
+  );
+
   const blocks = useMemo(
     () =>
-      selected
-        .reduce<{ cursor: number; blocks: { task: Suggestion; start: number; duration: number }[] }>(
-          (state, task) => {
-            const duration = Math.max(15, task.suggestedMinutes || task.estimateMinutes || 30);
-            const rawStart = taskStart(task, state.cursor);
-            const start = rawStart + duration > DAY_MINUTES ? Math.max(0, DAY_MINUTES - duration) : rawStart;
-            return {
-              cursor: Math.max(state.cursor, start + duration + Math.max(0, blockBufferMinutes)),
-              blocks: [...state.blocks, { task, start, duration }],
-            };
-          },
-          { cursor: anchorMinutes, blocks: [] },
-        )
-        .blocks,
-    [anchorMinutes, blockBufferMinutes, selected],
+      scheduled.length
+        ? scheduled
+        : selected
+            .reduce<{ cursor: number; blocks: { task: Suggestion; start: number; duration: number; blockId?: string }[] }>(
+              (state, task) => {
+                const duration = Math.max(15, task.suggestedMinutes || task.estimateMinutes || 30);
+                const rawStart = taskStart(task, state.cursor);
+                const start = rawStart + duration > DAY_MINUTES ? Math.max(0, DAY_MINUTES - duration) : rawStart;
+                return {
+                  cursor: Math.max(state.cursor, start + duration + Math.max(0, blockBufferMinutes)),
+                  blocks: [...state.blocks, { task, start, duration }],
+                };
+              },
+              { cursor: anchorMinutes, blocks: [] },
+            )
+            .blocks,
+    [anchorMinutes, blockBufferMinutes, scheduled, selected],
   );
 
   const nowMinutes = minutesOfDay(now);
@@ -183,13 +204,13 @@ export function DayFlow({ tasks, capacity, busy, note, workdayStart, workdayEnd,
           </div>
 
           {blocks.length ? (
-            blocks.map(({ task, start, duration }) => {
+            blocks.map(({ task, start, duration, blockId }) => {
               const width = (duration / DAY_MINUTES) * 100;
-              const wide = duration >= 90;
+              const wide = duration >= (blockId ? 60 : 90);
               return (
                 <button
                   type="button"
-                  key={task.id}
+                  key={blockId ?? task.id}
                   className={`day-flow-block${task.accepted ? " chosen" : " suggested"}${task.blocked ? " blocked" : ""}${draggingId === task.id ? " dragging" : ""} priority-${task.priority}`}
                   style={{ left: `${(start / DAY_MINUTES) * 100}%`, width: `${Math.max(0.7, width)}%` }}
                   draggable

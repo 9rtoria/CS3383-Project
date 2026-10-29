@@ -2,7 +2,7 @@
 
 Baseline screenshots `01`–`09` were generated from the seeded demo workspace (`SEED_DEMO=true`) at 2026-10-23T14:01:25.402Z with `npm run screenshots`.
 
-ProjectA2 states `10`–`23` were captured on 2026-10-24 from the same seeded demo account at `localhost:3000`, after the A2 UI fixes.
+ProjectA2 states `10`–`26` were captured on 2026-10-29 from the same seeded demo account at `localhost:3000`, after the A2 UI fixes.
 
 - `01-today.png` — baseline today.
 - `02-board.png` — board.
@@ -27,5 +27,8 @@ ProjectA2 states `10`–`23` were captured on 2026-10-24 from the same seeded de
 - `21-notifications.png` — in-app, mentions, email, browser, digest, quiet hours, and test notification.
 - `22-mobile-settings.png` — mobile Settings header, section picker, and account/appearance context.
 - `23-dark-appearance.png` — the Settings appearance section in dark theme.
+- `24-auto-plan.png` — Today with an applied Auto-plan, exact Day Flow blocks, and the weekly load summary.
+- `25-auto-plan-settings.png` — Auto-plan limits, cadence, rest, lunch, splitting, and delegated cleanup.
+- `26-auto-plan-modal.png` — Balanced / Focus first / Light day options with unscheduled work and warnings.
 
 Screenshots are deterministic fixtures, not customer data. The Sound Lab is best judged live; a screenshot cannot convey timbre.

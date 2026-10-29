@@ -5,7 +5,11 @@ import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Plus, SunM
 import { EmptyState, PriorityBadge } from "@/components/ui";
 import { api, formatApiError } from "@/lib/client";
 import { appLocale, formatTime, parseDateOnly } from "@/lib/format";
-import type { UpcomingPayload, Workspace } from "@/lib/types";
+import type { CalendarPayload, UpcomingPayload, Workspace } from "@/lib/types";
+
+function clockLabel(minutes: number): string {
+  return formatTime(new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60));
+}
 
 export function UpcomingView({ workspace, refreshKey, onOpenTask, onQuickCapture }: {
   workspace: Workspace;
@@ -105,7 +109,7 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
 }) {
   const now = new Date();
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-  const [data, setData] = useState<import("@/lib/types").CalendarPayload | null>(null);
+  const [data, setData] = useState<CalendarPayload | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -144,6 +148,10 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
 
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const selectedTasks = selected ? data?.byDate[selected] ?? [] : [];
+  const selectedBlocks = selected ? data?.blocksByDate?.[selected] ?? [] : [];
+  const selectedTaskIds = new Set(selectedBlocks.map((block) => block.taskId));
+  const selectedDue = selectedTasks.filter((task) => !selectedTaskIds.has(task.id));
+  const selectedCount = selectedBlocks.length + selectedDue.length;
   const monthLabel = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1).toLocaleDateString(appLocale(), { month: "long", year: "numeric" });
 
   function shift(delta: number) {
@@ -181,6 +189,12 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
           <div className="calendar-grid">
             {cells.map((cell) => {
               const tasks = data?.byDate[cell.key] ?? [];
+              const blocks = data?.blocksByDate?.[cell.key] ?? [];
+              const scheduledTaskIds = new Set(blocks.map((block) => block.taskId));
+              const dueOnly = tasks.filter((task) => !scheduledTaskIds.has(task.id));
+              const itemCount = blocks.length + dueOnly.length;
+              const visibleBlocks = blocks.slice(0, 3);
+              const visibleDue = dueOnly.slice(0, Math.max(0, 3 - visibleBlocks.length));
               const dayLabel = cell.date.toLocaleDateString(appLocale(), { weekday: "long", month: "long", day: "numeric" });
               return (
                 <div
@@ -190,22 +204,28 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
                   <button
                     type="button"
                     className="day-select"
-                    aria-label={`${dayLabel}, ${tasks.length} tasks`}
+                    aria-label={`${dayLabel}, ${itemCount} items`}
                     aria-pressed={selected === cell.key}
                     onClick={() => setSelected(cell.key)}
                   >
                     <span className="day-number">{cell.date.getDate()}</span>
                   </button>
                   <div className="day-tasks">
-                    {tasks.slice(0, 3).map((task) => (
+                    {visibleBlocks.map((block) => (
+                      <button type="button" className="day-task scheduled" key={block.id} onClick={() => onOpenTask(block.taskId)}>
+                        <span className="day-task-time">{clockLabel(block.startMinute)}</span>
+                        <span className="day-task-title">{block.title ?? block.task?.title}</span>
+                      </button>
+                    ))}
+                    {visibleDue.map((task) => (
                       <button type="button" className="day-task" key={task.id} onClick={() => onOpenTask(task.id)}>
                         <span className={`side-dot${task.completedAt ? "" : task.priority === "urgent" || task.priority === "high" ? " over" : " week"}`} aria-hidden />
                         <span className="day-task-title">{task.title}</span>
                       </button>
                     ))}
-                    {tasks.length > 3 ? (
+                    {itemCount > 3 ? (
                       <button type="button" className="day-more" onClick={() => setSelected(cell.key)}>
-                        +{tasks.length - 3} more
+                        +{itemCount - 3} more
                       </button>
                     ) : null}
                   </div>
@@ -221,9 +241,15 @@ export function CalendarView({ workspace, refreshKey, weekStartsOn, onOpenTask, 
               <h2 className="section-title">{selected ? parseDateOnly(selected).toLocaleDateString(appLocale(), { weekday: "long", month: "long", day: "numeric" }) : "Pick a day"}</h2>
             </div>
             {selected ? (
-              selectedTasks.length ? (
+              selectedCount ? (
                 <div className="upcoming-tasks">
-                  {selectedTasks.map((task) => (
+                  {selectedBlocks.map((block) => (
+                    <button type="button" className="slim-task scheduled" key={block.id} onClick={() => onOpenTask(block.taskId)} style={{ padding: "7px 9px" }}>
+                      <span className="day-task-time">{clockLabel(block.startMinute)}</span>
+                      <span className="slim-title">{block.title ?? block.task?.title}</span>
+                    </button>
+                  ))}
+                  {selectedDue.map((task) => (
                     <button type="button" className="slim-task" key={task.id} onClick={() => onOpenTask(task.id)} style={{ padding: "7px 9px" }}>
                       <span className={`side-dot${task.completedAt ? "" : " today"}`} aria-hidden />
                       <span className="slim-title">{task.title}</span>

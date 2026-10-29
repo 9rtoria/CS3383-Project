@@ -82,4 +82,29 @@ describe("Zod input validation (NFR-001, error contract)", () => {
     expect(settingsSchema.safeParse({ workdayEnd: 25 }).success).toBe(false);
     expect(settingsSchema.safeParse({ capacityMinutes: 14 }).success).toBe(false);
   });
+
+  it("validates Auto-plan settings and boundaries", () => {
+    expect(settingsSchema.safeParse({
+      autoPlanEnabled: true,
+      autoPlanMode: "delegated",
+      autoPlanRestMinutes: 15,
+      autoPlanWeeklyMinutes: 1800,
+      autoPlanRefreshMinutes: 30,
+      autoPlanDeepWorkMinutes: 90,
+      autoPlanSplitLongTasks: true,
+      autoPlanIncludeWeekends: false,
+      autoPlanDefaultEstimateMinutes: 45,
+      autoPlanCapBehavior: "stop",
+      autoPlanLunchEnabled: true,
+      autoPlanLunchStart: 12,
+      autoPlanLunchEnd: 13,
+      autoPlanAllowStaleArchive: false,
+      autoPlanStaleDays: 30,
+    }).success).toBe(true);
+    expect(settingsSchema.safeParse({ autoPlanMode: "automatic" }).success).toBe(false);
+    expect(settingsSchema.safeParse({ autoPlanRefreshMinutes: 10 }).success).toBe(false);
+    expect(settingsSchema.safeParse({ autoPlanWeeklyMinutes: 30 }).success).toBe(false);
+    expect(settingsSchema.safeParse({ autoPlanDeepWorkMinutes: 5 }).success).toBe(false);
+    expect(settingsSchema.safeParse({ autoPlanLunchEnd: 25 }).success).toBe(false);
+  });
 });

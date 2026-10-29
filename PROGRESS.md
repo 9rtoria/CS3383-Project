@@ -6,13 +6,13 @@
 
 This is an independent clone for a school-demo extension. `ProjectA` remains the untouched baseline at `6876db1`; the v1.3 delivery evidence below is preserved.
 
-- **Added:** Day Flow (24-hour rail, stable anchor, drag-to-Later), Smart Plan (local-rules preview, apply, undo), Focus Mode (timer, completion, `actualMinutes`), Sound Lab (three synthesized palettes, volume, mute, optional typing), voice capture with a text fallback, and a real Settings experience (appearance, typography, motion, language/region preview, planning, focus, notifications, sound, keyboard, features).
-- **Data:** nullable `Task.actualMinutes`, migration `20261024140000_task_actual_minutes`; new `UserSettings` personalization fields and migration `20261024180000_settings_experience`; validation, API serialization, exports, and Focus persistence.
+- **Added:** Day Flow (24-hour rail, stable anchor, drag-to-Later), Smart Plan (local-rules preview, apply, undo), Focus Mode (timer, completion, `actualMinutes`), Sound Lab (three synthesized palettes, volume, mute, optional typing), voice capture with a text fallback, a real Settings experience (appearance, typography, motion, language/region preview, planning, focus, notifications, sound, keyboard, features), and **Auto-plan** (three option previews, weekly cap, rest/protected lunch, splitting, dependencies, safe/full/delegated levels, Today/Day Flow/Calendar writes, undo).
+- **Data:** nullable `Task.actualMinutes`, migration `20261024140000_task_actual_minutes`; `UserSettings` personalization fields and migration `20261024180000_settings_experience`; `PlanBlock` schedule layer and `UserSettings` Auto-plan fields in migration `20261026120000_auto_plan`; validation, API serialization, exports, and Focus persistence.
 - **Honesty boundary:** Smart Plan is labeled local rules, not AI; no model call is made. Voice uses the browser speech service and is disclosed in the capture modal. Language is a preview: core planning and Settings are translated; workspace admin remains English.
-- **Last verified commands:** `npm run typecheck` pass; `npm run lint` 0 errors / 40 baseline warnings; `npm test` **91/91** in 13 files; `npm run build` pass; Playwright **27/27** journeys across Chromium, Firefox, and WebKit (**81 executions**); axe serious/critical 0 on the checked settings sections and core pages.
+- **Last verified commands:** `npm run typecheck` pass; `npm run lint` 0 errors / 40 baseline warnings; `npm test` **100/100** in 14 files; `npm run build` pass; Playwright **31/31** journeys across Chromium, Firefox, and WebKit (**93 executions**); axe serious/critical 0 on the checked settings sections and core pages.
 - **Interface fixes:** date/time formatting now follows the app language instead of the OS locale; the Done column count includes completed cards; mobile Day Flow starts near the current block instead of the empty morning rail.
-- **New A2 journeys:** appearance/persistence, system theme, capacity/week start effects, language persistence, rapid notification queueing, feature toggles, focus/capture defaults, workday/plan buffer/start view, save failure rollback, settings search/mobile navigation, Done-column count, plus the four original A2 journeys.
-- **Screenshots:** `docs/screenshots/10-day-flow.png` through `23-dark-appearance.png`.
+- **New A2 journeys:** Auto-plan preview/apply/undo/calendar, safe auto-apply, weekly limit, Auto-plan settings, appearance/persistence, system theme, capacity/week start effects, language persistence, rapid notification queueing, feature toggles, focus/capture defaults, workday/plan buffer/start view, save failure rollback, settings search/mobile navigation, Done-column count, plus the four original A2 journeys.
+- **Screenshots:** `docs/screenshots/10-day-flow.png` through `26-auto-plan-modal.png`.
 - **Open items:** human listening pass for the sound palettes; real-microphone testing across browsers; Smart Plan remains deterministic and non-learning; Day Flow has no manual block resizing; language preview does not yet cover every admin/enterprise string.
 - **Delivery:** [`docs/A2_EXPERIMENT.md`](docs/A2_EXPERIMENT.md), [`docs/SETTINGS.md`](docs/SETTINGS.md), and [`docs/DEMO.md`](docs/DEMO.md).
 
@@ -81,8 +81,8 @@ Documentation now covers architecture, flows, design, motion, accessibility, sec
 | `build-output.txt` | Production build route table |
 | `typecheck-output.txt` | Strict TypeScript result |
 | `lint-output.txt` | ESLint result and warnings |
-| `test-output.txt` | Vitest **91/91** (A2 run) |
-| `e2e-output.txt` | Playwright **27 journeys × 3 engines = 81 executions** (A2 run) |
+| `test-output.txt` | Vitest **100/100** (A2 run) |
+| `e2e-output.txt` | Playwright **31 journeys × 3 engines = 93 executions** (A2 run) |
 | `perf-output.txt` | Baseline v1.3 Lighthouse run log; not re-run after the A2 UI additions |
 | `screenshots-output.txt` | Baseline screenshot capture log; A2 states captured separately |
 | `migrate-output.txt` | Prisma migrate deploy result |

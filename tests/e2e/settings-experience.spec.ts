@@ -194,7 +194,7 @@ test("workday shading, plan buffer, block buffer, and start view reach Today", a
   await page.getByRole("button", { name: "Today" }).first().click();
   await expect(page.locator(".day-flow-outside")).toHaveCount(2);
   await page.getByRole("button", { name: /Smart Plan/ }).click();
-  await expect(page.getByText(/breathing room/)).toBeVisible();
+  await expect(page.locator(".plan-changes").getByText(/breathing room/)).toBeVisible();
 });
 
 test("a failed settings save rolls the UI back", async ({ page }) => {

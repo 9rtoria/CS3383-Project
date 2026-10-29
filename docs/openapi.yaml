@@ -468,6 +468,12 @@ paths:
       summary: Delete a saved view
       responses:
         "200": { description: View deleted }
+  /api/auto-plan:
+    post:
+      tags: [Planning]
+      summary: Preview or apply a deterministic Auto-plan option
+      responses:
+        "200": { description: Auto-plan preview or application receipt }
   /api/today:
     get:
       tags: [Planning]

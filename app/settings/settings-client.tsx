@@ -44,6 +44,7 @@ import { Avatar, EmptyState, InlineError, LoadingButton, Menu, Modal, Spinner, T
 import { SoundSettings } from "@/components/sound-settings";
 import {
   AppearanceSettings,
+  AutoPlanSettings,
   FeaturesSettings,
   FocusCaptureSettings,
   LanguageSettings,
@@ -63,6 +64,7 @@ type SectionId =
   | "appearance"
   | "language"
   | "planning"
+  | "auto-plan"
   | "focus"
   | "notifications"
   | "sound"
@@ -121,6 +123,7 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode; group: st
   { id: "appearance", label: "Appearance", icon: <Palette size={15} />, group: "You" },
   { id: "language", label: "Language & region", icon: <Languages size={15} />, group: "You" },
   { id: "planning", label: "Planning", icon: <SlidersHorizontal size={15} />, group: "You" },
+  { id: "auto-plan", label: "Auto-plan", icon: <RefreshCw size={15} />, group: "You" },
   { id: "focus", label: "Focus & capture", icon: <Timer size={15} />, group: "You" },
   { id: "notifications", label: "Notifications", icon: <Bell size={15} />, group: "You" },
   { id: "sound", label: "Sound", icon: <Sparkles size={15} />, group: "You" },
@@ -416,7 +419,25 @@ export function SettingsClient() {
         ? { locale: settings.locale, timeFormat: settings.timeFormat, weekStartsOn: settings.weekStartsOn }
         : sectionToReset === "planning"
           ? { capacityMinutes: settings.capacityMinutes, planBufferPercent: settings.planBufferPercent, workdayStart: settings.workdayStart, workdayEnd: settings.workdayEnd, blockBufferMinutes: settings.blockBufferMinutes, startView: settings.startView }
-          : sectionToReset === "focus"
+          : sectionToReset === "auto-plan"
+            ? {
+                autoPlanEnabled: settings.autoPlanEnabled,
+                autoPlanMode: settings.autoPlanMode,
+                autoPlanRestMinutes: settings.autoPlanRestMinutes,
+                autoPlanWeeklyMinutes: settings.autoPlanWeeklyMinutes,
+                autoPlanRefreshMinutes: settings.autoPlanRefreshMinutes,
+                autoPlanDeepWorkMinutes: settings.autoPlanDeepWorkMinutes,
+                autoPlanSplitLongTasks: settings.autoPlanSplitLongTasks,
+                autoPlanIncludeWeekends: settings.autoPlanIncludeWeekends,
+                autoPlanDefaultEstimateMinutes: settings.autoPlanDefaultEstimateMinutes,
+                autoPlanCapBehavior: settings.autoPlanCapBehavior,
+                autoPlanLunchEnabled: settings.autoPlanLunchEnabled,
+                autoPlanLunchStart: settings.autoPlanLunchStart,
+                autoPlanLunchEnd: settings.autoPlanLunchEnd,
+                autoPlanAllowStaleArchive: settings.autoPlanAllowStaleArchive,
+                autoPlanStaleDays: settings.autoPlanStaleDays,
+              }
+            : sectionToReset === "focus"
             ? { focusMinutes: settings.focusMinutes, focusAutoStart: settings.focusAutoStart, captureCloseAfterAdd: settings.captureCloseAfterAdd }
             : { featuresJson: settings.featuresJson };
     patchSettings(resetSectionPatch(sectionToReset));
@@ -1005,6 +1026,7 @@ export function SettingsClient() {
         <AppearanceSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
         <LanguageSettings settings={settings} timezone={timezone} onPatch={patchSettings} onReset={resetSection} />
         <PlanningSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
+        <AutoPlanSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
         <FocusCaptureSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
 
         {/* Notifications */}
