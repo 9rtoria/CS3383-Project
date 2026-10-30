@@ -48,6 +48,7 @@ model User {
   createdInvites  Invite[]         @relation("InviteCreator")
   webhooks        Webhook[]        @relation("WebhookCreator")
   clientErrors    ClientError[]
+  planBlocks      PlanBlock[]
 
   @@index([deletedAt])
 }
@@ -98,6 +99,7 @@ model Workspace {
   notifications        Notification[]
   idempotencyKeys      IdempotencyKey[]
   undoActions          UndoAction[]
+  planBlocks           PlanBlock[]
 
   @@index([deletedAt])
 }
@@ -171,6 +173,7 @@ model Task {
   dueDate          DateTime?
   dueAllDay        Boolean          @default(true)
   estimateMinutes  Int?
+  actualMinutes    Int? // time tracked in Focus mode
   position         String
   completedAt      DateTime?
   recurrenceRule   String?
@@ -196,6 +199,7 @@ model Task {
   automationRuns   AutomationRun[]
   notifications    Notification[]
   todayDismissals  TodayDismissal[]
+  planBlocks       PlanBlock[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -405,18 +409,69 @@ model Notification {
 }
 
 model UserSettings {
-  userId            String   @id
-  theme             String   @default("system")
-  density           String   @default("comfortable")
-  capacityMinutes   Int      @default(300)
-  emailDigest       Boolean  @default(true)
-  digestHour        Int      @default(8)
-  quietStart        Int?
-  quietEnd          Int?
-  weekStartsOn      Int      @default(1)
-  notificationsJson String   @default("{\"inApp\":true,\"email\":true,\"mentions\":true}")
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  updatedAt         DateTime @updatedAt
+  userId               String   @id
+  theme                String   @default("system")
+  density              String   @default("comfortable")
+  locale               String   @default("en")
+  timeFormat           String   @default("auto")
+  readingSize          String   @default("default")
+  displayFont          String   @default("editorial")
+  accent               String   @default("moss")
+  motion               String   @default("system")
+  startView            String   @default("today")
+  capacityMinutes      Int      @default(300)
+  planBufferPercent    Int      @default(0)
+  workdayStart         Int      @default(9)
+  workdayEnd           Int      @default(18)
+  blockBufferMinutes   Int      @default(0)
+  focusMinutes         Int      @default(25)
+  focusAutoStart       Boolean  @default(false)
+  captureCloseAfterAdd Boolean  @default(true)
+  autoPlanEnabled      Boolean  @default(true)
+  autoPlanMode         String   @default("suggest")
+  autoPlanRestMinutes  Int      @default(10)
+  autoPlanWeeklyMinutes Int     @default(1500)
+  autoPlanRefreshMinutes Int    @default(30)
+  autoPlanDeepWorkMinutes Int   @default(90)
+  autoPlanSplitLongTasks Boolean @default(true)
+  autoPlanIncludeWeekends Boolean @default(false)
+  autoPlanDefaultEstimateMinutes Int @default(30)
+  autoPlanCapBehavior  String   @default("stop")
+  autoPlanLunchEnabled Boolean  @default(true)
+  autoPlanLunchStart   Int      @default(12)
+  autoPlanLunchEnd     Int      @default(13)
+  autoPlanAllowStaleArchive Boolean @default(false)
+  autoPlanStaleDays    Int      @default(30)
+  featuresJson         String   @default("{\"dayFlow\":true,\"smartPlan\":true,\"voice\":true}")
+  emailDigest          Boolean  @default(true)
+  digestHour           Int      @default(8)
+  quietStart           Int?
+  quietEnd             Int?
+  weekStartsOn         Int      @default(1)
+  notificationsJson    String   @default("{\"inApp\":true,\"email\":true,\"mentions\":true,\"browser\":true}")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt            DateTime @updatedAt
+}
+
+model PlanBlock {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  taskId      String
+  date        String
+  startMinute Int
+  minutes     Int
+  source      String    @default("auto") // auto | manual
+  locked      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@index([workspaceId, date])
+  @@index([taskId])
 }
 
 model TodayDismissal {

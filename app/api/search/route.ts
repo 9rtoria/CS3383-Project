@@ -79,6 +79,7 @@ export async function GET(req: NextRequest) {
     const where: any = {
       workspaceId,
       deletedAt: null,
+      board: { deletedAt: null },
       ...(ids ? { id: { in: ids } } : {}),
       ...(boardId ? { boardId } : {}),
       ...(priority ? { priority } : {}),

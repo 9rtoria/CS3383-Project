@@ -77,7 +77,9 @@ export async function handleApi(
   let viewer: Viewer | null = null;
 
   try {
-    const limit = options.rateLimit ?? (url.pathname.startsWith("/api/auth") ? 20 : 180);
+    // The browser suite creates a fresh guest per test. Keep production limits
+    // strict while giving the E2E harness enough headroom for three engines.
+    const limit = process.env.E2E === "true" ? 10_000 : options.rateLimit ?? (url.pathname.startsWith("/api/auth") ? 20 : 180);
     const limited = rateLimited(`${options.public ? "anon" : "ip"}:${ip}:${url.pathname}`, limit);
     if (limited.limited) {
       const response = errorResponse(new ApiError("RATE_LIMITED"), requestId);
@@ -87,6 +89,14 @@ export async function handleApi(
 
     viewer = await viewerFromRequest(req);
     if (!viewer && !options.public) throw new ApiError("UNAUTHORIZED");
+    if (viewer?.viaApiToken) {
+      // A personal API token is workspace-bound. Reject user-level endpoints and
+      // any request that tries to use it against a different workspace.
+      const requestedWorkspace = workspaceHeader(req);
+      if (!requestedWorkspace || requestedWorkspace !== viewer.apiWorkspaceId) {
+        throw new ApiError("FORBIDDEN", "This API token belongs to another workspace.");
+      }
+    }
 
     if (method !== "GET" && method !== "HEAD" && !options.skipCsrf) {
       const hasBearer = Boolean(req.headers.get("authorization"));

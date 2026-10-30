@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { featureFlags } from "@/lib/env";
 import { requireWorkspace, findTaskInWorkspace, recordActivity } from "@/lib/authz";
+import { canReadBoard } from "@/lib/rbac";
 import { randomToken } from "@/lib/crypto";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -47,7 +48,10 @@ export async function POST(req: NextRequest) {
       if (!ALLOWED.has(mimeType)) throw new ApiError("UNSUPPORTED_MEDIA_TYPE", "That file type is not allowed. Use an image, PDF, text, CSV, Office document, or ZIP.");
       const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
       if (!access.workspace.attachmentsEnabled) throw new ApiError("FEATURE_DISABLED", "Attachments are disabled for this workspace.");
-      await findTaskInWorkspace(taskId, workspaceId);
+      const task = await findTaskInWorkspace(taskId, workspaceId);
+      if (!canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id)) {
+        throw new ApiError("TASK_NOT_FOUND");
+      }
 
       const extension = path.extname(file.name).replace(/[^.a-zA-Z0-9]/g, "").slice(0, 12);
       const storageName = `${randomToken(18)}${extension}`;

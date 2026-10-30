@@ -20,7 +20,7 @@ import {
 import { mergeGuestWorkspace, createStarterWorkspaceForUser, type Viewer } from "./session";
 import { safeTimeZone } from "./time";
 
-export async function requestMagicLink(email: string, clientIp: string, next = "/") {
+export async function requestMagicLink(email: string, clientIp: string, next = "/", state = "") {
   const token = randomToken(32);
   await prisma.magicLinkToken.create({
     data: {
@@ -31,9 +31,9 @@ export async function requestMagicLink(email: string, clientIp: string, next = "
       ipHash: sha256(clientIp).slice(0, 32),
     },
   });
-  const payload = magicLinkEmail(email, token, next);
+  const payload = magicLinkEmail(email, token, next, state);
   await queueEmail(payload);
-  return { token, devUrl: featureFlags.devEmailPreview ? `${appUrl()}/api/auth/magic?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next)}` : undefined };
+  return { token, devUrl: featureFlags.devEmailPreview ? `${appUrl()}/api/auth/magic/verify?token=${encodeURIComponent(token)}${state ? `&state=${encodeURIComponent(state)}` : ""}&next=${encodeURIComponent(next)}` : undefined };
 }
 
 export async function signupGuest(viewer: Viewer, input: { name: string; email: string; password: string; timezone?: string }) {
@@ -125,38 +125,41 @@ export async function verifyMfaChallenge(challenge: string, code: string, meta: 
 export async function consumeMagicToken(token: string) {
   const record = await prisma.magicLinkToken.findUnique({ where: { tokenHash: sha256(token) } });
   if (!record || record.usedAt || record.expiresAt < new Date()) throw new ApiError("INVALID_TOKEN");
-  await prisma.magicLinkToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
+  // Atomic claim closes the read-then-write race between two verifier requests.
+  const claimed = await prisma.magicLinkToken.updateMany({
+    where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+    data: { usedAt: new Date() },
+  });
+  if (claimed.count !== 1) throw new ApiError("INVALID_TOKEN");
   return record;
 }
 
-export async function userForMagicEmail(email: string, guestId?: string | null) {
+export async function userForMagicEmail(email: string) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     if (existing.deletedAt) throw new ApiError("INVALID_TOKEN");
-    if (guestId && guestId !== existing.id) await mergeGuestWorkspace(guestId, existing.id).catch(() => undefined);
+    // A magic link authenticates the email owner. It must never merge or claim
+    // whichever guest session happens to be active in the browser that opens it.
     return existing;
-  }
-  if (guestId) {
-    const guest = await prisma.user.findUnique({ where: { id: guestId } });
-    if (guest?.isGuest) {
-      const claimed = await prisma.user.update({
-        where: { id: guestId },
-        data: { email, isGuest: false, emailVerified: new Date() },
-      });
-      return claimed;
-    }
   }
   const user = await prisma.user.create({
     data: { email, emailVerified: new Date(), name: email.split("@")[0]!, isGuest: false },
   });
-  const workspaceId = await createStarterWorkspaceForUser(user.id);
-  void workspaceId;
+  await createStarterWorkspaceForUser(user.id);
   return user;
 }
 
-export async function prepareMfa(userId: string) {
+export async function prepareMfa(userId: string, currentCode?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new ApiError("UNAUTHORIZED");
+  // Resetting an existing authenticator is a security-sensitive change. Require
+  // proof from the current factor before replacing the secret.
+  if (user.mfaEnabled) {
+    if (!currentCode?.trim()) throw new ApiError("VALIDATION_ERROR", "Enter your current authenticator code to reset two-factor.");
+    if (!user.mfaSecretEnc || !verifyTotp(decrypt(user.mfaSecretEnc), currentCode.trim())) {
+      throw new ApiError("INVALID_CREDENTIALS", "That authenticator code is not valid.");
+    }
+  }
   const qrcode = (await import("qrcode")).default;
   const secret = generateTotpSecret();
   await prisma.user.update({ where: { id: userId }, data: { mfaSecretEnc: encrypt(secret), mfaEnabled: false } });
@@ -189,7 +192,14 @@ export async function disableMfa(userId: string, code: string) {
   if (user.memberships.some((membership) => membership.workspace.requireMfa)) {
     throw new ApiError("FORBIDDEN", "An organization you belong to requires MFA. Ask an admin before disabling it.");
   }
-  if (!verifyTotp(decrypt(user.mfaSecretEnc), code)) throw new ApiError("INVALID_CREDENTIALS", "That code is not valid.");
+  let valid = verifyTotp(decrypt(user.mfaSecretEnc), code);
+  if (!valid && user.mfaBackupCodesJson) {
+    const codes = JSON.parse(user.mfaBackupCodesJson) as string[];
+    const target = sha256(normalizeBackupCode(code));
+    const index = codes.findIndex((stored) => stored === target);
+    if (index >= 0) valid = true;
+  }
+  if (!valid) throw new ApiError("INVALID_CREDENTIALS", "That code is not valid.");
   await prisma.user.update({
     where: { id: userId },
     data: { mfaEnabled: false, mfaSecretEnc: null, mfaBackupCodesJson: null },

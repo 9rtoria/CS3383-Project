@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   return handleApi(req, async ({ viewer, req: request }) => {
     const url = new URL(request.url);
     const workspaceId = url.searchParams.get("workspaceId");
-    await requireWorkspace(viewer, workspaceId, "GUEST", "workspace:read");
+    await requireWorkspace(viewer, workspaceId, "ADMIN", "automation:manage");
     const [rules, preview] = await Promise.all([
       prisma.automationRule.findMany({
         where: { workspaceId: workspaceId! },

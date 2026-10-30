@@ -51,7 +51,55 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         throw new ApiError("CONFLICT", "Bulk moves cannot be undone automatically. Move the tasks back from their current columns.");
       }
     } else if (undo.action === "board.delete") {
-      await prisma.board.update({ where: { id: undo.entityId }, data: { deletedAt: null, version: { increment: 1 } } });
+      await prisma.$transaction([
+        prisma.board.update({ where: { id: undo.entityId }, data: { deletedAt: null, version: { increment: 1 } } }),
+        prisma.task.updateMany({
+          where: { id: { in: Array.isArray(payload.taskIds) ? payload.taskIds.map(String) : [] }, boardId: undo.entityId },
+          data: { deletedAt: null, version: { increment: 1 } },
+        }),
+      ]);
+    } else if (undo.action === "auto_plan.apply") {
+      const previousBlocks = Array.isArray(payload.previousBlocks) ? payload.previousBlocks as Array<Record<string, any>> : [];
+      const previousFocus = Array.isArray(payload.previousFocus) ? payload.previousFocus as Array<Record<string, any>> : [];
+      await prisma.$transaction(async (tx) => {
+        await tx.planBlock.deleteMany({
+          where: {
+            userId: viewer.user.id,
+            workspaceId,
+            source: "auto",
+            locked: false,
+            ...(Array.isArray(payload.taskIds) ? { taskId: { in: payload.taskIds.map(String) } } : {}),
+            ...(payload.startDate && payload.endDate ? { date: { gte: payload.startDate as string, lte: payload.endDate as string } } : {}),
+          },
+        });
+        if (previousBlocks.length) {
+          await tx.planBlock.createMany({
+            data: previousBlocks.map((block) => ({
+              userId: viewer.user.id,
+              workspaceId,
+              taskId: String(block.taskId),
+              date: String(block.date),
+              startMinute: Number(block.startMinute),
+              minutes: Number(block.minutes),
+              source: "auto",
+              locked: false,
+            })),
+          });
+        }
+        for (const row of previousFocus) {
+          await tx.task.updateMany({
+            where: { id: String(row.taskId), workspaceId },
+            data: { focusDate: row.focusDate ? String(row.focusDate) : null, version: { increment: 1 } },
+          });
+        }
+        const previousArchived = Array.isArray(payload.previousArchived) ? payload.previousArchived as Array<Record<string, any>> : [];
+        for (const row of previousArchived) {
+          await tx.task.updateMany({
+            where: { id: String(row.taskId), workspaceId },
+            data: { archivedAt: row.archivedAt ? new Date(String(row.archivedAt)) : null, version: { increment: 1 } },
+          });
+        }
+      });
     } else if (undo.action === "automation.run") {
       const before = payload.before as Record<string, any>;
       if (before.priority) await prisma.task.update({ where: { id: payload.taskId }, data: { priority: before.priority, version: { increment: 1 } } });

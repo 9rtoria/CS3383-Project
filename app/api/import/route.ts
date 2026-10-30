@@ -67,7 +67,7 @@ function parseCsv(content: string): ImportTask[] {
       priority: entry.priority,
       column: entry.column,
       dueDate: entry.duedate || entry.due_date,
-      estimateMinutes: entry.estimateMinutes || entry.estimate,
+      estimateMinutes: entry.estimateminutes || entry.estimate,
       labels: entry.labels,
       completedAt: entry.completedat || entry.completed_at,
       assignee: entry.assignee,

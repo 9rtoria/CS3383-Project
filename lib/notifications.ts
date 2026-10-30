@@ -9,6 +9,13 @@ export async function notifyUser(input: {
   body?: string;
   link?: string;
 }) {
+  if (input.workspaceId) {
+    const membership = await prisma.membership.findFirst({
+      where: { workspaceId: input.workspaceId, userId: input.userId },
+      select: { id: true },
+    });
+    if (!membership) return null;
+  }
   const settings = await prisma.userSettings.findUnique({ where: { userId: input.userId } });
   let preferences: Record<string, boolean> = { inApp: true, email: true, mentions: true };
   try {

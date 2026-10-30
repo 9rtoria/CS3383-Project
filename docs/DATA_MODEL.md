@@ -1,9 +1,9 @@
 # Data model
 
 **Database:** SQLite (demo / small team) via Prisma 7 and `better-sqlite3`  
-**Schema:** `prisma/schema.prisma` — 36 models  
-**Migrations:** four checked-in migrations in `prisma/migrations/`  
-**Last updated:** 2026-10-23
+**Schema:** `prisma/schema.prisma` ??37 models
+**Migrations:** seven checked-in migrations in `prisma/migrations/`
+**Last updated:** 2026-10-30
 
 ## 1. Modeling principles
 
@@ -13,7 +13,7 @@
 4. **Optimistic concurrency.** Boards and tasks carry `version`; task moves and edits compare the client version and return `409 VERSION_CONFLICT` rather than overwriting.
 5. **Ordering is fractional.** `Column.position` and `Task.position` are lexicographic strings generated with `fractional-indexing`, so inserting between neighbors does not renumber the list.
 6. **Idempotency is persisted.** `IdempotencyKey` stores the actor, method, path, status, and response body for 24 hours.
-7. **Secrets are never stored in plaintext.** Session tokens, magic links, invites, API tokens, and backup codes are SHA-256 hashed; TOTP secrets, OIDC client secrets, and webhook secrets use AES-256-GCM.
+7. **Secrets are never stored in plaintext.** Session tokens, magic links, invites, API tokens, and backup codes are SHA-256 hashed; TOTP secrets, OIDC client secrets, webhook secrets, and email outbox bodies use AES-256-GCM. Legacy outbox rows created before this hardening may still be plaintext and should be purged or re-sealed by an operator.
 
 ## 2. Entity map
 
@@ -49,10 +49,10 @@ erDiagram
 | `User` | Person or anonymous guest | unique nullable `email`; `isGuest`; `timezone`; `deletedAt`; MFA columns |
 | `Session` | Opaque login session | unique `tokenHash`; `expiresAt`; `revokedAt`; MFA timestamp; hashed IP |
 | `Workspace` | Tenant | `type` personal/team/org; retention, MFA, AI, automation, attachment, sharing policy flags; `version` |
-| `Membership` | User ↔ workspace role | unique `(userId, workspaceId)`; role `OWNER/ADMIN/MEMBER/GUEST` |
+| `Membership` | User ??workspace role | unique `(userId, workspaceId)`; role `OWNER/ADMIN/MEMBER/GUEST` |
 | `MagicLinkToken` | One-time email login | unique hash; expiry; `usedAt`; hashed IP |
 | `Invite` | Pending workspace invitation | unique token hash; email; role; expiry; `acceptedAt` |
-| `OidcConfig` | Workspace SSO | one per workspace; encrypted client secret; allowed domains; `enforceSso` |
+| `OidcConfig` | Workspace SSO | one per workspace; encrypted client secret; allowed domains; `enforceSso` is stored but not yet enforced by sign-in policy |
 | `ApiToken` | Bearer credential | unique hash; display prefix; optional expiry/revocation |
 | `OAuthAccount` | Linked external identity | provider + provider account ID; unique per provider |
 | `UserSettings` | Preferences | theme, density, capacity, digest hour, quiet hours, notification JSON |
@@ -63,15 +63,15 @@ erDiagram
 |---|---|---|
 | `Board` | Container for columns and tasks | `visibility` workspace/private; `shareToken`; `shareEnabled`; archive/soft delete; `version` |
 | `Column` | Kanban stage | fractional `position`; optional WIP limit; `isDone` marks completion stage |
-| `Task` | Unit of work | title, description, priority, start/due, all-day flag, estimate, recurrence, focus date, assignee, creator, `version`, archive/soft delete |
+| `Task` | Unit of work | title, description, priority, start/due, all-day flag, estimate, **tracked `actualMinutes`**, recurrence, focus date, assignee, creator, `version`, archive/soft delete |
 | `Subtask` | Checklist item | ordered, completed flag |
 | `Label` / `TaskLabel` | Workspace label taxonomy | unique label name per workspace; join table |
-| `TaskDependency` | “blocked by” edge | composite PK; both sides cascade |
+| `TaskDependency` | "blocked by" edge | composite PK; schema declares cascades, but the current hand-written migration does not add the missing foreign keys on both sides |
 | `Comment` | Task discussion | soft delete; author nullable after account deletion |
 | `Attachment` | File metadata | random `storageName`; MIME, size; bytes live in `data/attachments` |
 | `ActivityEvent` | Task feed | action, entity, metadata, request ID |
 | `Reminder` | Per-user alert | `remindAt`, `sentAt`, channel; indexed by due time |
-| `TodayDismissal` | “Not today” decisions | composite PK `(userId, taskId, date)` |
+| `TodayDismissal` | "Not today" decisions | composite PK `(userId, taskId, date)` |
 | `View` | Saved board/list view | unique `(userId, workspaceId, name)`; filters JSON; favorite flag |
 
 ## 5. Automation, notifications, integrations
@@ -99,11 +99,12 @@ erDiagram
 
 ## 7. Invariants enforced in code
 
-- A task’s `columnId` must belong to its `boardId`; the task service re-checks this on create and move.
+- A task's `columnId` must belong to its `boardId`; the task service re-checks this on create and move.
 - Moving to a done column sets `completedAt`; moving out clears it. Completing a recurring task creates the next occurrence.
+- `actualMinutes` is accumulated Focus Mode time, independent of `estimateMinutes`. It is written through the versioned task update path and is serialized to the board, Today, calendar, upcoming, and JSON/CSV export surfaces.
 - A workspace must retain at least one `OWNER`; ownership transfer and member removal enforce this.
 - Private boards are visible only to their creator and workspace admins/owners.
-- A task assignee must be a member of the task’s workspace.
+- A task assignee must be a member of the task's workspace.
 - A reminder belongs to one user; the task title and board name are read at delivery time.
 - `shareToken` is random and only resolves when `shareEnabled` is true.
 - Deleting an account anonymizes the user row and removes credentials; authored content remains for workspace integrity.

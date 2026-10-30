@@ -99,6 +99,9 @@ test("AC-009/AC-005: guest work survives claim, sign-out, and password sign-in",
 
   await page.getByRole("link", { name: /Save this workspace to an account/ }).click();
   await expect(page.getByRole("heading", { name: "Keep this workspace" })).toBeVisible();
+  // Let the client form hydrate before filling; Firefox/WebKit can otherwise
+  // replace the value with React's initial empty state.
+  await page.waitForTimeout(500);
   await page.getByLabel("Your name").fill("E2E Claimer");
   await page.getByLabel("Email").fill(email);
   await page.locator('input[autocomplete="new-password"]').fill("E2ePassword123");
@@ -115,6 +118,7 @@ test("AC-009/AC-005: guest work survives claim, sign-out, and password sign-in",
   expect(signOut.status).toBe(200);
   await page.goto("/auth?mode=signin");
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await page.waitForTimeout(500);
   await page.getByLabel("Email").fill(email);
   await page.locator('input[autocomplete="current-password"]').fill("E2ePassword123");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();

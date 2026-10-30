@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
       prisma.view.findMany({ where: { userId: viewer.user.id }, orderBy: { createdAt: "asc" } }),
     ]);
 
+    const visibleNotifications = notifications.filter((notification) =>
+      !notification.workspaceId || memberships.some((membership) => membership.workspaceId === notification.workspaceId),
+    );
     const workspaces = [];
     for (const membership of memberships) {
       const workspace = membership.workspace;
@@ -108,7 +111,7 @@ export async function GET(req: NextRequest) {
       },
       workspaces,
       settings,
-      notifications: notifications.map((notification) => ({
+      notifications: visibleNotifications.map((notification) => ({
         id: notification.id,
         type: notification.type,
         title: notification.title,
@@ -118,7 +121,7 @@ export async function GET(req: NextRequest) {
         createdAt: notification.createdAt,
         workspaceId: notification.workspaceId,
       })),
-      unreadCount: notifications.filter((notification) => !notification.readAt).length,
+      unreadCount: visibleNotifications.filter((notification) => !notification.readAt).length,
       views,
       templates: BOARD_TEMPLATES,
       features: {

@@ -6,8 +6,15 @@ import { notificationUpdateSchema } from "@/lib/validation";
 
 export async function GET(req: NextRequest) {
   return handleApi(req, async ({ viewer }) => {
-    const notifications = await prisma.notification.findMany({
+    const memberships = await prisma.membership.findMany({
       where: { userId: viewer.user.id },
+      select: { workspaceId: true },
+    });
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId: viewer.user.id,
+        OR: [{ workspaceId: null }, { workspaceId: { in: memberships.map((membership) => membership.workspaceId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: 50,
     });

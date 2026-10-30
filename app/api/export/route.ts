@@ -6,7 +6,9 @@ import { canReadBoard } from "@/lib/rbac";
 import { recordAudit } from "@/lib/authz";
 
 function csvCell(value: unknown): string {
-  const text = value === null || value === undefined ? "" : String(value);
+  const raw = value === null || value === undefined ? "" : String(value);
+  // Neutralize spreadsheet formulas while preserving the visible value.
+  const text = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -44,7 +46,7 @@ export async function GET(req: NextRequest) {
       metadata: { format, boards: visible.length },
     });
     if (format === "csv") {
-      const header = ["board", "column", "title", "description", "priority", "dueDate", "completedAt", "assignee", "labels", "estimateMinutes", "archivedAt", "createdAt"];
+      const header = ["board", "column", "title", "description", "priority", "dueDate", "completedAt", "assignee", "labels", "estimateMinutes", "actualMinutes", "archivedAt", "createdAt"];
       const rows = visible.flatMap((board) =>
         board.tasks.map((task) => [
           board.name,
@@ -57,6 +59,7 @@ export async function GET(req: NextRequest) {
           task.assignee?.email ?? task.assignee?.name ?? "",
           task.labels.map((entry) => entry.label.name).join("|"),
           task.estimateMinutes ?? "",
+          task.actualMinutes ?? "",
           task.archivedAt?.toISOString() ?? "",
           task.createdAt.toISOString(),
         ].map(csvCell).join(",")),
@@ -90,6 +93,7 @@ export async function GET(req: NextRequest) {
           dueDate: task.dueDate,
           dueAllDay: task.dueAllDay,
           estimateMinutes: task.estimateMinutes,
+          actualMinutes: task.actualMinutes,
           completedAt: task.completedAt,
           archivedAt: task.archivedAt,
           recurrenceRule: task.recurrenceRule,

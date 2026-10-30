@@ -3,14 +3,18 @@ import { handleApi, ok, workspaceHeader } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { requireWorkspace } from "@/lib/authz";
+import { canReadBoard, type Role } from "@/lib/rbac";
 import { subtaskUpdateSchema } from "@/lib/validation";
 
-async function getSubtask(id: string, workspaceId: string) {
+async function getSubtask(id: string, workspaceId: string, role: Role, userId: string) {
   const subtask = await prisma.subtask.findFirst({
-    where: { id, task: { workspaceId, deletedAt: null } },
-    include: { task: { select: { id: true } } },
+    where: { id, task: { workspaceId, deletedAt: null, board: { deletedAt: null } } },
+    include: { task: { select: { id: true, board: { select: { visibility: true, createdById: true } } } } },
   });
   if (!subtask) throw new ApiError("NOT_FOUND", "Checklist item not found.");
+  if (!canReadBoard(role, subtask.task.board.visibility, subtask.task.board.createdById, userId)) {
+    throw new ApiError("NOT_FOUND", "Checklist item not found.");
+  }
   return subtask;
 }
 
@@ -19,8 +23,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const workspaceId = workspaceHeader(request);
     if (!workspaceId) throw new ApiError("VALIDATION_ERROR", "Choose a workspace.");
-    await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
-    await getSubtask(id, workspaceId);
+    const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
+    await getSubtask(id, workspaceId, access.role, viewer.user.id);
     const input = subtaskUpdateSchema.parse(body);
     const subtask = await prisma.subtask.update({
       where: { id },
@@ -35,8 +39,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const workspaceId = workspaceHeader(request);
     if (!workspaceId) throw new ApiError("VALIDATION_ERROR", "Choose a workspace.");
-    await requireWorkspace(viewer, workspaceId, "MEMBER", "content:delete");
-    await getSubtask(id, workspaceId);
+    const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:delete");
+    await getSubtask(id, workspaceId, access.role, viewer.user.id);
     await prisma.subtask.delete({ where: { id } });
     return ok({ deleted: true });
   });

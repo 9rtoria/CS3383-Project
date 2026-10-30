@@ -3,7 +3,7 @@ import { ApiError } from "./errors";
 import type { Viewer } from "./session";
 import { requireBoard, requireColumn } from "./board-authz";
 import { requireWorkspace, recordActivity, recordAudit, findTaskInWorkspace } from "./authz";
-import { canReadBoard } from "./rbac";
+import { canReadBoard, publicRole } from "./rbac";
 import { appendAfter, positionBetween, sortByPosition } from "./fractional";
 import { nextOccurrence } from "./recurrence";
 import { notifyUser } from "./notifications";
@@ -16,7 +16,7 @@ import type { taskCreateSchema, taskUpdateSchema } from "./validation";
 
 const LABEL_COLORS = ["moss", "blue", "amber", "rose", "violet", "slate"];
 
-export function serializeTask(task: any) {
+export function serializeTask(task: any, viewerId?: string) {
   return {
     id: task.id,
     workspaceId: task.workspaceId,
@@ -29,6 +29,7 @@ export function serializeTask(task: any) {
     dueDate: task.dueDate,
     dueAllDay: task.dueAllDay,
     estimateMinutes: task.estimateMinutes,
+    actualMinutes: task.actualMinutes ?? null,
     position: task.position,
     completedAt: task.completedAt,
     recurrenceRule: task.recurrenceRule,
@@ -47,7 +48,7 @@ export function serializeTask(task: any) {
       author: comment.author ?? null,
       createdAt: comment.createdAt,
     })),
-    reminders: task.reminders ?? [],
+    reminders: (task.reminders ?? []).filter((reminder: any) => !viewerId || reminder.userId === viewerId),
     dependencies: (task.dependencies ?? []).map((entry: any) => ({
       id: entry.dependsOnTask?.id ?? entry.dependsOnTaskId,
       title: entry.dependsOnTask?.title ?? "",
@@ -129,19 +130,41 @@ async function upsertLabels(tx: any, workspaceId: string, names: string[]): Prom
   return ids;
 }
 
-async function assertAssignee(tx: any, workspaceId: string, assigneeId: string | null | undefined) {
+async function assertAssignee(
+  tx: any,
+  workspaceId: string,
+  assigneeId: string | null | undefined,
+  board?: { visibility: string; createdById: string | null } | null,
+) {
   if (!assigneeId) return;
   const membership = await tx.membership.findUnique({
     where: { userId_workspaceId: { userId: assigneeId, workspaceId } },
   });
   if (!membership) throw new ApiError("VALIDATION_ERROR", "That assignee is not a member of this workspace.");
+  if (board?.visibility === "private" && !canReadBoard(publicRole(membership.role), board.visibility, board.createdById, assigneeId)) {
+    throw new ApiError("VALIDATION_ERROR", "That assignee cannot see this private board.");
+  }
 }
 
 async function createReminder(tx: any, task: any, userId: string, offset: number | null | undefined) {
   if (!task.dueDate || offset === null || offset === undefined) return;
   const remindAt = new Date(new Date(task.dueDate).getTime() - offset * 60_000);
   if (remindAt < new Date()) return;
-  await tx.reminder.create({ data: { taskId: task.id, userId, remindAt, channel: "in_app" } });
+  const settings = await tx.userSettings.findUnique({ where: { userId } });
+  let emailEnabled = true;
+  try {
+    if (settings?.notificationsJson) {
+      const parsed = JSON.parse(settings.notificationsJson) as { email?: boolean };
+      emailEnabled = parsed.email !== false;
+    }
+  } catch {
+    // Fall back to the documented default if legacy JSON is malformed.
+  }
+  // The settings toggle now controls an actual delivery channel. The jobs
+  // worker still records an in-app notification independently of this choice.
+  await tx.reminder.create({
+    data: { taskId: task.id, userId, remindAt, channel: emailEnabled ? "email" : "in_app" },
+  });
 }
 
 async function createNextOccurrence(
@@ -217,7 +240,7 @@ export async function createTask(
     const count = await prisma.task.count({ where: { columnId: column.id, deletedAt: null, archivedAt: null } });
     if (count >= column.wipLimit) throw new ApiError("WIP_LIMIT", `${column.name} is limited to ${column.wipLimit} open tasks.`);
   }
-  await assertAssignee(prisma, access.workspace.id, input.assigneeId);
+  await assertAssignee(prisma, access.workspace.id, input.assigneeId, boardAccess.board);
 
   const task = await prisma.$transaction(async (tx) => {
     const position = await resolvePosition(tx, input.columnId, input.afterId, null);
@@ -234,6 +257,7 @@ export async function createTask(
         dueAllDay: input.dueAllDay ?? true,
         startDate: input.startDate ? new Date(input.startDate) : null,
         estimateMinutes: input.estimateMinutes ?? null,
+        actualMinutes: input.actualMinutes ?? null,
         position,
         recurrenceRule: input.recurrenceRule ?? null,
         assigneeId: input.assigneeId ?? null,
@@ -298,7 +322,7 @@ export async function createTask(
     inverse: {},
     ttlSeconds: 10,
   }).catch(() => undefined);
-  return { task: serializeTask(task), undo };
+  return { task: serializeTask(task, viewer.user.id), undo };
 }
 
 export async function updateTask(
@@ -310,15 +334,15 @@ export async function updateTask(
 ): Promise<{ task: ReturnType<typeof serializeTask>; undo?: Awaited<ReturnType<typeof createUndo>>; nextTaskId?: string }> {
   const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
   const current = await prisma.task.findFirst({
-    where: { id: taskId, workspaceId, deletedAt: null },
+    where: { id: taskId, workspaceId, deletedAt: null, board: { deletedAt: null } },
     include: { labels: true, reminders: true, board: { include: { columns: { where: { deletedAt: null }, orderBy: { position: "asc" } } } } },
   });
   if (!current) throw new ApiError("TASK_NOT_FOUND");
-  if (!canReadBoard(access.role, current.board.visibility, current.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
+  if (!canReadBoard(access.role, current.board.visibility, current.board.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
   if (input.version !== current.version) {
     throw new ApiError("VERSION_CONFLICT", "This task changed elsewhere. Review the newer version.", { currentVersion: current.version });
   }
-  await assertAssignee(prisma, workspaceId, input.assigneeId);
+  await assertAssignee(prisma, workspaceId, input.assigneeId, current.board);
 
   if (input.completed === true && !current.completedAt) {
     const blockers = await prisma.taskDependency.findMany({
@@ -375,6 +399,7 @@ export async function updateTask(
         ...(input.dueAllDay !== undefined ? { dueAllDay: input.dueAllDay } : {}),
         ...(input.startDate !== undefined ? { startDate: input.startDate ? new Date(input.startDate) : null } : {}),
         ...(input.estimateMinutes !== undefined ? { estimateMinutes: input.estimateMinutes } : {}),
+        ...(input.actualMinutes !== undefined ? { actualMinutes: input.actualMinutes } : {}),
         ...(input.recurrenceRule !== undefined ? { recurrenceRule: input.recurrenceRule } : {}),
         ...(input.assigneeId !== undefined ? { assigneeId: input.assigneeId } : {}),
         ...(input.focusDate !== undefined ? { focusDate: input.focusDate } : {}),
@@ -392,6 +417,12 @@ export async function updateTask(
 
     if (completing) {
       nextTaskId = (await createNextOccurrence(tx, updated, workspaceId, viewer.user.id, requestId, viewer.user.timezone)) ?? undefined;
+    }
+
+    // A plan block is a projection of task facts and preferences. Invalidate it
+    // when those facts change instead of leaving a stale slot on Calendar/Day Flow.
+    if (["dueDate", "startDate", "estimateMinutes", "priority", "completed", "archived", "dependencyIds"].some((key) => key in input)) {
+      await tx.planBlock.deleteMany({ where: { taskId, source: "auto", locked: false } });
     }
 
     await tx.activityEvent.create({
@@ -455,7 +486,7 @@ export async function updateTask(
     });
   }
   const fresh = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, include: taskInclude });
-  return { task: serializeTask(fresh), undo, nextTaskId: result.nextTaskId };
+  return { task: serializeTask(fresh, viewer.user.id), undo, nextTaskId: result.nextTaskId };
 }
 
 export async function moveTask(
@@ -467,11 +498,11 @@ export async function moveTask(
 ) {
   const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:write");
   const current = await prisma.task.findFirst({
-    where: { id: taskId, workspaceId, deletedAt: null },
+    where: { id: taskId, workspaceId, deletedAt: null, board: { deletedAt: null } },
     include: { board: { include: { columns: { where: { deletedAt: null }, orderBy: { position: "asc" } } } } },
   });
   if (!current) throw new ApiError("TASK_NOT_FOUND");
-  if (!canReadBoard(access.role, current.board.visibility, current.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
+  if (!canReadBoard(access.role, current.board.visibility, current.board.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
   const target = current.board.columns.find((column) => column.id === input.columnId);
   if (!target) throw new ApiError("VALIDATION_ERROR", "Target column is not on this board.");
   if (input.version && input.version !== current.version) {
@@ -498,6 +529,9 @@ export async function moveTask(
     });
     if (completing) {
       nextTaskId = (await createNextOccurrence(tx, updated, workspaceId, viewer.user.id, requestId, viewer.user.timezone)) ?? undefined;
+    }
+    if (target.isDone) {
+      await tx.planBlock.deleteMany({ where: { taskId, source: "auto", locked: false } });
     }
     await tx.activityEvent.create({
       data: {
@@ -552,17 +586,17 @@ export async function moveTask(
     ttlSeconds: 60,
   });
   const fresh = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, include: taskInclude });
-  return { task: serializeTask(fresh), undo, nextTaskId: result.nextTaskId };
+  return { task: serializeTask(fresh, viewer.user.id), undo, nextTaskId: result.nextTaskId };
 }
 
 export async function deleteTask(viewer: Viewer, taskId: string, workspaceId: string, requestId: string) {
   const access = await requireWorkspace(viewer, workspaceId, "MEMBER", "content:delete");
   const current = await prisma.task.findFirst({
-    where: { id: taskId, workspaceId, deletedAt: null },
+    where: { id: taskId, workspaceId, deletedAt: null, board: { deletedAt: null } },
     include: { board: true },
   });
   if (!current) throw new ApiError("TASK_NOT_FOUND");
-  if (!canReadBoard(access.role, current.board.visibility, current.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
+  if (!canReadBoard(access.role, current.board.visibility, current.board.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
   await prisma.$transaction([
     prisma.task.update({ where: { id: taskId }, data: { deletedAt: new Date(), version: { increment: 1 } } }),
     prisma.activityEvent.create({
@@ -596,12 +630,12 @@ export async function bulkTaskAction(
 ) {
   const access = await requireWorkspace(viewer, input.workspaceId, "MEMBER", "content:write");
   const tasks = await prisma.task.findMany({
-    where: { id: { in: input.taskIds }, workspaceId: input.workspaceId, deletedAt: null },
+    where: { id: { in: input.taskIds }, workspaceId: input.workspaceId, deletedAt: null, board: { deletedAt: null } },
     include: { board: true },
   });
   if (tasks.length !== input.taskIds.length) throw new ApiError("TASK_NOT_FOUND", "One or more tasks are missing.");
   for (const task of tasks) {
-    if (!canReadBoard(access.role, task.board.visibility, task.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
+    if (!canReadBoard(access.role, task.board.visibility, task.board.createdById, viewer.user.id)) throw new ApiError("TASK_NOT_FOUND");
   }
   const now = new Date();
   if (input.action === "delete") {
@@ -679,7 +713,7 @@ export async function getTaskDetail(viewer: Viewer, taskId: string, workspaceId:
     : [];
   const undoByRun = new Map(undoActions.map((undo) => [undo.entityId, undo.id]));
   return {
-    task: serializeTask(task),
+    task: serializeTask(task, viewer.user.id),
     activity: activity.map((entry) => ({
       id: entry.id,
       action: entry.action,

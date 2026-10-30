@@ -3,7 +3,7 @@
 **Base URL:** `http://localhost:3000`  
 **Contract:** [`docs/openapi.yaml`](openapi.yaml), also served at `GET /api/openapi`  
 **Version:** 1.0.0  
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-24
 
 The API is a JSON REST surface implemented by Next.js route handlers. It is the same surface the web client uses; there is no private browser-only backend.
 
@@ -14,13 +14,13 @@ Two credential types are accepted:
 | Credential | Header / cookie | Notes |
 |---|---|---|
 | Browser session | `drift_session` HttpOnly cookie | Created by guest, sign-up, sign-in, magic link, OAuth, or SSO |
-| Personal access token | `Authorization: Bearer drift_pat_…` | Created in Settings → Integrations; bound to one user and workspace |
+| Personal access token | `Authorization: Bearer drift_pat_...` | Created in Settings → Integrations; bound to one user and workspace |
 
 Rules:
 
 - Cookie-authenticated **mutations** must send `Origin` matching `APP_URL` or the request origin. Missing or foreign origins return `403 CSRF_FAILED`.
 - Bearer requests skip the Origin check but still resolve the token owner and workspace. A token for workspace A cannot read or write workspace B.
-- API tokens currently inherit the owner’s workspace role. There are **no per-token scopes**; create tokens only for trusted integrations. This is a documented limitation, not a claim of least privilege.
+- API tokens currently inherit the owner's workspace role. There are **no per-token scopes**; create tokens only for trusted integrations. This is a documented limitation, not a claim of least privilege.
 - Workspace-scoped routes require `X-Workspace-Id` (preferred) or `?workspaceId=`.
 - Public routes: `/api/health`, `/api/openapi`, `/api/auth/*` endpoints that begin a flow, `/api/share/[token]`, and `/api/calendar/ics` with a valid token.
 
@@ -29,7 +29,7 @@ Rules:
 ```http
 GET /api/today?workspaceId=ws_123 HTTP/1.1
 Origin: http://localhost:3000
-Cookie: drift_session=…
+Cookie: drift_session=??
 X-Workspace-Id: ws_123
 ```
 
@@ -57,7 +57,7 @@ Exceeding a limit returns `429 RATE_LIMITED` with `Retry-After`.
 Success bodies are **domain-keyed**, not wrapped in `data`:
 
 ```json
-{ "task": { "id": "tsk_…", "title": "Shape the launch story", "version": 3 } }
+{ "task": { "id": "tsk_??, "title": "Shape the launch story", "version": 3 } }
 ```
 
 Lists use the plural key and, where paginated, a cursor:
@@ -73,13 +73,13 @@ Errors are uniform:
   "code": "VALIDATION_ERROR",
   "message": "Choose a board.",
   "details": { "fieldErrors": { "boardId": ["Required"] } },
-  "requestId": "2f1c9b1e-…"
+  "requestId": "2f1c9b1e-??
 }
 ```
 
 Common codes: `UNAUTHORIZED`, `FORBIDDEN`, `WORKSPACE_NOT_FOUND`, `TASK_NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `VERSION_CONFLICT`, `RATE_LIMITED`, `CSRF_FAILED`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `MFA_REQUIRED`, `INTERNAL_ERROR`.
 
-`VERSION_CONFLICT` includes the current server entity in `details.current` so the client can offer “Keep mine / Use server”.
+`VERSION_CONFLICT` includes the current server entity in `details.current` so the client can offer "Keep mine / Use server".
 
 ## 4. Endpoint index
 
@@ -93,9 +93,10 @@ All paths are relative to the base URL. `W` means workspace-scoped.
 | POST | `/api/auth/signup` | Claim a guest or create an account |
 | POST | `/api/auth/signin` | Password sign-in |
 | POST | `/api/auth/magic` | Request a magic link |
-| POST | `/api/auth/magic/verify` | Verify a magic-link token |
+| GET | `/api/auth/magic/verify` | Verify a browser-bound magic-link token |
 | POST | `/api/auth/mfa/challenge` | Complete a TOTP challenge |
-| POST | `/api/auth/signout` | Revoke the current session |
+| POST | `/api/auth/signout` | Revoke all sessions |
+| DELETE | `/api/auth/signout` | Revoke the current session |
 | GET/POST | `/api/auth/oauth/[provider]` | Start GitHub/Google/Apple OAuth |
 | GET | `/api/auth/oauth/[provider]/callback` | OAuth callback |
 | GET | `/api/auth/sso/[workspaceId]` | Start workspace OIDC SSO |
@@ -109,9 +110,10 @@ All paths are relative to the base URL. `W` means workspace-scoped.
 |---|---|---|
 | GET | `/api/bootstrap` | Viewer, workspaces, boards, labels, settings, inbox, flags |
 | GET | `/api/today` | Ranked plan, capacity contract, suggestions |
+| POST | `/api/today` | `accept`, `dismiss`, or `applyPlan` actions for the day |
 | GET | `/api/upcoming` | Next 14 days grouped by local date |
 | GET | `/api/calendar` | Tasks in a date range |
-| GET | `/api/calendar/ics` | Tokenized ICS subscription |
+| GET | `/api/calendar/ics` | Authenticated ICS download (not a calendar subscription feed) |
 | GET | `/api/insights` | Timeline, workload, board health, focus suggestion |
 | GET | `/api/archive` | Archived tasks |
 | GET | `/api/search` | Full-text search with filters and cursor |
@@ -188,7 +190,7 @@ POST /api/tasks
 Origin: http://localhost:3000
 X-Workspace-Id: ws_123
 Content-Type: application/json
-Idempotency-Key: 5b0d…
+Idempotency-Key: 5b0d??
 
 {
   "boardId": "brd_123",
@@ -201,7 +203,27 @@ Idempotency-Key: 5b0d…
 }
 ```
 
-`201` returns `{ "task": { … } }`.
+`201` returns `{ "task": { ??} }`.
+
+`actualMinutes` is an optional integer on create/update, independent of `estimateMinutes`. Focus Mode completes a task with a versioned `PATCH /api/tasks/{id}` carrying `{ "completed": true, "actualMinutes": 42, "version": 7 }`; leaving early writes `actualMinutes` without `completed`.
+
+### Apply a Smart Plan
+
+```http
+POST /api/today
+Origin: http://localhost:3000
+X-Workspace-Id: ws_123
+Content-Type: application/json
+Idempotency-Key: 8f2c??
+
+{
+  "workspaceId": "ws_123",
+  "action": "applyPlan",
+  "taskIds": ["tsk_123", "tsk_456"]
+}
+```
+
+Smart Plan is a client-side deterministic preview; the server validates board access, dependencies, and board membership before replacing the user's `focusDate` set for today and logging activity. `accept` and `dismiss` use the same workspace-scoped handler.
 
 ### Move a task
 
@@ -235,7 +257,7 @@ The response reports how many existing tasks would change and a sample diff. Pre
 
 ### Export
 
-`GET /api/export?format=csv&workspaceId=ws_123` streams a CSV with a header row. JSON export returns boards, columns, tasks, labels, and comments. Exports are scoped to the caller’s workspace and role.
+`GET /api/export?format=csv&workspaceId=ws_123` streams a CSV with a header row. JSON export returns boards, columns, tasks, labels, and comments. Exports are scoped to the caller's workspace and role.
 
 ### Import
 
@@ -264,4 +286,4 @@ The API is versioned by the `info.version` field (`1.0.0`). There is no `/v2` ye
 
 ## 9. Contract validation
 
-`docs/openapi.yaml` documents **63 paths**. It is parsed by `js-yaml` in the test suite and served at `/api/openapi`. The route index above is generated from `app/api/**/route.ts`; if you add a route, update the YAML and this table in the same change.
+`docs/openapi.yaml` documents **64 paths**. It is parsed by `js-yaml` in the test suite and served at `/api/openapi`. The route index above is generated from `app/api/**/route.ts`; if you add a route, update the YAML and this table in the same change.

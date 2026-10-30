@@ -69,7 +69,37 @@ export type UserSettings = {
   userId: string;
   theme: string;
   density: string;
+  locale: string;
+  timeFormat: string;
+  readingSize: string;
+  displayFont: string;
+  accent: string;
+  motion: string;
+  startView: string;
   capacityMinutes: number;
+  planBufferPercent: number;
+  workdayStart: number;
+  workdayEnd: number;
+  blockBufferMinutes: number;
+  focusMinutes: number;
+  focusAutoStart: boolean;
+  captureCloseAfterAdd: boolean;
+  autoPlanEnabled: boolean;
+  autoPlanMode: string;
+  autoPlanRestMinutes: number;
+  autoPlanWeeklyMinutes: number;
+  autoPlanRefreshMinutes: number;
+  autoPlanDeepWorkMinutes: number;
+  autoPlanSplitLongTasks: boolean;
+  autoPlanIncludeWeekends: boolean;
+  autoPlanDefaultEstimateMinutes: number;
+  autoPlanCapBehavior: string;
+  autoPlanLunchEnabled: boolean;
+  autoPlanLunchStart: number;
+  autoPlanLunchEnd: number;
+  autoPlanAllowStaleArchive: boolean;
+  autoPlanStaleDays: number;
+  featuresJson: string;
   emailDigest: boolean;
   digestHour: number;
   quietStart: number | null;
@@ -130,6 +160,7 @@ export type Task = {
   dueDate: string | null;
   dueAllDay: boolean;
   estimateMinutes: number | null;
+  actualMinutes: number | null;
   position: string;
   completedAt: string | null;
   recurrenceRule: string | null;
@@ -152,6 +183,21 @@ export type Task = {
   column?: { id: string; name: string; isDone: boolean };
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type PlanBlock = {
+  id: string;
+  userId: string;
+  workspaceId: string;
+  taskId: string;
+  date: string;
+  startMinute: number;
+  minutes: number;
+  source: "auto" | "manual" | string;
+  locked: boolean;
+  title?: string;
+  priority?: string;
+  task?: Pick<Task, "id" | "title" | "priority" | "estimateMinutes" | "dueDate" | "dueAllDay" | "focusDate">;
 };
 
 export type Bootstrap = {
@@ -216,6 +262,7 @@ export type TodayPayload = {
   date: string;
   capacity: { totalMinutes: number; selectedMinutes: number; remainingMinutes: number; percent: number; overbooked: boolean };
   suggestions: (Task & { reason: string; score: number; suggestedMinutes: number; selected: boolean; blocked: boolean; accepted: boolean })[];
+  planBlocks: PlanBlock[];
   counts: { open: number; selected: number; overdue: number };
   aiEnabled: boolean;
   workspace: { id: string; name: string; type: string };
@@ -232,6 +279,7 @@ export type UpcomingPayload = {
 export type CalendarPayload = {
   month: string;
   byDate: Record<string, Task[]>;
+  blocksByDate: Record<string, PlanBlock[]>;
   total: number;
 };
 

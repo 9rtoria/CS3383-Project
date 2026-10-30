@@ -2,7 +2,7 @@
 
 **Target:** one Next.js web process + one jobs worker + SQLite (demo/small team)  
 **Production path:** PostgreSQL + object storage + managed SMTP  
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-24
 
 > **Verification status:** the local production build and `next start` were executed and tested. The Dockerfile, Compose file, and CI workflow are delivered and syntax-reviewed, but **Docker was not available in the delivery environment**, so the image was not built or run here. Treat Docker as unverified until you run the commands below.
 
@@ -163,13 +163,15 @@ The E2E step starts the production server and points Playwright at `http://local
 - [ ] `npx prisma migrate deploy` applied
 - [ ] `npm run typecheck` 0 errors
 - [ ] `npm run lint` 0 errors
-- [ ] `npm test` 78/78
+- [ ] `npm test` 106/106
 - [ ] `npm run build` succeeds
+- [ ] `npm run test:e2e` 35 journeys × Chromium/Firefox/WebKit
 - [ ] `/api/health` 200
 - [ ] Guest capture works in a private window
 - [ ] Sign-in, sign-out, and MFA challenge work
 - [ ] Board move + undo works
 - [ ] Search returns scoped results
+- [ ] A2 smoke: Day Flow renders, Smart Plan preview/apply/undo works, Focus persists tracked time, Sound Lab previews, voice fallback stays available
 - [ ] Public share opens without a session and is read-only
 - [ ] Export/import round-trip works
 - [ ] Jobs run and write `JobRun`

@@ -2,7 +2,21 @@
 
 > Start: **2026-10-23 19:11 +08:00**. Actuals are wall-clock effort reconstructed from artifact timestamps and command logs, rounded to 0.01 h; they are not stopwatch measurements. Estimates are in `PLAN.md`. Categories: BUILD / DESIGN / VERIFY / OPTIMIZE / OVERHEAD.
 
-## Current state
+## ProjectA2 extension — 2026-10-24
+
+This is an independent clone for a school-demo extension. `ProjectA` remains the untouched baseline at `6876db1`; the v1.3 delivery evidence below is preserved.
+
+- **Added:** Day Flow (24-hour rail, stable anchor, drag-to-Later), Smart Plan (local-rules preview, apply, undo), Focus Mode (timer, completion, `actualMinutes`), Sound Lab (three synthesized palettes, volume, mute, optional typing), voice capture with a text fallback, a real Settings experience (appearance, typography, motion, language/region preview, planning, focus, notifications, sound, keyboard, features), and **Auto-plan** (three option previews, weekly cap, rest/protected lunch, splitting, dependencies, safe/full/delegated levels, Today/Day Flow/Calendar writes, undo).
+- **Data:** nullable `Task.actualMinutes`, migration `20261024140000_task_actual_minutes`; `UserSettings` personalization fields and migration `20261024180000_settings_experience`; `PlanBlock` schedule layer and `UserSettings` Auto-plan fields in migration `20261026120000_auto_plan`; validation, API serialization, exports, and Focus persistence.
+- **Honesty boundary:** Smart Plan is labeled local rules, not AI; no model call is made. Voice uses the browser speech service and is disclosed in the capture modal. Language is a preview: core planning and Settings are translated; workspace admin remains English.
+- **Last verified commands:** `npm run typecheck` pass; `npm run lint` 0 errors / 40 baseline warnings; `npm test` **106/106** in 15 files; `npm run build` pass; Playwright **35/35** journeys across Chromium, Firefox, and WebKit (**105 executions**); axe serious/critical 0 on the checked settings sections and core pages. A 2026-10-30 release-hardening pass addressed the highest-risk audit findings; see the top-level README for the current fixed/remaining boundary.
+- **Interface fixes:** date/time formatting now follows the app language instead of the OS locale; the Done column count includes completed cards; mobile Day Flow starts near the current block instead of the empty morning rail.
+- **New A2 journeys:** Auto-plan preview/apply/undo/calendar, safe auto-apply, weekly limit, Auto-plan settings, appearance/persistence, system theme, capacity/week start effects, language persistence, rapid notification queueing, feature toggles, focus/capture defaults, workday/plan buffer/start view, save failure rollback, settings search/mobile navigation, Done-column count, plus the four original A2 journeys.
+- **Screenshots:** `docs/screenshots/10-day-flow.png` through `26-auto-plan-modal.png`.
+- **Open items:** human listening pass for the sound palettes; real-microphone testing across browsers; Smart Plan remains deterministic and non-learning; Day Flow has no manual block resizing; language preview does not yet cover every admin/enterprise string.
+- **Delivery:** [`docs/A2_EXPERIMENT.md`](docs/A2_EXPERIMENT.md), [`docs/SETTINGS.md`](docs/SETTINGS.md), and [`docs/DEMO.md`](docs/DEMO.md).
+
+## Baseline v1.3 state
 
 - **Phase:** M7 complete — final QA and delivery review.
 - **Application status:** runnable; production build verified; guest, board, Today, Insights, search, offline, sharing, automation, and settings flows browser-tested.
@@ -15,7 +29,7 @@
 | Milestone | Scope | Start | End | BUILD | DESIGN | VERIFY | OPTIMIZE | OVERHEAD | Notes |
 |---|---|---|---:|---:|---:|---:|---:|---:|---|
 | M0 | Plan, assumptions, risks, backlog, decisions | 19:11 | 19:20 | 0.05 | 0.05 | 0.02 | 0.00 | 0.03 | Artifacts authored before code. |
-| M1 | Scaffold, tokens, Prisma 7 schema/migrations, auth, guest bootstrap, seed | 19:20 | 19:55 | 0.35 | 0.10 | 0.05 | 0.02 | 0.06 | Prisma 7 adapter; four migrations. |
+| M1 | Scaffold, tokens, Prisma 7 schema/migrations, auth, guest bootstrap, seed | 19:20 | 19:55 | 0.35 | 0.10 | 0.05 | 0.02 | 0.06 | Prisma 7 adapter; seven migrations after Auto-plan. |
 | M2 | Boards/columns/tasks, APIs, shell, drawer, comments/checklist | 19:55 | 20:25 | 0.30 | 0.08 | 0.06 | 0.02 | 0.04 | Single-page shell + task service. |
 | M3 | Kanban drag, keyboard move, optimistic UI, undo, bulk | 20:25 | 20:40 | 0.12 | 0.04 | 0.05 | 0.02 | 0.02 | Native DnD + Alt+Arrow parity. |
 | M4 | Today/Upcoming/Calendar/Archive, search, views, recurrence, reminders, notifications | 20:40 | 21:00 | 0.18 | 0.05 | 0.06 | 0.02 | 0.02 | Capacity contract fixed; FTS5 search. |
@@ -67,13 +81,13 @@ Documentation now covers architecture, flows, design, motion, accessibility, sec
 | `build-output.txt` | Production build route table |
 | `typecheck-output.txt` | Strict TypeScript result |
 | `lint-output.txt` | ESLint result and warnings |
-| `test-output.txt` | Vitest 78/78 |
-| `e2e-output.txt` | Playwright 12/12 |
-| `perf-output.txt` | Latest Lighthouse run log; `perf-run-1.txt`/`perf-run-2.txt` stable repeats; `perf-run-early-outlier.txt` earlier outlier |
-| `screenshots-output.txt` | Screenshot capture log |
+| `test-output.txt` | Vitest **106/106** (A2 hardening run) |
+| `e2e-output.txt` | Playwright **35 journeys × 3 engines = 105 executions** (A2 hardening run) |
+| `perf-output.txt` | Baseline v1.3 Lighthouse run log; not re-run after the A2 UI additions |
+| `screenshots-output.txt` | Baseline screenshot capture log; A2 states captured separately |
 | `migrate-output.txt` | Prisma migrate deploy result |
-| `audit-output.txt` | Production dependency audit |
-| `jobs-output.txt` | Background job dispatcher result |
-| `smoke-output.txt` | Health, OpenAPI, metrics, and header smoke |
-| `docs/performance/summary.json` | Lighthouse metrics |
-| `docs/screenshots/` | Nine production screenshots |
+| `audit-output.txt` | Baseline production dependency audit |
+| `jobs-output.txt` | Baseline background job dispatcher result |
+| `smoke-output.txt` | Baseline health, OpenAPI, metrics, and header smoke |
+| `docs/performance/summary.json` | Baseline Lighthouse metrics |
+| `docs/screenshots/` | Nine baseline screenshots plus eight A2 states (`10`–`17`) |

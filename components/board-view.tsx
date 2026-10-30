@@ -28,6 +28,7 @@ import { TaskCard } from "@/components/task-card";
 import { useToast } from "@/components/toast";
 import { ApiClientError, api, formatApiError, newIdempotencyKey } from "@/lib/client";
 import { enqueueWrite } from "@/lib/offline";
+import { playSound } from "@/lib/sound";
 import { parseQuickAdd } from "@/lib/nlq";
 import { formatDue, isOverdue, priorityLabel } from "@/lib/format";
 import type { BoardColumn, BoardPayload, Task, Workspace } from "@/lib/types";
@@ -154,6 +155,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
       });
       setData((current) => current ? { ...current, tasks: current.tasks.map((item) => (item.id === task.id ? { ...result.task, commentCount: item.commentCount, attachmentCount: item.attachmentCount, openDependencies: item.openDependencies } : item)) } : current);
       const columnName = result.task.column?.name ?? columns.find((column) => column.id === targetColumnId)?.name ?? "column";
+      playSound(result.task.column?.isDone ? "complete" : "move");
       setAnnouncement(`Moved ${result.task.title} to ${columnName}.`);
       toast.push({ message: `Moved to ${columnName}`, tone: "success", actionLabel: "Undo", onAction: async () => {
         const undoId = (result as unknown as { undo?: { id?: string } }).undo?.id;
@@ -179,6 +181,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
         toast.push({ message: "Move saved on this device. It will sync when you reconnect.", duration: 4500 });
         return;
       }
+      playSound("error");
       toast.error(formatApiError(moveError));
       setAnnouncement("Move failed. The task returned to its original column.");
       void loadBoard(true);
@@ -362,6 +365,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
           {columns.map((column) => {
             const list = grouped.get(column.id) ?? [];
             const open = list.filter((task) => !task.completedAt).length;
+            const columnCount = column.isDone ? list.length : open;
             const wipOver = Boolean(column.wipEnforced && column.wipLimit && open > column.wipLimit);
             const wipNear = Boolean(column.wipEnforced && column.wipLimit && open === column.wipLimit);
             return (
@@ -375,7 +379,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
                   <span className={`column-dot${column.isDone ? " done" : ""}`} aria-hidden />
                   <h2 className="column-title">
                     {column.name}
-                    <span className="column-count">{open}</span>
+                    <span className="column-count">{columnCount}</span>
                     {column.wipEnforced && column.wipLimit ? <span className={`wip-label${wipOver ? " rose" : ""}`}>WIP {open}/{column.wipLimit}</span> : null}
                   </h2>
                   <div className="column-head-actions">
@@ -406,7 +410,7 @@ export function BoardView({ workspace, boardId, refreshKey, timeZone, currentUse
                       task={task}
                       dragging={draggingId === task.id}
                       onOpen={onOpenTask}
-                      onDragStart={(dragged) => setDraggingId(dragged.id)}
+                      onDragStart={(dragged) => { setDraggingId(dragged.id); playSound("tap"); }}
                       onDragEnd={() => { setDraggingId(null); setDropColumn(null); }}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => void dropOnCard(event, task)}
@@ -569,7 +573,7 @@ function ColumnComposer({ workspaceId, boardId, columnId, timeZone, onClose, onC
     <div className="quick-composer">
       <textarea ref={ref} value={value} onChange={(event) => setValue(event.target.value)} placeholder="A small next step…" aria-label="New task title" onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
-        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void submit(); }
+        if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); }
       }} />
       <div className="quick-composer-foot">
         <span className="quick-hint">{parsed.dueDate ? formatDue(parsed.dueDate, parsed.dueAllDay) : "↵ to add · Esc to close"}</span>

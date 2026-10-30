@@ -346,6 +346,7 @@ paths:
                 dueDate: { type: [string, "null"], format: date-time }
                 dueAllDay: { type: boolean }
                 estimateMinutes: { type: [integer, "null"], maximum: 1440 }
+                actualMinutes: { type: [integer, "null"], maximum: 525600, description: Time tracked in Focus mode. }
                 labels: { type: array, items: { type: string } }
                 assigneeId: { type: [string, "null"] }
                 recurrenceRule: { type: [string, "null"] }
@@ -467,6 +468,12 @@ paths:
       summary: Delete a saved view
       responses:
         "200": { description: View deleted }
+  /api/auto-plan:
+    post:
+      tags: [Planning]
+      summary: Preview or apply a deterministic Auto-plan option
+      responses:
+        "200": { description: Auto-plan preview or application receipt }
   /api/today:
     get:
       tags: [Planning]
@@ -475,7 +482,7 @@ paths:
         "200": { description: Today payload }
     post:
       tags: [Planning]
-      summary: Accept, dismiss, or rebalance a Today suggestion
+      summary: Accept, dismiss, rebalance, or apply a previewed Smart Plan
       requestBody:
         required: true
         content:
@@ -493,6 +500,15 @@ paths:
                   properties:
                     action: { enum: [rebalance] }
                     workspaceId: { type: string }
+                - type: object
+                  required: [action, workspaceId, taskIds]
+                  properties:
+                    action: { enum: [applyPlan] }
+                    workspaceId: { type: string }
+                    taskIds:
+                      type: array
+                      maxItems: 50
+                      items: { type: string }
       responses:
         "200": { description: Updated Today payload }
   /api/insights:
@@ -564,7 +580,7 @@ paths:
         "200": { description: Settings }
     patch:
       tags: [Collaboration]
-      summary: Update preferences, timezone, capacity, and notifications
+      summary: Update appearance, language/region, planning, focus, sound-adjacent preferences, and notifications
       responses:
         "200": { description: Settings updated }
   /api/workspaces:

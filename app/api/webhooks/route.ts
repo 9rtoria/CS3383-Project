@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       : [];
     const countByWebhook = new Map(deliveryCounts.map((row) => [row.webhookId, row._count._all]));
     return ok({
-      webhooks: webhooks.map((hook) => ({
+      webhooks: webhooks.map(({ secretEnc: _secretEnc, ...hook }) => ({
         ...hook,
         events: safeEvents(hook.eventsJson),
         deliveries: countByWebhook.get(hook.id) ?? 0,

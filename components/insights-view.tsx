@@ -110,8 +110,8 @@ function TimelinePanel({ data, timeZone, days, onDays, onOpenTask }: {
               <div className="timeline-dates" aria-hidden>
                 {dates.map((date, index) => (
                   <span key={date} className={index === 0 ? "today" : ""}>
-                    <strong>{index === 0 ? "Today" : parseDateOnly(date).toLocaleDateString(undefined, { weekday: "short" })}</strong>
-                    <small>{parseDateOnly(date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small>
+                    <strong>{index === 0 ? "Today" : formatDate(parseDateOnly(date), { weekday: "short" })}</strong>
+                    <small>{formatDate(parseDateOnly(date), { month: "short", day: "numeric" })}</small>
                   </span>
                 ))}
               </div>

@@ -43,10 +43,17 @@ fs.mkdirSync(path.join(root, "data", "backups"), { recursive: true });
 
 function run(label, command, args) {
   console.log(`• ${label}`);
-  execFileSync(command, args, { stdio: "inherit", cwd: root, env: process.env });
+  const options = { stdio: "inherit", cwd: root, env: process.env };
+  if (process.platform === "win32") {
+    // Windows resolves .cmd shims only through cmd. Node 24 can otherwise
+    // throw EINVAL for npx.cmd when it is launched with execFileSync.
+    execFileSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", [command, ...args].join(" ")], options);
+  } else {
+    execFileSync(command, args, options);
+  }
 }
 
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+const npx = "npx";
 run("Generating Prisma client", npx, ["prisma", "generate"]);
 run("Applying database migrations", npx, ["prisma", "migrate", "deploy"]);
 

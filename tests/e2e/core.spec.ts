@@ -75,6 +75,28 @@ test("AC-001/AC-002: keyboard move, undo, persistence, and accessible announceme
   await expect(page.getByRole("region", { name: /^In progress/ }).getByRole("button", { name: new RegExp(title) })).toBeVisible();
 });
 
+test("the Done column counts completed cards", async ({ page }) => {
+  const title = uniqueTitle("done count");
+  await openApp(page);
+  await capture(page, title);
+  const board = await openBoard(page);
+  const card = board.getByRole("button", { name: new RegExp(title) });
+  await expect(card).toBeVisible();
+
+  await card.focus();
+  await page.keyboard.press("Alt+ArrowRight");
+  await expect(page.getByText(`Moved ${title} to In progress.`)).toBeAttached();
+  await expect(page.getByRole("region", { name: /^In progress/ }).getByRole("button", { name: new RegExp(title) })).toBeVisible();
+  const inProgressCard = page.getByRole("region", { name: /^In progress/ }).getByRole("button", { name: new RegExp(title) });
+  await inProgressCard.focus();
+  await page.keyboard.press("Alt+ArrowRight");
+  await expect(page.getByText(`Moved ${title} to Done.`)).toBeAttached();
+
+  const done = page.getByRole("region", { name: /^Done/ });
+  await expect(done.getByRole("button", { name: new RegExp(title) })).toBeVisible();
+  await expect(done.locator(".column-count")).toHaveText("1");
+});
+
 test("search is instant, scoped, and filterable", async ({ page }) => {
   const title = uniqueTitle("search needle");
   await openApp(page);

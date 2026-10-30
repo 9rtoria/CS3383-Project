@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   return handleApi(req, async ({ viewer, body }) => {
     const action = z.object({ action: z.enum(["setup", "enable", "disable"]), secret: z.string().optional(), code: z.string().optional() }).parse(body);
     if (action.action === "setup") {
-      const setup = await prepareMfa(viewer.user.id);
+      const setup = await prepareMfa(viewer.user.id, action.code);
       return ok(setup);
     }
     if (action.action === "enable") {

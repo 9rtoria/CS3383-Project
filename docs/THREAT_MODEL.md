@@ -22,13 +22,13 @@
 |---|---|---|---|---|
 | **Spoofing** | Session theft | XSS or network capture steals cookie | httpOnly, Secure in prod, SameSite=Lax, CSP, short-lived challenge tokens | CSP `unsafe-inline` weakens XSS defense; add nonces |
 | Spoofing | Credential stuffing | Attackers try leaked passwords | scrypt, rate limits, generic errors, MFA available | No breached-password check; add at scale |
-| Spoofing | OAuth/SSO forgery | Forged callback/state | State + PKCE + nonce + signature validation | Live IdP round-trip unverified |
+| Spoofing | OAuth/SSO forgery | Forged callback/state | Signed state cookie; OIDC requires explicit verified email and does not auto-link existing accounts. PKCE/nonce/ID-token validation is not implemented | Live IdP round-trip unverified; complete the OIDC token validation before regulated production |
 | Spoofing | Invite token guessing | Guess another invite | 32-byte token, hash at rest, expiry, email binding | Email delivery depends on SMTP |
 | **Tampering** | Cross-tenant write | Change `workspaceId`/task ID in request | Server-side membership + object scoping; 404 on mismatch | Covered by E2E isolation test |
 | Tampering | Stale overwrite | Two tabs edit same task | `version` check → 409; explicit conflict choice | Queue covers create/move only |
 | Tampering | Role escalation | POST role=OWNER | Role matrix + owner-only transfer | Add integration tests for every role/action pair |
 | Tampering | Audit deletion | Member deletes audit row | No delete route; admin-only read; append-only path | DB operator can tamper; add hash chain/WORM |
-| Tampering | Webhook spoofing | Receiver trusts unsigned payload | Optional HMAC signature header; delivery ID | Receiver must verify; document secret rotation |
+| Tampering | Webhook spoofing | Receiver trusts unsigned payload | Delivery IDs and retry tracking; payload signing is **not implemented** (`secretEnc` is reserved) | Add HMAC signing and document secret rotation |
 | **Repudiation** | Deny action | User claims they did not move/delete | Activity + audit with request ID, actor, time | No legal-grade non-repudiation; hash chain backlog |
 | Repudiation | Shared account | Multiple people use one login | Session list, MFA, audit actor | Cannot distinguish humans behind one account |
 | **Information disclosure** | IDOR | Guess board/task/attachment ID | Membership-scoped queries; 404; random attachment names | Add automated authz matrix |
@@ -42,7 +42,7 @@
 | DoS | Expensive search | Wildcard FTS queries | Sanitized tokens, pagination | Add query timeout at scale |
 | DoS | Job starvation | Scheduler down | Jobs separate; health/metrics | Add external alert on last successful run |
 | **Elevation of privilege** | Guest claims admin | Guest sends admin action | Server role check; guest is MEMBER of personal workspace only | Covered by RBAC tests |
-| Elevation | SSO email mismatch | Attacker controls IdP email | Verified email + issuer/audience checks; invite email binding | Configure allowed domains per org |
+| Elevation | SSO email mismatch | Attacker controls IdP email | Explicit `email_verified`, allowed domains, and no automatic linking to an existing account | ID-token signature/nonce/issuer-audience validation and an explicit SSO link flow remain backlog; configure allowed domains per org |
 | Elevation | API token scope creep | Token used outside scope | Scopes + workspace binding + expiry | Add per-endpoint scope tests |
 | Elevation | Dependency compromise | Malicious package | Lockfile, minimal deps, audit | Pin images/digests; SBOM in CI |
 
@@ -55,7 +55,7 @@
 5. **Enumeration via timing:** generic auth errors and constant-time comparisons; avoid user-existence oracles in invite flows.
 6. **CSRF via form posts:** SameSite + Origin check; bearer requests are exempt by design.
 7. **Cache poisoning:** authenticated responses are `no-store`; service worker caches bootstrap locally, not shared.
-8. **Open redirect:** `next` must start with `/`; OAuth/SSO redirect URIs are fixed to `APP_URL`.
+8. **Open redirect:** `next` must start with `/` and rejects both `//` and `/\`; OAuth/SSO redirect URIs are fixed to `APP_URL`.
 
 ## 4. Data-flow trust boundaries
 
@@ -67,7 +67,7 @@ flowchart TD
   N -->|authz + random name| FS["Attachment volume"]
   N -->|SMTP creds| M["SMTP relay"]
   N -->|HMAC| W["Customer webhook"]
-  N -->|state/PKCE| I["OIDC/OAuth IdP"]
+  N -->|signed state| I["OIDC/OAuth IdP"]
   J["Jobs process"] --> DB
   J --> M
   J --> W

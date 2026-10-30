@@ -1,6 +1,8 @@
 # START HERE
 
-This is the evaluator entry point for the Project A v1.3 delivery. The application is **Drift**, a working full-stack planner/Kanban app. Everything below was produced in one continuous run and is backed by the evidence linked here.
+This is the evaluator entry point for **ProjectA2**, an independent school-demo extension of the Project A v1.3 delivery. The application is **Drift**, a working full-stack planner/Kanban app. `ProjectA` remains the untouched baseline; this clone adds Day Flow, Smart Plan, Focus Mode, a Web Audio Sound Lab, and voice capture with a text fallback.
+
+**A2 fast tour:** open Today → Day Flow, click **Smart Plan** (preview → Apply → Undo), click **Focus next** (Begin → Pause → Complete), then visit **Settings → Sound** and press `C` for voice/text capture. Smart Plan is explicitly local rules, not AI.
 
 ## 1. Run it in two commands
 
@@ -47,10 +49,12 @@ A longer script with exact expected text is in [docs/DEMO.md](docs/DEMO.md).
 | Build output | `build-output.txt` |
 | Typecheck output | `typecheck-output.txt` |
 | Lint output (0 errors, warnings triaged) | `lint-output.txt` |
-| Unit test output (78/78) | `test-output.txt` |
-| E2E output (12/12) | `e2e-output.txt` |
+| Unit test output (106/106) | `test-output.txt` |
+| E2E output (35 journeys × 3 engines = 105 executions) | `e2e-output.txt` |
 | Lighthouse summary and reports | `perf-output.txt`, `perf-run-1.txt`, `perf-run-2.txt`, `perf-run-early-outlier.txt`, `docs/performance/` |
-| Screenshots (9) | `docs/screenshots/` |
+| Screenshots (9 baseline + 17 A2) | `docs/screenshots/` |
+| A2 design rationale and limits | [docs/A2_EXPERIMENT.md](docs/A2_EXPERIMENT.md) |
+| Settings IA and behavior | [docs/SETTINGS.md](docs/SETTINGS.md) |
 | Dependency audit | `audit-output.txt` |
 | Background jobs | `jobs-output.txt` |
 | Health/OpenAPI/metrics smoke | `smoke-output.txt` |

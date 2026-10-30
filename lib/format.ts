@@ -12,6 +12,38 @@ export function memberName(member: { name?: string | null; email?: string | null
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Dates follow the app's language, not the operating system. Without this,
+ * an English UI on a Traditional Chinese machine renders dates such as
+ * "10月24日星期六" beside English labels.
+ */
+export function appLocale(): string {
+  if (typeof window === "undefined") return "en-US";
+  try {
+    return localStorage.getItem("drift-locale") === "zh-TW" ? "zh-TW" : "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
+function timeFormatOptions(): { hour12?: boolean } {
+  if (typeof window === "undefined") return {};
+  try {
+    const value = localStorage.getItem("drift-time-format");
+    return value === "12" ? { hour12: true } : value === "24" ? { hour12: false } : {};
+  } catch {
+    return {};
+  }
+}
+
+function capitalize(value: string): string {
+  return value ? value[0]!.toUpperCase() + value.slice(1) : value;
+}
+
+function relativeDay(diff: number): string {
+  return capitalize(new Intl.RelativeTimeFormat(appLocale(), { numeric: "auto" }).format(diff, "day"));
+}
+
 export function startOfDay(value: Date): Date {
   const copy = new Date(value);
   copy.setHours(0, 0, 0, 0);
@@ -22,14 +54,14 @@ export function formatDate(value: string | Date | null | undefined, options: Int
   if (!value) return "";
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(undefined, options).format(date);
+  return new Intl.DateTimeFormat(appLocale(), options).format(date);
 }
 
 export function formatTime(value: string | Date | null | undefined): string {
   if (!value) return "";
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+  return new Intl.DateTimeFormat(appLocale(), { hour: "numeric", minute: "2-digit", ...timeFormatOptions() }).format(date);
 }
 
 export function formatDue(value: string | Date | null | undefined, allDay = true): string {
@@ -39,14 +71,14 @@ export function formatDue(value: string | Date | null | undefined, allDay = true
   const today = startOfDay(new Date());
   const target = startOfDay(date);
   const diff = Math.round((target.getTime() - today.getTime()) / DAY_MS);
-  if (diff === 0) return allDay ? "Today" : `Today ${formatTime(date)}`;
-  if (diff === 1) return allDay ? "Tomorrow" : `Tomorrow ${formatTime(date)}`;
-  if (diff === -1) return "Yesterday";
-  if (diff < -1 && diff >= -7) return `${Math.abs(diff)} days ago`;
+  if (diff === 0) return allDay ? relativeDay(0) : `${relativeDay(0)} ${formatTime(date)}`;
+  if (diff === 1) return allDay ? relativeDay(1) : `${relativeDay(1)} ${formatTime(date)}`;
+  if (diff === -1) return relativeDay(-1);
+  if (diff < -1 && diff >= -7) return relativeDay(diff);
   if (diff > 1 && diff < 7) {
-    return new Intl.DateTimeFormat(undefined, { weekday: "long", ...(allDay ? {} : { hour: "numeric", minute: "2-digit" }) }).format(date);
+    return new Intl.DateTimeFormat(appLocale(), { weekday: "long", ...(allDay ? {} : { hour: "numeric", minute: "2-digit", ...timeFormatOptions() }) }).format(date);
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(appLocale(), {
     month: "short",
     day: "numeric",
     ...(date.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {}),

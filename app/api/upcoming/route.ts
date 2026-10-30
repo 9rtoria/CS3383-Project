@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const today = todayInTimeZone(viewer.user.timezone);
     const end = addDaysToDateString(today, days);
     const tasks = await prisma.task.findMany({
-      where: { workspaceId, completedAt: null, deletedAt: null, archivedAt: null, dueDate: { not: null } },
+      where: { workspaceId, completedAt: null, deletedAt: null, archivedAt: null, dueDate: { not: null }, board: { deletedAt: null } },
       include: {
         labels: { include: { label: true } },
         board: { select: { id: true, name: true, visibility: true, createdById: true } },
@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
         dueDate: task.dueDate,
         dueAllDay: task.dueAllDay,
         estimateMinutes: task.estimateMinutes,
+        actualMinutes: task.actualMinutes,
         focusDate: task.focusDate,
         version: task.version,
         labels: task.labels.map((entry) => entry.label),

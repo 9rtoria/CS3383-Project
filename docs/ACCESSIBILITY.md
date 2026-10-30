@@ -107,6 +107,8 @@ All non-essential motion is removed under `prefers-reduced-motion: reduce`; smoo
 | No user-facing density/font-size setting | Low-vision users rely on browser zoom | Zoom works; a density setting is backlog |
 | No captions/transcripts | No audio/video content exists in v1 | N/A |
 | Reduced-motion testing is CSS-level | OS/browser variations not exhaustively tested | Manual matrix in the next QA pass |
+| A2 modal/timer/voice surfaces lack a manual AT pass | Smart Plan diff semantics, Focus timer announcements, and the voice listening state are not screen-reader verified | Automated axe covers underlying Today/Settings; schedule a manual NVDA/VoiceOver pass before claiming A2 conformance |
+| A2 voice path lacks a real-microphone matrix | Browser speech services vary by browser, OS, permission state, and network | Text fallback remains visible; test on the demo machine and one phone before the live demo |
 
 ## 11. Testing commands
 

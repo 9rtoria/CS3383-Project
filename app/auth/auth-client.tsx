@@ -20,7 +20,7 @@ type Props = {
 };
 
 function safeNext(value: string): string {
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
 }
 
 export function AuthClient({ initialClaim, initialMode, challenge, next, guestName, providers, signupAvailable, initialError = "" }: Props) {

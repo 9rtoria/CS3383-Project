@@ -2,7 +2,7 @@ import type { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "./db";
 import { hashIp, randomToken, sha256 } from "./crypto";
-import { appUrl, isProduction } from "./env";
+import { appUrl } from "./env";
 import { positionsBetween } from "./fractional";
 
 export const SESSION_COOKIE = "drift_session";
@@ -25,13 +25,20 @@ export type Viewer = {
   apiWorkspaceId?: string;
 };
 
+function secureCookies(): boolean {
+  // Local production runs on http://localhost; browsers differ on whether
+  // localhost is a secure context for Secure cookies (WebKit rejects them).
+  // Trust the configured public URL instead of NODE_ENV alone.
+  return appUrl().trim().startsWith("https://");
+}
+
 export function sessionCookie(token: string, maxAge = SESSION_DAYS * 24 * 60 * 60) {
   return {
     name: SESSION_COOKIE,
     value: token,
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: isProduction(),
+    secure: secureCookies(),
     path: "/",
     maxAge,
   };
@@ -43,7 +50,7 @@ export function clearSessionCookie() {
     value: "",
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: isProduction(),
+    secure: secureCookies(),
     path: "/",
     maxAge: 0,
   };
@@ -54,7 +61,15 @@ export function parseCookies(header: string | null): Record<string, string> {
   return Object.fromEntries(
     header.split(";").map((pair) => {
       const index = pair.indexOf("=");
-      return [pair.slice(0, index).trim(), decodeURIComponent(pair.slice(index + 1).trim())];
+      if (index < 0) return [pair.trim(), ""];
+      const raw = pair.slice(index + 1).trim();
+      let value = raw;
+      try {
+        value = decodeURIComponent(raw);
+      } catch {
+        // Malformed cookie encoding must not turn a request into a 500.
+      }
+      return [pair.slice(0, index).trim(), value];
     }),
   );
 }
@@ -77,7 +92,9 @@ async function hydrateSession(tokenHash: string): Promise<Viewer | null> {
       mfaEnabled: session.user.mfaEnabled,
     },
     sessionId: session.id,
-    mfaVerified: Boolean(session.mfaVerifiedAt) || !session.user.mfaEnabled,
+    // A session without MFA enabled is not an MFA-verified session. Workspace
+    // policies must be able to require members to actually enroll a factor.
+    mfaVerified: Boolean(session.mfaVerifiedAt) && Boolean(session.user.mfaEnabled),
     viaApiToken: false,
   };
 }

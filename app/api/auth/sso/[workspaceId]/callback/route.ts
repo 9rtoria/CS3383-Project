@@ -8,7 +8,6 @@ import { recordAudit } from "@/lib/authz";
 import {
   createSession,
   createStarterWorkspaceForUser,
-  mergeGuestWorkspace,
   parseCookies,
   sessionCookie,
   viewerFromRequest,
@@ -42,6 +41,7 @@ async function complete(req: NextRequest, workspaceId: string, params: URLSearch
       workspaceId,
     });
     if (!profile.email) return redirect("/auth?error=email_required");
+    if (!profile.emailVerified) return redirect("/auth?error=email_unverified");
     const domains = config.allowedDomains.split(",").map((domain) => domain.trim().toLowerCase()).filter(Boolean);
     if (domains.length && !domains.some((domain) => profile.email!.endsWith(`@${domain}`))) {
       return redirect("/auth?error=domain_not_allowed");
@@ -49,7 +49,13 @@ async function complete(req: NextRequest, workspaceId: string, params: URLSearch
 
     const current = await viewerFromRequest(req);
     const guestId = current?.user.isGuest ? current.user.id : null;
-    let user = await prisma.user.findUnique({ where: { email: profile.email } });
+    const existing = await prisma.user.findUnique({ where: { email: profile.email } });
+    if (existing?.deletedAt) return redirect("/auth?error=account_unavailable");
+    // Never auto-link an existing account from an org-controlled IdP. Otherwise
+    // any org owner could point discovery at their own IdP and mint a session
+    // for a member's personal account. Existing users must link SSO explicitly.
+    if (existing && existing.id !== guestId) return redirect("/auth?error=account_link_required");
+    let user = existing;
     if (!user) {
       if (guestId) {
         user = await prisma.user.update({
@@ -68,10 +74,7 @@ async function complete(req: NextRequest, workspaceId: string, params: URLSearch
         });
         await createStarterWorkspaceForUser(user.id);
       }
-    } else if (guestId && guestId !== user.id) {
-      await mergeGuestWorkspace(guestId, user.id).catch(() => undefined);
     }
-    if (!user || user.deletedAt) return redirect("/auth?error=account_unavailable");
 
     await prisma.membership.upsert({
       where: { userId_workspaceId: { userId: user.id, workspaceId } },

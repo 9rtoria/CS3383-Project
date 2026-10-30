@@ -73,8 +73,8 @@ lib/
   webhooks.ts, email.ts    outbound delivery and outbox
   oidc.ts, oauth.ts        standards-based identity flows
 prisma/
-  schema.prisma            36 models
-  migrations/              four checked-in migrations
+  schema.prisma            37 models
+  migrations/              seven checked-in migrations
   seed.ts                  deterministic demo workspace
 ```
 
@@ -112,9 +112,9 @@ Success bodies are domain-keyed (`{ task }`, `{ boards }`, `{ results }`), not w
 - **Claim:** `POST /api/auth/signup` upgrades the current guest row with email, name, and scrypt password hash. The user ID and all content stay stable.
 - **Sign-in:** password or magic link creates a new opaque session; the old guest session is not merged into an existing account (documented limitation).
 - **MFA:** TOTP secret encrypted with AES-256-GCM; backup codes hashed; challenge route issues a short-lived challenge token; org policy can require MFA.
-- **OAuth/OIDC:** authorization-code + PKCE/state, encrypted client secret, issuer discovery, nonce validation, linking by verified email. External round-trips are unverified without credentials.
+- **OAuth/OIDC:** authorization-code + signed state, encrypted client secret, issuer discovery, and verified-email checks. PKCE/nonce/ID-token validation and automatic existing-account linking are not implemented in this build; existing SSO accounts must use their current sign-in method. External round-trips are unverified without credentials.
 - **Sessions:** 30-day absolute expiry, revocation on sign-out, “sign out everywhere,” session list. Cookie is `httpOnly`, `SameSite=Lax`, `Secure` in production.
-- **CSRF:** SameSite plus an Origin allowlist for cookie mutations; bearer tokens bypass the Origin check but still require scopes.
+- **CSRF:** SameSite plus an Origin allowlist for cookie mutations; bearer tokens bypass the Origin check but are workspace-bound by the request pipeline and still pass authorization.
 
 ## 6. Tenancy and authorization
 
@@ -216,8 +216,8 @@ In serverless deployments, invoke the same command from an external scheduler/co
 - Parameterized Prisma queries; Zod at boundaries; no raw SQL except vetted FTS statements.
 - scrypt password hashing, AES-256-GCM for secrets, SHA-256 for tokens, timing-safe comparisons.
 - Fixed-window rate limits per IP/path; stricter buckets for auth, magic links, uploads, and client errors.
-- Attachment MIME allowlist, signature checks, size cap, randomized names, `Content-Disposition: attachment`.
-- Audit with hashed IPs; no secrets or raw payloads.
+- Attachment MIME allowlist, size cap, randomized names, `Content-Disposition: attachment`; magic-byte/signature sniffing is not implemented.
+- Audit rows carry actor/request/entity metadata; IP hashing is reserved but not populated by current routes. No secrets or raw payloads are logged.
 - Production requires `AUTH_SECRET` and `APP_ENCRYPTION_KEY`; no runtime secret generation in production.
 
 See [SECURITY.md](SECURITY.md) and [THREAT_MODEL.md](THREAT_MODEL.md).

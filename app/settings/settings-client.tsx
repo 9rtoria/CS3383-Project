@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -17,6 +17,8 @@ import {
   Globe2,
   History,
   KeyRound,
+  Keyboard,
+  Languages,
   LayoutGrid,
   LifeBuoy,
   Lock,
@@ -25,9 +27,12 @@ import {
   Palette,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   SunMedium,
+  Timer,
   Trash2,
   Upload,
   UserRound,
@@ -36,15 +41,36 @@ import {
   X,
 } from "lucide-react";
 import { Avatar, EmptyState, InlineError, LoadingButton, Menu, Modal, Spinner, Toggle } from "@/components/ui";
+import { SoundSettings } from "@/components/sound-settings";
+import {
+  AppearanceSettings,
+  AutoPlanSettings,
+  FeaturesSettings,
+  FocusCaptureSettings,
+  LanguageSettings,
+  PlanningSettings,
+  type ResetSection,
+  resetSectionPatch,
+} from "@/components/settings-sections";
 import { useToast } from "@/components/toast";
 import { api, formatApiError, newIdempotencyKey } from "@/lib/client";
 import { formatDate, roleLabel } from "@/lib/format";
+import { clearOfflineData } from "@/lib/offline";
+import { applyPreferencesToDocument, normalizePreferences, type SettingsPatch } from "@/lib/preferences";
+import { setLocale, useI18n } from "@/lib/i18n";
 import type { Bootstrap, UserSettings, Workspace } from "@/lib/types";
 
 type SectionId =
   | "account"
   | "appearance"
+  | "language"
+  | "planning"
+  | "auto-plan"
+  | "focus"
   | "notifications"
+  | "sound"
+  | "keyboard"
+  | "features"
   | "security"
   | "workspace"
   | "members"
@@ -96,7 +122,14 @@ type AutomationDraftPreview = {
 const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode; group: string }[] = [
   { id: "account", label: "Account", icon: <UserRound size={15} />, group: "You" },
   { id: "appearance", label: "Appearance", icon: <Palette size={15} />, group: "You" },
+  { id: "language", label: "Language & region", icon: <Languages size={15} />, group: "You" },
+  { id: "planning", label: "Planning", icon: <SlidersHorizontal size={15} />, group: "You" },
+  { id: "auto-plan", label: "Auto-plan", icon: <RefreshCw size={15} />, group: "You" },
+  { id: "focus", label: "Focus & capture", icon: <Timer size={15} />, group: "You" },
   { id: "notifications", label: "Notifications", icon: <Bell size={15} />, group: "You" },
+  { id: "sound", label: "Sound", icon: <Sparkles size={15} />, group: "You" },
+  { id: "keyboard", label: "Keyboard", icon: <Keyboard size={15} />, group: "You" },
+  { id: "features", label: "Features", icon: <Sparkles size={15} />, group: "You" },
   { id: "security", label: "Security", icon: <ShieldCheck size={15} />, group: "You" },
   { id: "workspace", label: "Workspace", icon: <LayoutGrid size={15} />, group: "Workspace" },
   { id: "members", label: "People", icon: <UsersRound size={15} />, group: "Workspace" },
@@ -104,8 +137,8 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode; group: st
   { id: "automations", label: "Automations", icon: <Workflow size={15} />, group: "Workspace" },
   { id: "integrations", label: "Integrations", icon: <Code2 size={15} />, group: "Workspace" },
   { id: "audit", label: "Audit log", icon: <History size={15} />, group: "Workspace" },
-  { id: "data", label: "Data & export", icon: <Database size={15} />, group: "Workspace" },
-  { id: "about", label: "About Drift", icon: <BookOpen size={15} />, group: "Workspace" },
+  { id: "data", label: "Data & export", icon: <Database size={15} />, group: "Data" },
+  { id: "about", label: "About Drift", icon: <BookOpen size={15} />, group: "Data" },
 ];
 
 const TRIGGERS = [
@@ -131,6 +164,7 @@ function sectionFromLocation(): SectionId {
 
 export function SettingsClient() {
   const toast = useToast();
+  const { t } = useI18n();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [workspaceId, setWorkspaceId] = useState("");
   const [section, setSection] = useState<SectionId>("account");
@@ -140,7 +174,13 @@ export function SettingsClient() {
   const [timezone, setTimezone] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
   const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [savingSettings, setSavingSettings] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [settingsQuery, setSettingsQuery] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [singleKeyShortcuts, setSingleKeyShortcuts] = useState(true);
+  const settingsRef = useRef<UserSettings | null>(null);
+  const pendingPatch = useRef<SettingsPatch>({});
+  const savingQueue = useRef(false);
   const [mfa, setMfa] = useState<MfaStatus | null>(null);
   const [mfaSetup, setMfaSetup] = useState<{ qrDataUrl: string; secret: string } | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -204,10 +244,41 @@ export function SettingsClient() {
     document.getElementById(next)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [section]);
 
+  useEffect(() => {
+    settingsRef.current = settings;
+    if (!settings) return;
+    const preferences = normalizePreferences(settings);
+    applyPreferencesToDocument(preferences);
+    setLocale(preferences.locale);
+    setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+  }, [settings]);
+
+  useEffect(() => {
+    if (!settings) return;
+    const preferences = normalizePreferences(settings);
+    if (preferences.theme !== "system" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemTheme = () => applyPreferencesToDocument(preferences);
+    media.addEventListener("change", onSystemTheme);
+    return () => media.removeEventListener("change", onSystemTheme);
+  }, [settings]);
+
+  useEffect(() => {
+    setNotificationPermission(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+    setSingleKeyShortcuts(localStorage.getItem("drift-single-key-shortcuts") !== "off");
+  }, []);
+
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const timer = window.setTimeout(() => setSaveState("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const payload = await api<Bootstrap>("/api/bootstrap");
+      settingsRef.current = payload.settings;
       setData(payload);
       setSettings(payload.settings);
       setName(payload.user.name === "You" ? "" : payload.user.name);
@@ -281,7 +352,7 @@ export function SettingsClient() {
     if (savingAccount) return;
     setSavingAccount(true);
     try {
-      await api("/api/account", { method: "PATCH", body: { name: name.trim() || user?.name, timezone } });
+      await api("/api/account", { method: "PATCH", body: { name: name.trim() || user?.name } });
       toast.success("Account updated.");
       await load();
     } catch (saveError) {
@@ -291,27 +362,113 @@ export function SettingsClient() {
     }
   }
 
-  async function patchSettings(input: Partial<UserSettings> & { timezone?: string }) {
-    if (savingSettings) return;
-    setSavingSettings(true);
-    try {
-      const result = await api<{ settings: UserSettings; user: Bootstrap["user"] }>("/api/settings", { method: "PATCH", body: input });
-      setSettings(result.settings);
-      setData((current) => current ? { ...current, settings: result.settings, user: { ...current.user, timezone: result.user.timezone } } : current);
-      toast.success("Preference saved.");
-    } catch (saveError) {
-      toast.error(formatApiError(saveError));
-    } finally {
-      setSavingSettings(false);
-    }
+  function patchSettings(input: SettingsPatch) {
+    const current = settingsRef.current;
+    if (!current) return;
+    const { timezone: _timezone, ...settingsFields } = input;
+    const next = { ...current, ...settingsFields };
+    settingsRef.current = next;
+    setSettings(next);
+    setData((currentData) => currentData ? { ...currentData, settings: next } : currentData);
+    if (input.locale === "en" || input.locale === "zh-TW") setLocale(input.locale);
+    pendingPatch.current = { ...pendingPatch.current, ...input };
+    setSaveState("saving");
+    if (savingQueue.current) return;
+    savingQueue.current = true;
+    void (async () => {
+      while (Object.keys(pendingPatch.current).length) {
+        const patch = pendingPatch.current;
+        pendingPatch.current = {};
+        try {
+          const result = await api<{ settings: UserSettings; user: Bootstrap["user"] }>("/api/settings", { method: "PATCH", body: patch, keepalive: true });
+          const { timezone: _pendingTimezone, ...pendingSettings } = pendingPatch.current;
+          const merged = { ...result.settings, ...pendingSettings };
+          settingsRef.current = merged;
+          setSettings(merged);
+          setData((currentData) => currentData ? { ...currentData, settings: merged, user: { ...currentData.user, timezone: result.user.timezone } } : currentData);
+          setTimezone(result.user.timezone);
+          setSaveState(Object.keys(pendingPatch.current).length ? "saving" : "saved");
+        } catch (saveError) {
+          setSaveState("error");
+          toast.error(formatApiError(saveError));
+          pendingPatch.current = {};
+          try {
+            const fresh = await api<{ settings: UserSettings; user: Bootstrap["user"] }>("/api/settings");
+            settingsRef.current = fresh.settings;
+            setSettings(fresh.settings);
+            setTimezone(fresh.user.timezone);
+            setData((currentData) => currentData ? { ...currentData, settings: fresh.settings, user: { ...currentData.user, timezone: fresh.user.timezone } } : currentData);
+          } catch {
+            // Keep the page usable even if the rollback read also fails.
+          }
+          break;
+        }
+      }
+      savingQueue.current = false;
+    })();
   }
 
   function applyTheme(next: "light" | "dark") {
-    setTheme(next);
-    localStorage.setItem("drift-theme", next);
-    document.documentElement.dataset.theme = next;
-    window.dispatchEvent(new Event("drift-theme-change"));
-    void patchSettings({ theme: next });
+    patchSettings({ theme: next });
+  }
+
+  function resetSection(sectionToReset: ResetSection) {
+    if (!settings) return;
+    const previous: SettingsPatch = sectionToReset === "appearance"
+      ? { theme: settings.theme, accent: settings.accent, displayFont: settings.displayFont, readingSize: settings.readingSize, density: settings.density, motion: settings.motion }
+      : sectionToReset === "language"
+        ? { locale: settings.locale, timeFormat: settings.timeFormat, weekStartsOn: settings.weekStartsOn }
+        : sectionToReset === "planning"
+          ? { capacityMinutes: settings.capacityMinutes, planBufferPercent: settings.planBufferPercent, workdayStart: settings.workdayStart, workdayEnd: settings.workdayEnd, blockBufferMinutes: settings.blockBufferMinutes, startView: settings.startView }
+          : sectionToReset === "auto-plan"
+            ? {
+                autoPlanEnabled: settings.autoPlanEnabled,
+                autoPlanMode: settings.autoPlanMode,
+                autoPlanRestMinutes: settings.autoPlanRestMinutes,
+                autoPlanWeeklyMinutes: settings.autoPlanWeeklyMinutes,
+                autoPlanRefreshMinutes: settings.autoPlanRefreshMinutes,
+                autoPlanDeepWorkMinutes: settings.autoPlanDeepWorkMinutes,
+                autoPlanSplitLongTasks: settings.autoPlanSplitLongTasks,
+                autoPlanIncludeWeekends: settings.autoPlanIncludeWeekends,
+                autoPlanDefaultEstimateMinutes: settings.autoPlanDefaultEstimateMinutes,
+                autoPlanCapBehavior: settings.autoPlanCapBehavior,
+                autoPlanLunchEnabled: settings.autoPlanLunchEnabled,
+                autoPlanLunchStart: settings.autoPlanLunchStart,
+                autoPlanLunchEnd: settings.autoPlanLunchEnd,
+                autoPlanAllowStaleArchive: settings.autoPlanAllowStaleArchive,
+                autoPlanStaleDays: settings.autoPlanStaleDays,
+              }
+            : sectionToReset === "focus"
+            ? { focusMinutes: settings.focusMinutes, focusAutoStart: settings.focusAutoStart, captureCloseAfterAdd: settings.captureCloseAfterAdd }
+            : { featuresJson: settings.featuresJson };
+    patchSettings(resetSectionPatch(sectionToReset));
+    toast.push({
+      message: t("Defaults restored."),
+      tone: "success",
+      actionLabel: t("Undo"),
+      onAction: () => patchSettings(previous),
+    });
+  }
+
+  async function requestNotifications() {
+    try {
+      setNotificationPermission(await Notification.requestPermission());
+    } catch {
+      setNotificationPermission("unsupported");
+    }
+  }
+
+  function testNotification() {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      toast.error(t("Background reminders require browser permission."));
+      return;
+    }
+    try {
+      new Notification("Drift reminder", { body: "A quiet reminder from your day." });
+      toast.success(t("A test notification was sent."));
+    } catch {
+      toast.error(t("Background reminders require browser permission."));
+    }
   }
 
   async function loadMfa() {
@@ -720,6 +877,7 @@ export function SettingsClient() {
     if (deleteConfirm !== "DELETE") return;
     try {
       await api("/api/account", { method: "DELETE", body: { confirm: "DELETE" } });
+      clearOfflineData();
       window.location.assign("/auth");
     } catch (deleteError) {
       toast.error(formatApiError(deleteError));
@@ -743,13 +901,19 @@ export function SettingsClient() {
     );
   }
 
+  const notifyPrefs = notificationsPrefs(settings);
   const visibleSections = SECTIONS.filter((item) => {
     if (item.id === "members" || item.id === "policies" || item.id === "automations") return enterprise;
     if (item.id === "audit") return enterprise && isAdmin;
     if (item.id === "integrations") return isAdmin;
     return true;
   });
-  const grouped = ["You", "Workspace"];
+  const query = settingsQuery.trim().toLowerCase();
+  const matchingSections = query
+    ? visibleSections.filter((item) => `${item.label} ${t(item.label)} ${item.group}`.toLowerCase().includes(query))
+    : [];
+  const navSections = query ? matchingSections : visibleSections;
+  const grouped = ["You", "Workspace", "Data"];
 
   return (
     <div className="settings-shell">
@@ -760,11 +924,11 @@ export function SettingsClient() {
           </span>
           Drift
         </Link>
-        <Link className="nav-item" href="/"><ArrowLeft size={15} /> Back to app</Link>
-        <div style={{ margin: "12px 6px" }}>
+        <Link className="nav-item" href="/"><ArrowLeft size={15} /> {t("Back to app")}</Link>
+        <div className="settings-workspace-switch" style={{ margin: "12px 6px" }}>
           {data.workspaces.length > 1 ? (
             <Menu
-              trigger={<><span className="workspace-avatar" style={{ width: 24, height: 24, fontSize: 9 }}>{workspace.name.slice(0, 2).toUpperCase()}</span><span className="workspace-copy"><strong>{workspace.name}</strong><span>{roleLabel(workspace.role)}</span></span><ChevronDown size={13} /></>}
+              trigger={<><span className="workspace-avatar" style={{ width: 24, height: 24, fontSize: 9 }}>{workspace.name.slice(0, 2).toUpperCase()}</span><span className="workspace-copy"><strong>{workspace.name}</strong><span>{t(roleLabel(workspace.role))}</span></span><ChevronDown size={13} /></>}
               triggerLabel="Switch workspace in settings"
               triggerClassName="workspace-button"
               align="left"
@@ -780,19 +944,36 @@ export function SettingsClient() {
           ) : (
             <div className="workspace-button" style={{ cursor: "default" }}>
               <span className="workspace-avatar" style={{ width: 24, height: 24, fontSize: 9 }}>{workspace.name.slice(0, 2).toUpperCase()}</span>
-              <span className="workspace-copy"><strong>{workspace.name}</strong><span>{roleLabel(workspace.role)}</span></span>
+              <span className="workspace-copy"><strong>{workspace.name}</strong><span>{t(roleLabel(workspace.role))}</span></span>
             </div>
           )}
         </div>
+        <div className="settings-search">
+          <Search size={14} aria-hidden />
+          <input
+            value={settingsQuery}
+            onChange={(event) => setSettingsQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && matchingSections[0]) {
+                setSection(matchingSections[0].id);
+                setSettingsQuery("");
+              }
+              if (event.key === "Escape") setSettingsQuery("");
+            }}
+            placeholder={t("Search settings")}
+            aria-label={t("Search settings")}
+          />
+        </div>
+        {query && !matchingSections.length ? <p className="settings-search-empty">{t("No settings found.")}</p> : null}
         {grouped.map((group) => {
-          const items = visibleSections.filter((item) => item.group === group);
+          const items = navSections.filter((item) => item.group === group);
           if (!items.length) return null;
           return (
             <div className="nav-section" key={group}>
-              <div className="nav-label">{group}</div>
+              <div className="nav-label">{t(group)}</div>
               {items.map((item) => (
                 <a key={item.id} href={`#${item.id}`} className={`nav-item${section === item.id ? " active" : ""}`} aria-current={section === item.id ? "page" : undefined} onClick={() => setSection(item.id)}>
-                  {item.icon} {item.label}
+                  {item.icon} {t(item.label)}
                 </a>
               ))}
             </div>
@@ -809,47 +990,94 @@ export function SettingsClient() {
 
       <main className="settings-content" id="main">
         <header className="inline" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-          <div><div className="eyebrow"><Sparkles size={12} /> Account & workspace</div><h1 className="settings-title">Settings</h1><p className="settings-sub">Quiet controls for how Drift works for you.</p></div>
-          <button type="button" className="icon-btn" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={() => applyTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <SunMedium size={18} /> : <Moon size={18} />}</button>
+          <div><div className="eyebrow"><Sparkles size={12} /> {t("Account & workspace")}</div><h1 className="settings-title">{t("Settings")}</h1><p className="settings-sub">{t("Quiet controls for how Drift works for you.")}</p></div>
+          <div className="settings-header-actions">
+            <span className={`settings-save-state ${saveState}`} aria-live="polite">
+              {saveState === "saving" ? t("Saving…") : saveState === "saved" ? t("Saved") : saveState === "error" ? t("Could not save") : t("Autosave")}
+            </span>
+            <button type="button" className="icon-btn" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={() => applyTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <SunMedium size={18} /> : <Moon size={18} />}</button>
+          </div>
         </header>
+
+        <select
+          className="select settings-mobile-section"
+          aria-label="Settings section"
+          value={section}
+          onChange={(event) => setSection(event.target.value as SectionId)}
+        >
+          {grouped.map((group) => (
+            <optgroup key={group} label={t(group)}>
+              {visibleSections.filter((item) => item.group === group).map((item) => <option key={item.id} value={item.id}>{t(item.label)}</option>)}
+            </optgroup>
+          ))}
+        </select>
 
         {error ? <InlineError>{error}</InlineError> : null}
 
         {/* Account */}
         <section className="settings-section" id="account" aria-labelledby="account-title">
-          <h2 id="account-title">Account</h2>
-          <p>Your identity in this workspace. Email changes are intentionally not self-service in v1.</p>
+          <h2 id="account-title">{t("Account")}</h2>
+          <p>{t("Your identity in this workspace. Email changes are intentionally not self-service in v1.")}</p>
           <form className="settings-card" onSubmit={saveAccount}>
-            <div className="settings-row"><div className="settings-copy"><strong>Display name</strong><span>Shown on tasks, comments, and mentions.</span></div><div className="settings-control"><input className="input" style={{ width: 240 }} value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" maxLength={80} aria-label="Display name" /></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Email</strong><span>{user.email ?? "No email yet. Save this guest workspace to add one."}</span></div><div className="settings-control">{user.isGuest ? <a className="btn sm primary" href="/auth?claim=1">Save workspace</a> : <span className="badge slate">{user.email}</span>}</div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Time zone</strong><span>Used for Today, reminders, digests, and recurrence.</span></div><div className="settings-control"><input className="input" style={{ width: 240 }} value={timezone} onChange={(event) => setTimezone(event.target.value)} list="timezones" aria-label="Time zone" /><datalist id="timezones">{["UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "Europe/Berlin", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney"].map((zone) => <option key={zone} value={zone} />)}</datalist></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Account status</strong><span>{user.isGuest ? "Guest, not yet claimable across devices." : "Verified account."} {user.mfaEnabled ? "Two-factor is on." : "Two-factor is off."}</span></div><div className="settings-control inline"><span className={`badge ${user.isGuest ? "amber" : "accent"}`}>{user.isGuest ? "Guest" : "Account"}</span><LoadingButton loading={savingAccount} className="btn primary sm" type="submit"><Check size={13} /> Save</LoadingButton></div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Display name")}</strong><span>{t("Shown on tasks, comments, and mentions.")}</span></div><div className="settings-control"><input className="input" style={{ width: 240 }} value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" maxLength={80} aria-label={t("Display name")} /></div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Email")}</strong><span>{user.email ?? "No email yet. Save this guest workspace to add one."}</span></div><div className="settings-control">{user.isGuest ? <a className="btn sm primary" href="/auth?claim=1">Save workspace</a> : <span className="badge slate">{user.email}</span>}</div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Account status")}</strong><span>{user.isGuest ? t("Guest, not yet claimable across devices.") : t("Verified account.")} {user.mfaEnabled ? t("Two-factor is on.") : t("Two-factor is off.")}</span></div><div className="settings-control inline"><span className={`badge ${user.isGuest ? "amber" : "accent"}`}>{user.isGuest ? t("Guest") : t("Account")}</span><LoadingButton loading={savingAccount} className="btn primary sm" type="submit"><Check size={13} /> {t("Save")}</LoadingButton></div></div>
           </form>
         </section>
 
-        {/* Appearance */}
-        <section className="settings-section" id="appearance" aria-labelledby="appearance-title">
-          <h2 id="appearance-title">Appearance</h2>
-          <p>Calm by default. Compact when you need more on screen.</p>
-          <div className="settings-card">
-            <div className="settings-row"><div className="settings-copy"><strong>Theme</strong><span>Follows your system unless you choose.</span></div><div className="settings-control inline"><button type="button" className={`btn sm${theme === "light" ? " primary" : ""}`} onClick={() => applyTheme("light")}><SunMedium size={13} /> Light</button><button type="button" className={`btn sm${theme === "dark" ? " primary" : ""}`} onClick={() => applyTheme("dark")}><Moon size={13} /> Dark</button></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Density</strong><span>Compact reduces row height in list views.</span></div><div className="settings-control"><select className="select" aria-label="Density" value={settings.density} onChange={(event) => void patchSettings({ density: event.target.value as UserSettings["density"] })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Week starts on</strong><span>Calendar and weekly rhythms.</span></div><div className="settings-control"><select className="select" aria-label="Week starts on" value={settings.weekStartsOn} onChange={(event) => void patchSettings({ weekStartsOn: Number(event.target.value) })}><option value={1}>Monday</option><option value={0}>Sunday</option><option value={6}>Saturday</option></select></div></div>
-          </div>
-        </section>
+        <AppearanceSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
+        <LanguageSettings settings={settings} timezone={timezone} onPatch={patchSettings} onReset={resetSection} />
+        <PlanningSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
+        <AutoPlanSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
+        <FocusCaptureSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
 
         {/* Notifications */}
         <section className="settings-section" id="notifications" aria-labelledby="notifications-title">
-          <h2 id="notifications-title">Notifications</h2>
-          <p>In-app notifications are the source of truth. Email is delivered when SMTP is configured.</p>
+          <h2 id="notifications-title">{t("Notifications")}</h2>
+          <p>{t("In-app notifications are the source of truth. Email is delivered when SMTP is configured.")}</p>
           <div className="settings-card">
-            <div className="settings-row"><div className="settings-copy"><strong>In-app notifications</strong><span>Assignments, comments, reminders, and automations.</span></div><div className="settings-control"><Toggle label="In-app notifications" checked={notificationsPrefs(settings).inApp} onChange={(next) => void patchSettings({ notificationsJson: JSON.stringify({ ...notificationsPrefs(settings), inApp: next }) })} /></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Mentions and assignments</strong><span>Only notify me when someone needs my attention.</span></div><div className="settings-control"><Toggle label="Mentions and assignment notifications" checked={notificationsPrefs(settings).mentions} onChange={(next) => void patchSettings({ notificationsJson: JSON.stringify({ ...notificationsPrefs(settings), mentions: next }) })} /></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Daily email digest</strong><span>A short morning plan. Requires SMTP in production.</span></div><div className="settings-control"><Toggle label="Daily email digest" checked={settings.emailDigest} onChange={(next) => void patchSettings({ emailDigest: next })} /></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Digest hour</strong><span>Local time, 0–23.</span></div><div className="settings-control"><select className="select" aria-label="Digest hour" value={settings.digestHour} onChange={(event) => void patchSettings({ digestHour: Number(event.target.value) })}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></div></div>
-            <div className="settings-row"><div className="settings-copy"><strong>Quiet hours</strong><span>In-app still records; email and digests pause.</span></div><div className="settings-control inline"><select className="select" aria-label="Quiet hours start" value={settings.quietStart ?? ""} onChange={(event) => void patchSettings({ quietStart: event.target.value ? Number(event.target.value) : null })}><option value="">Off</option>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}</option>)}</select><span style={{ color: "var(--faint)" }}>to</span><select className="select" aria-label="Quiet hours end" value={settings.quietEnd ?? ""} onChange={(event) => void patchSettings({ quietEnd: event.target.value ? Number(event.target.value) : null })}><option value="">Off</option>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}</option>)}</select></div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("In-app notifications")}</strong><span>{t("Assignments, comments, reminders, and automations.")}</span></div><div className="settings-control"><Toggle label={t("In-app notifications")} checked={notifyPrefs.inApp} onChange={(next) => void patchSettings({ notificationsJson: JSON.stringify({ ...notifyPrefs, inApp: next }) })} /></div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Mentions and assignments")}</strong><span>{t("Only notify me when someone needs my attention.")}</span></div><div className="settings-control"><Toggle label={t("Mentions and assignments")} checked={notifyPrefs.mentions} onChange={(next) => void patchSettings({ notificationsJson: JSON.stringify({ ...notifyPrefs, mentions: next }) })} /></div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Email reminders")}</strong><span>{t("Reminder emails use the development outbox when SMTP is not configured.")}</span></div><div className="settings-control"><Toggle label={t("Email reminders")} checked={notifyPrefs.email} onChange={(next) => void patchSettings({ notificationsJson: JSON.stringify({ ...notifyPrefs, email: next }) })} /></div></div>
+            <div className="settings-row">
+              <div className="settings-copy">
+                <strong>{t("Browser reminders")}</strong>
+                <span>{t("When this tab is hidden, a browser notification can use the system sound. The operating system decides.")}</span>
+                {notificationPermission === "granted" ? <small className="field-hint">{t("Browser enabled")}</small> : notificationPermission === "denied" ? <small className="field-hint">{t("Blocked in browser settings")}</small> : null}
+              </div>
+              <div className="settings-control inline">
+                {notificationPermission === "default" ? <button type="button" className="btn ghost sm" onClick={() => void requestNotifications()}>{t("Allow notifications")}</button> : null}
+                <Toggle label={t("Browser reminders")} checked={notifyPrefs.browser} onChange={(next) => void patchSettings({ notificationsJson: JSON.stringify({ ...notifyPrefs, browser: next }) })} />
+                <button type="button" className="btn ghost sm" onClick={testNotification}>{t("Send test")}</button>
+              </div>
+            </div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Daily email digest")}</strong><span>{t("A short morning plan. Requires SMTP in production.")}</span></div><div className="settings-control"><Toggle label={t("Daily email digest")} checked={settings.emailDigest} onChange={(next) => void patchSettings({ emailDigest: next })} /></div></div>
+            <div className="settings-row"><div className="settings-copy"><strong>{t("Digest hour")}</strong><span>{t("Local time, 0–23.")}</span></div><div className="settings-control"><select className="select" aria-label={t("Digest hour")} value={settings.digestHour} onChange={(event) => void patchSettings({ digestHour: Number(event.target.value) })}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></div></div>
+            <div className="settings-row settings-quiet-hours"><div className="settings-copy"><strong>{t("Quiet hours")}</strong><span>{t("In-app still records; email and digests pause. Cross-midnight windows are supported.")}</span></div><div className="settings-control inline"><select className="select" aria-label={`${t("Quiet hours")} start`} value={settings.quietStart ?? ""} onChange={(event) => void patchSettings({ quietStart: event.target.value ? Number(event.target.value) : null })}><option value="">{t("Off")}</option>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}</option>)}</select><span style={{ color: "var(--faint)" }}>{t("to")}</span><select className="select" aria-label={`${t("Quiet hours")} end`} value={settings.quietEnd ?? ""} onChange={(event) => void patchSettings({ quietEnd: event.target.value ? Number(event.target.value) : null })}><option value="">{t("Off")}</option>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}</option>)}</select></div></div>
           </div>
         </section>
+
+        {/* Sound */}
+        <section className="settings-section" id="sound" aria-labelledby="sound-title">
+          <div className="settings-section-head"><div><h2 id="sound-title">{t("Sound")}</h2><p>{t("A quiet material texture, not an alarm. Test it here before turning it on for a demo.")}</p></div></div>
+          <SoundSettings />
+        </section>
+
+        {/* Keyboard */}
+        <section className="settings-section" id="keyboard" aria-labelledby="keyboard-title">
+          <div className="settings-section-head"><div><h2 id="keyboard-title">{t("Keyboard")}</h2><p>{t("Keyboard-first by default. This setting stays on this device.")}</p></div></div>
+          <div className="settings-card">
+            <div className="settings-row">
+              <div className="settings-copy"><strong>{t("Single-key shortcuts")}</strong><span>{t("Press C to capture, / to search, ? for the shortcut sheet.")}</span></div>
+              <div className="settings-control"><Toggle label={t("Single-key shortcuts")} checked={singleKeyShortcuts} onChange={(next) => {
+                setSingleKeyShortcuts(next);
+                localStorage.setItem("drift-single-key-shortcuts", next ? "on" : "off");
+              }} /></div>
+            </div>
+          </div>
+        </section>
+
+        <FeaturesSettings settings={settings} onPatch={patchSettings} onReset={resetSection} />
 
         {/* Security */}
         <section className="settings-section" id="security" aria-labelledby="security-title">
@@ -1126,10 +1354,10 @@ export function SettingsClient() {
   );
 }
 
-function notificationsPrefs(settings: UserSettings): { inApp: boolean; email: boolean; mentions: boolean } {
+function notificationsPrefs(settings: UserSettings): { inApp: boolean; email: boolean; mentions: boolean; browser: boolean } {
   try {
-    return { inApp: true, email: true, mentions: true, ...JSON.parse(settings.notificationsJson) };
+    return { inApp: true, email: true, mentions: true, browser: true, ...JSON.parse(settings.notificationsJson) };
   } catch {
-    return { inApp: true, email: true, mentions: true };
+    return { inApp: true, email: true, mentions: true, browser: true };
   }
 }

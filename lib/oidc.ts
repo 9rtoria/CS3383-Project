@@ -80,7 +80,9 @@ export async function exchangeSsoCode(discovery: Discovery, input: { code: strin
   return {
     subject: profile.sub,
     email: profile.email?.toLowerCase() ?? null,
-    emailVerified: profile.email_verified !== false,
+    // Linking or creating an account requires an explicit positive assertion.
+    // Some providers omit email_verified; missing is not proof of verification.
+    emailVerified: profile.email_verified === true,
     name: profile.name?.trim() || profile.email?.split("@")[0] || "Team member",
     avatarUrl: profile.picture ?? null,
   };

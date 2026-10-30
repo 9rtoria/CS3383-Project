@@ -54,6 +54,17 @@ Content fades in over 150 ms. The sidebar and top bar do not animate on every na
 - Offline/pending badges do not pulse; they are static status, not alerts.
 - A failed queue item uses a persistent warning color, not a shake.
 
+### ProjectA2 additions
+
+- **Day Flow:** blocks settle in with a 180 ms fade/short rise, then stay still. The rail anchor is frozen on mount so blocks do not slide down while the user reads them; only the “now” marker refreshes. Dragging uses the native ghost and a lifted border, not a lagging custom physics layer.
+- **Capacity ring:** the stroke offset moves over 300 ms when the plan changes. The number is not count-animated.
+- **Smart Plan:** the modal uses the standard 180 ms scale/fade. Before/After rows update in place without stagger; Apply and Undo do not wait for an exit animation.
+- **Focus Mode:** the orb breathes over a slow cycle using transform/opacity only. The timer text is never animated. Paused state freezes the orb. Entering Focus uses the dialog timing; leaving returns focus immediately.
+- **Sound Lab:** preview buttons show pressed state only; there is no waveform animation competing with the audio.
+- **Voice Capture:** the listening indicator is a steady state with a small pulsing dot; reduced motion makes it static. The transcript remains editable throughout.
+
+All of these are covered by the global reduced-motion rule in §3.
+
 ## 3. Reduced motion
 
 `@media (prefers-reduced-motion: reduce)` sets all animation/transition durations to `0.01 ms`, disables smooth scrolling, and removes card hover translation. State still changes; only the interpolation is removed. No information is conveyed solely by motion.

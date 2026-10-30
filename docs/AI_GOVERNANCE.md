@@ -2,16 +2,19 @@
 
 **Scope:** Drift’s local assist features  
 **Model provider:** none  
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-24 (ProjectA2 addendum)
 
 ## 1. What “AI” means in v1
 
 Drift v1 ships **deterministic, explainable assistance**, not a generative model. There is no model SDK, no prompt, no external inference call, and no customer data sent to a third party.
 
+ProjectA2's **Smart Plan** follows the same boundary. The UI says “Preview first — local rules only” and “No model call”; it does not call itself AI. The plan is computed in the browser from the Today payload, previewed before any write, and reversible with Undo. Voice capture is separately disclosed as using the browser's speech service; the task text and transcript are not sent to an external model by Drift.
+
 | Feature | Mechanism | User-visible output |
 |---|---|---|
 | Quick-add parsing | Regex/grammar rules over the capture text | Parsed date, time, priority, labels, estimate, recurrence |
 | Today plan | Weighted ranking over due date, priority, effort, focus date, and capacity | Ordered tasks with a short reason per task |
+| Smart Plan (ProjectA2) | Deterministic selection over priority, due date, estimates, dependencies, and remaining capacity | Before/After preview, added/waiting counts, explicit Apply, and Undo |
 | Checklist suggestions | Small template library keyed by task verbs | Suggested subtasks, never auto-applied |
 | Board health | Counts and aging thresholds | WIP/aging hints in Insights |
 
@@ -39,8 +42,8 @@ If a future release adds an external provider, it must ship with: explicit opt-i
 
 | Control | Location | Effect |
 |---|---|---|
-| `Workspace.aiEnabled` | Workspace settings / DB | Hides assist suggestions for that workspace |
-| `AI_KILL_SWITCH=true` | Environment | Disables all assist suggestions process-wide |
+| `Workspace.aiEnabled` | Workspace settings / DB | Hides the Smart Plan and Auto-plan controls for that workspace; the core Today list and local quick-add parser remain available |
+| `AI_KILL_SWITCH=true` | Environment | Hides those assist controls process-wide; it does not delete tasks or block normal capture |
 | Capacity setting | Settings → Planning | Changes the minutes available to the Today planner |
 | Dismissal | Today item menu | Removes an item from today’s plan only |
 | Automation preview | Settings → Automations | Side-effect-free diff before apply |
@@ -64,7 +67,7 @@ The test asserts exact parses/order, so a rule change is visible in review. It i
 | Ambiguous priority | Defaults to `none`; the user can set it in the drawer |
 | Invalid timezone | Falls back to UTC for date keys |
 | Capacity zero | Today shows the real total and marks the plan overbooked; it does not divide by zero |
-| Kill switch on | Suggestions are absent, not broken; core capture/planning still works |
+| Kill switch on | Smart Plan/Auto-plan controls disappear; core capture and the basic Today list still work |
 | Recurrence edge (DST) | Next occurrence is computed in the user’s timezone; tests cover spring/fall transitions |
 
 ## 7. Limitations

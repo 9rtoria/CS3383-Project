@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast";
 import { Runtime } from "@/components/runtime";
+import { SoundLayer } from "@/components/sound-layer";
 
 export const metadata: Metadata = {
   title: {
@@ -40,6 +41,12 @@ const themeBootstrap = `
     var stored = localStorage.getItem("drift-theme");
     var dark = stored === "dark" || ((!stored || stored === "system") && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.documentElement.dataset.themeMode = stored || "system";
+    var locale = localStorage.getItem("drift-locale");
+    if (locale === "zh-TW") {
+      document.documentElement.lang = "zh-TW";
+      document.documentElement.dataset.locale = "zh-TW";
+    }
   } catch (error) {
     document.documentElement.dataset.theme = "light";
   }
@@ -58,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <ToastProvider>
           <Runtime />
+          <SoundLayer />
           {children}
         </ToastProvider>
       </body>
