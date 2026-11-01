@@ -150,6 +150,9 @@ public class AppService {
         for (Map<String, Object> membership : memberships) {
             Map<String, Object> workspace = linked(membership);
             workspace.put("boards", boards(userId, (String) membership.get("id")));
+            workspace.put("labels", jdbc.queryForList("""
+                SELECT id, name, color FROM label WHERE workspace_id = ? ORDER BY name
+                """, membership.get("id")));
             workspaces.add(workspace);
         }
         return linked(Map.of(
@@ -228,6 +231,7 @@ public class AppService {
         int selectedMinutes = 0;
         for (Map<String, Object> task : tasks) {
             Map<String, Object> suggestion = linked(task);
+            suggestion.put("labels", labelsForTask((String) task.get("id")));
             boolean selected = suggestion.get("focusDate") != null;
             suggestion.put("selected", selected);
             suggestion.put("accepted", selected);
@@ -309,6 +313,7 @@ public class AppService {
             input.description() == null ? "" : input.description(), priority, input.startDate(),
             input.dueDate(), dueAllDay ? 1 : 0, normalizeEstimate(input.estimateMinutes()),
             normalizeActual(input.actualMinutes()), position, userId, now, now);
+        replaceTaskLabels(taskId, workspaceId, input.labels());
         return linked(Map.of("task", task(userId, taskId)));
     }
 
@@ -409,6 +414,7 @@ public class AppService {
             """, title, description, priority, startDate, dueDate, dueAllDay ? 1 : 0,
             estimate, actual, Instant.now().toString(), taskId, version);
         if (updated == 0) throw ApiException.conflict("This task changed elsewhere.", version + 1);
+        if (input.labels() != null) replaceTaskLabels(taskId, (String) current.get("workspaceId"), input.labels());
         return linked(Map.of("task", task(userId, taskId)));
     }
 
@@ -458,7 +464,7 @@ public class AppService {
     }
 
     private List<Map<String, Object>> tasks(String userId, String boardId, String columnId) {
-        return jdbc.queryForList("""
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId,
                    t.column_id AS columnId, t.title, t.description, t.priority,
                    t.start_date AS startDate, t.due_date AS dueDate,
@@ -471,6 +477,10 @@ public class AppService {
               AND b.workspace_id = t.workspace_id
             ORDER BY t.position, t.created_at
             """, boardId, columnId);
+        for (Map<String, Object> task : tasks) {
+            task.put("labels", labelsForTask((String) task.get("id")));
+        }
+        return tasks;
     }
 
     private Map<String, Object> user(String userId) {
@@ -504,7 +514,39 @@ public class AppService {
     private Map<String, Object> task(String userId, String taskId) {
         Map<String, Object> task = taskRow(taskId);
         requireMembership(userId, (String) task.get("workspaceId"));
+        task.put("labels", labelsForTask(taskId));
         return task;
+    }
+
+    private List<Map<String, Object>> labelsForTask(String taskId) {
+        return jdbc.queryForList("""
+            SELECT l.id, l.name, l.color
+            FROM task_label tl JOIN label l ON l.id = tl.label_id
+            WHERE tl.task_id = ? ORDER BY l.name
+            """, taskId);
+    }
+
+    private void replaceTaskLabels(String taskId, String workspaceId, List<String> names) {
+        jdbc.update("DELETE FROM task_label WHERE task_id = ?", taskId);
+        if (names == null) return;
+        for (String name : names.stream().map(value -> value == null ? "" : value.trim())
+            .filter(value -> !value.isEmpty()).distinct().limit(8).toList()) {
+            String labelId = upsertLabel(workspaceId, name);
+            jdbc.update("INSERT OR IGNORE INTO task_label (task_id, label_id) VALUES (?, ?)", taskId, labelId);
+        }
+    }
+
+    private String upsertLabel(String workspaceId, String name) {
+        return jdbc.queryForList("SELECT id FROM label WHERE workspace_id = ? AND name = ?", workspaceId, name)
+            .stream().findFirst().map(row -> row.get("id").toString()).orElseGet(() -> {
+                String labelId = id();
+                String[] colors = {"moss", "blue", "amber", "rose", "violet", "slate"};
+                String color = colors[Math.floorMod(name.hashCode(), colors.length)];
+                jdbc.update("""
+                    INSERT INTO label (id, workspace_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)
+                    """, labelId, workspaceId, name, color, Instant.now().toString());
+                return labelId;
+            });
     }
 
     private void requireMembership(String userId, String workspaceId) {

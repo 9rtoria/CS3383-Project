@@ -16,7 +16,8 @@ public final class ApiDtos {
         String dueDate,
         Boolean dueAllDay,
         Integer estimateMinutes,
-        Integer actualMinutes
+        Integer actualMinutes,
+        java.util.List<String> labels
     ) {
     }
 
@@ -29,7 +30,8 @@ public final class ApiDtos {
         String dueDate,
         Boolean dueAllDay,
         Integer estimateMinutes,
-        Integer actualMinutes
+        Integer actualMinutes,
+        java.util.List<String> labels
     ) {
     }
 

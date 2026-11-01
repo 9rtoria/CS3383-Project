@@ -291,6 +291,9 @@
     if (task.priority && task.priority !== "none") {
       meta.append(element("span", `pill priority-${task.priority}`, task.priority));
     }
+    for (const label of task.labels ?? []) {
+      meta.append(element("span", `pill label-${label.color || "slate"}`, label.name));
+    }
     if (task.estimateMinutes) meta.append(element("span", "pill", `${task.estimateMinutes}m`));
     if (task.actualMinutes) meta.append(element("span", "pill", `${task.actualMinutes}m tracked`));
     if (task.startDate) meta.append(element("span", "pill", `starts ${task.startDate.slice(0, 10)}`));
@@ -371,6 +374,7 @@
     $("taskTitle").value = task?.title ?? "";
     $("taskDescription").value = task?.description ?? "";
     $("taskPriority").value = task?.priority ?? "none";
+    $("taskLabels").value = (task?.labels ?? []).map((label) => label.name).join(", ");
     $("taskEstimate").value = task?.estimateMinutes ?? "";
     $("taskStart").value = task?.startDate ? String(task.startDate).slice(0, 10) : "";
     $("taskDue").value = task?.dueDate ? String(task.dueDate).slice(0, 10) : "";
@@ -490,6 +494,7 @@
         priority: $("taskPriority").value,
         estimateMinutes: $("taskEstimate").value ? Number($("taskEstimate").value) : null,
         actualMinutes: $("taskActual").value ? Number($("taskActual").value) : null,
+        labels: $("taskLabels").value.split(",").map((label) => label.trim()).filter(Boolean),
         startDate: $("taskStart").value || null,
         dueDate: $("taskDue").value || null,
         dueAllDay: $("taskDueAllDay").checked,

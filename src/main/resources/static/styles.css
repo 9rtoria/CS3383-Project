@@ -138,6 +138,12 @@ h1 { margin: 0; font-family: Georgia, "Noto Serif TC", serif; font-size: clamp(2
 .pill { border-radius: 999px; padding: 3px 7px; background: var(--surface-2); color: var(--muted); font-size: 11px; }
 .pill.priority-high, .pill.priority-urgent { background: #f9eae8; color: var(--danger); }
 .pill.priority-medium { background: #fbf1df; color: #98601a; }
+.pill.label-moss { background: #e4efe9; color: #21513f; }
+.pill.label-blue { background: #e9f2f8; color: #32658f; }
+.pill.label-amber { background: #fbf1df; color: #98601a; }
+.pill.label-rose { background: #f9eae8; color: #b3443e; }
+.pill.label-violet { background: #f1edf8; color: #6f5c9a; }
+.pill.label-slate { background: #eef0ed; color: #4b544e; }
 .empty { border: 1px dashed var(--border); border-radius: 9px; padding: 16px 10px; color: var(--muted); font-size: 12px; text-align: center; }
 .add-card { width: 100%; margin-top: 8px; border: 1px dashed var(--border); border-radius: 9px; padding: 8px; background: transparent; color: var(--muted); text-align: left; }
 .add-card:hover { background: var(--surface); }

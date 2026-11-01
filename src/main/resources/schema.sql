@@ -70,6 +70,24 @@ CREATE TABLE IF NOT EXISTS task (
     FOREIGN KEY (created_by) REFERENCES app_user(id)
 );
 
+CREATE TABLE IF NOT EXISTS label (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT 'slate',
+    created_at TEXT NOT NULL,
+    UNIQUE (workspace_id, name),
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS task_label (
+    task_id TEXT NOT NULL,
+    label_id TEXT NOT NULL,
+    PRIMARY KEY (task_id, label_id),
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE,
+    FOREIGN KEY (label_id) REFERENCES label(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS task_comment (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,

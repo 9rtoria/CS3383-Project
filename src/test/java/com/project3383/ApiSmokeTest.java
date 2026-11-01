@@ -11,6 +11,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -79,7 +80,8 @@ class ApiSmokeTest {
             "boardId", boardId,
             "columnId", todo,
             "title", "Smoke task",
-            "estimateMinutes", 30
+            "estimateMinutes", 30,
+            "labels", List.of("smoke")
         ));
         MvcResult created = mockMvc.perform(post("/api/tasks")
                 .session(session)
@@ -87,6 +89,7 @@ class ApiSmokeTest {
                 .content(taskJson))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.task.title").value("Smoke task"))
+            .andExpect(jsonPath("$.task.labels[0].name").value("smoke"))
             .andReturn();
         JsonNode task = objectMapper.readTree(created.getResponse().getContentAsString()).path("task");
 
