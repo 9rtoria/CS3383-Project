@@ -90,6 +90,13 @@ public final class ApiDtos {
     ) {
     }
 
+    public record ApiTokenCreate(
+        String workspaceId,
+        String name,
+        Integer expiresInDays
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type

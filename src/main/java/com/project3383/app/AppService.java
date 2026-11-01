@@ -2,12 +2,15 @@ package com.project3383.app;
 
 import com.project3383.api.ApiDtos;
 import com.project3383.api.ApiException;
+import com.project3383.auth.AuthInterceptor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -36,11 +39,14 @@ public class AppService {
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
+    private final AuditService auditService;
 
-    public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper) {
+    public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper,
+                      AuditService auditService) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -149,6 +155,8 @@ public class AppService {
         Map<String, Object> workspace = jdbc.queryForList("""
             SELECT id, name, type FROM workspace WHERE created_by = ? ORDER BY created_at DESC LIMIT 1
             """, userId).stream().findFirst().orElseThrow();
+        audit(String.valueOf(workspace.get("id")), userId, "workspace.created", "workspace",
+            String.valueOf(workspace.get("id")), Map.of("name", input.name().trim(), "type", type));
         return linked(Map.of("workspace", workspace));
     }
 
@@ -178,6 +186,7 @@ public class AppService {
             INSERT INTO invite (id, workspace_id, email, role, token_hash, expires_at, created_by, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, inviteId, workspaceId, email, role, sha256(token), expiresAt, userId, now);
+        audit(workspaceId, userId, "invite.created", "invite", inviteId, Map.of("email", email, "role", role));
         return linked(Map.of(
             "invite", Map.of("id", inviteId, "email", email, "role", role, "expiresAt", expiresAt),
             "token", token
@@ -206,6 +215,8 @@ public class AppService {
             ON CONFLICT(user_id, workspace_id) DO UPDATE SET role = excluded.role
             """, userId, invite.get("workspaceId"), invite.get("role"), Instant.now().toString());
         jdbc.update("UPDATE invite SET accepted_at = ? WHERE id = ?", Instant.now().toString(), invite.get("id"));
+        audit((String) invite.get("workspaceId"), userId, "invite.accepted", "invite",
+            String.valueOf(invite.get("id")), Map.of());
         return bootstrap(userId);
     }
 
@@ -220,6 +231,8 @@ public class AppService {
             .orElseThrow(() -> ApiException.notFound("Member not found."));
         if ("OWNER".equals(target.get("role"))) throw ApiException.forbidden("The workspace owner role cannot be changed here.");
         jdbc.update("UPDATE membership SET role = ? WHERE user_id = ? AND workspace_id = ?", role, targetUserId, workspaceId);
+        audit(workspaceId, userId, "membership.role_changed", "membership", targetUserId,
+            Map.of("role", role));
         return members(userId, workspaceId);
     }
 
@@ -232,6 +245,7 @@ public class AppService {
             .orElseThrow(() -> ApiException.notFound("Member not found."));
         if ("OWNER".equals(target.get("role"))) throw ApiException.forbidden("The workspace owner cannot be removed.");
         jdbc.update("DELETE FROM membership WHERE user_id = ? AND workspace_id = ?", targetUserId, workspaceId);
+        audit(workspaceId, userId, "membership.left", "membership", targetUserId, Map.of());
         return members(userId, workspaceId);
     }
 
@@ -244,9 +258,9 @@ public class AppService {
         String boardId = id();
         String now = Instant.now().toString();
         jdbc.update("""
-            INSERT INTO workspace (id, name, type, created_by, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """, workspaceId, workspaceName, type, userId, now);
+            INSERT INTO workspace (id, name, type, created_by, created_at, public_sharing_enabled)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """, workspaceId, workspaceName, type, userId, now, "personal".equals(type) ? 0 : 1);
         jdbc.update("""
             INSERT INTO membership (user_id, workspace_id, role, joined_at)
             VALUES (?, ?, 'OWNER', ?)
@@ -325,6 +339,7 @@ public class AppService {
                 INSERT INTO board_column (id, board_id, name, position, is_done) VALUES (?, ?, ?, ?, ?)
                 """, id(), boardId, columns[i], i, i == columns.length - 1 ? 1 : 0);
         }
+        audit(input.workspaceId(), userId, "board.created", "board", boardId, Map.of("name", input.name().trim()));
         return linked(Map.of("board", boardRow(boardId)));
     }
 
@@ -401,6 +416,7 @@ public class AppService {
                              version = version + 1
             WHERE id = ? AND version = ?
             """, name, description, visibility, archivedAt, boardId, version);
+        audit((String) board.get("workspaceId"), userId, "board.updated", "board", boardId, Map.of());
         return linked(Map.of("board", boardRowRaw(boardId)));
     }
 
@@ -460,6 +476,7 @@ public class AppService {
                 .map(label -> String.valueOf(label.get("name"))).toList();
             if (!labelNames.isEmpty()) replaceTaskLabels(newTaskId, workspaceId, labelNames);
         }
+        audit(workspaceId, userId, "board.duplicated", "board", newBoardId, Map.of("sourceBoardId", boardId));
         return board(userId, newBoardId);
     }
 
@@ -487,6 +504,7 @@ public class AppService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deleted", true);
         if (undo != null) result.put("undo", undo);
+        audit((String) board.get("workspaceId"), userId, "board.deleted", "board", boardId, Map.of());
         return result;
     }
 
@@ -499,7 +517,8 @@ public class AppService {
             throw ApiException.badRequest("Choose whether to enable sharing.");
         }
         String type = jdbc.queryForObject("SELECT type FROM workspace WHERE id = ?", String.class, workspaceId);
-        if (type == null || !Set.of("team", "org").contains(type)) {
+        Integer sharing = jdbc.queryForObject("SELECT public_sharing_enabled FROM workspace WHERE id = ?", Integer.class, workspaceId);
+        if (type == null || (sharing != null && sharing == 0)) {
             throw ApiException.forbidden("Public sharing is disabled for this workspace.");
         }
         boolean enabled = input.enabled();
@@ -512,6 +531,8 @@ public class AppService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("enabled", enabled);
         result.put("token", token);
+        audit(workspaceId, userId, enabled ? "board.share_enabled" : "board.share_disabled",
+            "board", boardId, Map.of());
         return result;
     }
 
@@ -522,7 +543,7 @@ public class AppService {
             FROM board b JOIN workspace w ON w.id = b.workspace_id
             WHERE b.share_token = ? AND b.share_enabled = 1
               AND b.deleted_at IS NULL AND b.archived_at IS NULL
-              AND w.type IN ('team', 'org')
+              AND w.public_sharing_enabled = 1
             """, token).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("This shared board is no longer available."));
         List<Map<String, Object>> columns = jdbc.queryForList("""
@@ -1126,6 +1147,7 @@ public class AppService {
             position, userId, now, now);
         replaceTaskLabels(taskId, workspaceId, input.labels());
         recordActivity(workspaceId, taskId, userId, "task.created", "task", taskId);
+        audit(workspaceId, userId, "task.created", "task", taskId, Map.of("title", input.title().trim()));
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         Map<String, Object> undo = createUndo(userId, workspaceId, "task.create", "task", taskId,
             Map.of("columnId", input.columnId()), 10);
@@ -1162,6 +1184,11 @@ public class AppService {
                                         entity_type, entity_id, metadata, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)
             """, id(), workspaceId, taskId, actorId, action, entityType, entityId, Instant.now().toString());
+    }
+
+    private void audit(String workspaceId, String actorId, String action, String entityType,
+                       String entityId, Map<String, Object> metadata) {
+        auditService.record(workspaceId, actorId, action, entityType, entityId, metadata);
     }
 
     private Map<String, Object> createUndo(String userId, String workspaceId, String action,
@@ -1426,6 +1453,7 @@ public class AppService {
         if (updated == 0) throw ApiException.conflict("This task changed elsewhere.", version + 1);
         if (input.labels() != null) replaceTaskLabels(taskId, (String) current.get("workspaceId"), input.labels());
         recordActivity((String) current.get("workspaceId"), taskId, userId, "task.updated", "task", taskId);
+        audit((String) current.get("workspaceId"), userId, "task.updated", "task", taskId, Map.of());
         return linked(Map.of("task", task(userId, taskId)));
     }
 
@@ -1527,6 +1555,8 @@ public class AppService {
             : null;
         recordActivity((String) current.get("workspaceId"), taskId, userId,
             completing ? "task.completed" : "task.moved", "task", taskId);
+        audit((String) current.get("workspaceId"), userId,
+            completing ? "task.completed" : "task.moved", "task", taskId, Map.of());
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         Map<String, Object> inverse = new LinkedHashMap<>();
         inverse.put("columnId", current.get("columnId"));
@@ -1547,6 +1577,8 @@ public class AppService {
             UPDATE task SET deleted_at = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL
             """, Instant.now().toString(), taskId);
         recordActivity((String) current.get("workspaceId"), taskId, userId, "task.deleted", "task", taskId);
+        audit((String) current.get("workspaceId"), userId, "task.deleted", "task", taskId,
+            Map.of("title", String.valueOf(current.get("title"))));
         Map<String, Object> inverse = new LinkedHashMap<>();
         inverse.put("columnId", current.get("columnId"));
         Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
@@ -1649,6 +1681,8 @@ public class AppService {
         }
         String entityId = String.join(",", taskIds);
         recordActivity(input.workspaceId(), null, userId, "task.bulk_" + action, "task", entityId);
+        audit(input.workspaceId(), userId, "task.bulk_" + action, "task", entityId,
+            Map.of("count", taskIds.size(), "action", action));
         Map<String, Object> inverse = new LinkedHashMap<>();
         inverse.put("taskIds", taskIds);
         inverse.put("action", action);
@@ -1722,6 +1756,8 @@ public class AppService {
             : null;
         recordActivity((String) current.get("workspaceId"), taskId, userId,
             completed ? "task.completed" : "task.reopened", "task", taskId);
+        audit((String) current.get("workspaceId"), userId,
+            completed ? "task.completed" : "task.reopened", "task", taskId, Map.of());
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (completed) {
             Map<String, Object> inverse = new LinkedHashMap<>();
@@ -1900,13 +1936,30 @@ public class AppService {
     }
 
     private void requireMembership(String userId, String workspaceId) {
+        requireTokenWorkspace(workspaceId);
         Integer count = jdbc.queryForObject("""
             SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Workspace not found.");
     }
 
+    private void requireTokenWorkspace(String workspaceId) {
+        try {
+            if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+                Object scoped = attributes.getRequest().getAttribute(AuthInterceptor.TOKEN_WORKSPACE);
+                if (scoped != null && !workspaceId.equals(String.valueOf(scoped))) {
+                    throw ApiException.forbidden("This API token is scoped to another workspace.");
+                }
+            }
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception ignored) {
+            // No request context.
+        }
+    }
+
     private void requireMinimumRole(String userId, String workspaceId, String minimum) {
+        requireTokenWorkspace(workspaceId);
         String role = roleFor(userId, workspaceId);
         if (roleRank(role) < roleRank(minimum)) throw ApiException.forbidden("You do not have permission for this action.");
     }

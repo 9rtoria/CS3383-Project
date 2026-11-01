@@ -23,7 +23,7 @@ Status key:
 | `/api/archive` | DONE | Completed tasks |
 | `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
 | `/api/attachments/{id}` | DONE | Download/delete |
-| `/api/audit` | MISSING | Schema only |
+| `/api/audit` | DONE | Admin audit feed with cursor pagination and retention purge |
 | `/api/auth/guest` | DONE | Guest session |
 | `/api/auth/magic` | MISSING | Email magic link not implemented |
 | `/api/auth/magic/verify` | MISSING | |
@@ -73,8 +73,8 @@ Status key:
 | `/api/tasks/{id}/reorder` | DONE | Keyboard order up/down with undo |
 | `/api/tasks/{id}/subtasks` | DONE | POST; detail returns checklist |
 | `/api/today` | DONE | Workspace-scoped GET, per-user selection, accept/dismiss/rebalance/applyPlan, counts |
-| `/api/tokens` | MISSING | |
-| `/api/tokens/{id}` | MISSING | |
+| `/api/tokens` | DONE | List/create personal workspace API tokens |
+| `/api/tokens/{id}` | DONE | Revoke token |
 | `/api/undo/{id}` | DONE | Auto-plan, task create/complete/move/delete, board delete, and bulk action undo hooks |
 | `/api/upcoming` | DONE | Due-date groups |
 | `/api/views` | MISSING | Schema only |
@@ -119,7 +119,7 @@ Status key:
 | Comment | DONE | `task_comment` |
 | Attachment | DONE | |
 | ActivityEvent | DONE | Recorded for task, comment, checklist, attachment, Today, and recurrence changes |
-| AuditEvent | SCHEMA | No audit API/jobs yet |
+| AuditEvent | DONE | Admin audit log, retention purge, cursor pagination |
 | Reminder | DONE | |
 | View | SCHEMA | No saved-view UI/API |
 | AutomationRule | SCHEMA | No automation service |
@@ -132,7 +132,7 @@ Status key:
 | MagicLinkToken | SCHEMA | |
 | Invite | DONE | |
 | OidcConfig | SCHEMA | SSO not implemented |
-| ApiToken | SCHEMA | API-token service not implemented |
+| ApiToken | DONE | Bearer auth, workspace scope, expiry, revocation, audit |
 | Webhook | SCHEMA | |
 | WebhookDelivery | SCHEMA | |
 | IdempotencyKey | SCHEMA | |
@@ -175,8 +175,9 @@ Status key:
 | i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
 | Automations / Webhooks | MISSING | |
-| SSO / MFA / API tokens | MISSING | |
-| Audit / Retention | MISSING | |
+| SSO / MFA | MISSING | |
+| API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
+| Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
 | Notifications / Reminders | DONE | In-app only |
 | Members / Invites / Roles | DONE | |
 | Export / Import | MISSING | |
@@ -216,6 +217,8 @@ Status key:
 - [x] Bulk complete/archive/delete/move with multi-select and undo
 - [x] Command palette, keyboard navigation, shortcuts help, and Alt+Arrow card move/reorder
 - [x] Phase 2 board/task scope complete
+- [x] Workspace API tokens with bearer auth, expiry, revocation, and audit
+- [x] Admin audit log with retention purge and cursor pagination
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -243,5 +246,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
+7. Automations, webhooks, SSO/MFA, import/export, deletion.
 8. Full E2E, screenshots, performance, and final parity sign-off.

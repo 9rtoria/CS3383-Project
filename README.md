@@ -46,6 +46,8 @@ Implemented:
 - Multi-select bulk complete / archive / delete / move with undo
 - Command palette with task search, board jumps, theme/settings commands, and keyboard navigation
 - Keyboard shortcuts: C, /, ?, G sequences, Shift+N, Ctrl/Cmd+K, Alt+Arrow move/reorder, single-key toggle
+- Workspace API tokens with bearer authentication, workspace scoping, expiry, and revocation
+- Admin audit log with cursor pagination, actor details, and configurable retention
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -55,9 +57,9 @@ Implemented:
 Not implemented yet:
 
 - Full Insights and visual parity
-- SSO/MFA/API tokens/Webhooks/Automations
-- Offline/PWA, Focus Mode, voice, sound, i18n
-- Full visual and behavioral parity with `ProjectA2`
+- SSO/MFA, Webhooks, Automations
+- Import/export, account/workspace deletion
+- Full accessibility, E2E, performance, and final parity sign-off
 
 The current Phase 0 parity matrix is at:
 
@@ -122,6 +124,10 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | GET | `/api/today` | Open-task list with capacity and day blocks |
 | POST | `/api/today` | Accept or dismiss a task for today |
 | POST | `/api/auto-plan` | Preview, apply, or clear the deterministic plan |
+| GET | `/api/tokens` | List personal workspace API tokens |
+| POST | `/api/tokens` | Create an API token and return the raw token once |
+| DELETE | `/api/tokens/{id}` | Revoke an API token |
+| GET | `/api/audit` | Admin audit feed with cursor pagination |
 | POST | `/api/tasks` | Create a task |
 | POST | `/api/tasks/bulk` | Bulk complete, archive, delete, or move tasks |
 | GET | `/api/tasks/{id}` | Task detail with comments and checklist |

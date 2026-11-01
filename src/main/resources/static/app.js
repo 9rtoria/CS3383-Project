@@ -3167,6 +3167,12 @@
       { id: "notifications", label: "Notifications", render: renderNotificationSettings },
       { id: "features", label: "Features", render: renderFeatureSettings },
     ];
+    if (["OWNER", "ADMIN"].includes(role)) {
+      definitions.push(
+        { id: "integrations", label: "Integrations", render: renderIntegrationSettings },
+        { id: "audit", label: "Audit log", render: renderAuditSettings },
+      );
+    }
     definitions.forEach((definition, index) => {
       const button = element("button", `settings-nav-item${index === 0 ? " active" : ""}`, definition.label);
       button.type = "button";
@@ -3584,6 +3590,168 @@
     toggleFeature("smartPlan", "Smart Plan", "Preview a local rules plan, then apply or undo it. No model call.");
     toggleFeature("voice", "Voice capture", "Show the browser speech shortcut. Text capture is always available.");
     settingsRow(card, "Single-key shortcuts", "C, /, ? and G sequences. Saved on this device.", makeToggle(state.singleKeyShortcuts, "Single-key shortcuts", setSingleKeyShortcuts));
+    return section;
+  }
+
+  function renderIntegrationSettings() {
+    const { section, card } = createSettingsSection(
+      "integrations",
+      "Integrations",
+      "Create personal API tokens for scripts, CLI tools, and external integrations. The raw token is shown once."
+    );
+    const created = element("div", "detail-list");
+    const list = element("div", "detail-list");
+    list.append(element("div", "empty", t("Loading tokens…")));
+    const form = element("form", "settings-card");
+    form.style.marginTop = "12px";
+    const nameField = element("div", "field");
+    const nameLabel = element("label", "", t("Token name"));
+    const nameInput = element("input", "input");
+    nameInput.maxLength = 80;
+    nameInput.placeholder = t("CLI sync");
+    nameField.append(nameLabel, nameInput);
+    const expiryField = element("div", "field");
+    const expiryLabel = element("label", "", t("Expires"));
+    const expiry = element("select", "select");
+    expiry.add(new Option(t("30 days"), "30"));
+    expiry.add(new Option(t("90 days"), "90"));
+    expiry.add(new Option(t("1 year"), "365"));
+    expiryField.append(expiryLabel, expiry);
+    const row = element("div", "form-row");
+    row.append(nameField, expiryField);
+    const submit = element("button", "btn primary sm", t("Create token"));
+    submit.type = "submit";
+    form.append(row, submit);
+    card.append(created, list, form);
+
+    const refresh = async () => {
+      try {
+        const result = await request(`/api/tokens?workspaceId=${encodeURIComponent(workspace().id)}`);
+        const tokens = result?.tokens ?? [];
+        list.replaceChildren();
+        if (!tokens.length) list.append(element("div", "empty", t("No API tokens yet.")));
+        for (const token of tokens) {
+          const item = element("div", "detail-item");
+          const grow = element("div", "grow");
+          grow.append(element("strong", "", token.name));
+          grow.append(element("p", "", `${token.prefix}… · ${t("Created")} ${new Date(token.createdAt).toLocaleDateString(state.settings?.locale || undefined)}`));
+          if (token.expiresAt) grow.append(element("p", "field-hint", `${t("Expires")} ${new Date(token.expiresAt).toLocaleDateString(state.settings?.locale || undefined)}`));
+          if (token.lastUsedAt) grow.append(element("p", "field-hint", `${t("Last used")} ${relativeTime(token.lastUsedAt)}`));
+          const revoke = element("button", "btn ghost sm", t("Revoke"));
+          revoke.type = "button";
+          revoke.addEventListener("click", async () => {
+            if (!window.confirm(t("Revoke this token? Tools using it will stop working."))) return;
+            try {
+              await request(`/api/tokens/${encodeURIComponent(token.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
+              showToast(t("Token revoked."));
+              await refresh();
+            } catch (error) {
+              showToast(error.message);
+            }
+          });
+          item.append(grow, revoke);
+          list.append(item);
+        }
+      } catch (error) {
+        list.replaceChildren(element("div", "empty", error.message));
+      }
+    };
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name) {
+        nameInput.focus();
+        return;
+      }
+      submit.disabled = true;
+      try {
+        const result = await request("/api/tokens", {
+          method: "POST",
+          body: { workspaceId: workspace().id, name, expiresInDays: Number(expiry.value) },
+        });
+        created.replaceChildren();
+        const cardNode = element("div", "detail-item");
+        const grow = element("div", "grow");
+        grow.append(element("strong", "", t("Token created. Copy it now — it will not be shown again.")));
+        const output = element("input", "input");
+        output.value = result.token;
+        output.readOnly = true;
+        output.setAttribute("aria-label", t("New API token"));
+        const copy = element("button", "btn ghost sm", t("Copy"));
+        copy.type = "button";
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard?.writeText(result.token);
+            showToast(t("Token copied."));
+          } catch {
+            output.select();
+          }
+        });
+        grow.append(output);
+        cardNode.append(grow, copy);
+        created.append(cardNode);
+        nameInput.value = "";
+        await refresh();
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    void refresh();
+    return section;
+  }
+
+  function renderAuditSettings() {
+    const { section, card } = createSettingsSection(
+      "audit",
+      "Audit log",
+      "Privileged workspace actions, newest first. Retention is configured by the workspace policy."
+    );
+    const list = element("div", "detail-list");
+    list.append(element("div", "empty", t("Loading audit log…")));
+    const more = element("button", "btn ghost sm", t("Load more"));
+    more.type = "button";
+    more.classList.add("hidden");
+    card.append(list, more);
+    let cursor = null;
+    let loading = false;
+
+    const load = async (reset = false) => {
+      if (loading) return;
+      loading = true;
+      try {
+        const query = new URLSearchParams({ workspaceId: workspace().id, limit: "40" });
+        if (!reset && cursor) query.set("cursor", cursor);
+        const result = await request(`/api/audit?${query.toString()}`);
+        if (reset) list.replaceChildren();
+        const events = result?.events ?? [];
+        if (!events.length && reset) list.append(element("div", "empty", t("No audit events yet.")));
+        for (const event of events) {
+          const item = element("div", "activity-item");
+          item.append(element("span", "side-dot"));
+          const grow = element("div", "grow");
+          const copy = element("div", "activity-copy");
+          copy.append(element("strong", "", event.actor?.name || t("Someone")));
+          copy.append(document.createTextNode(` ${String(event.action).replace(/[._]/g, " ")}`));
+          grow.append(copy);
+          grow.append(element("div", "activity-time", `${event.entityType || ""} · ${relativeTime(event.createdAt)}`));
+          item.append(grow);
+          list.append(item);
+        }
+        cursor = result?.nextCursor ?? null;
+        more.classList.toggle("hidden", !cursor);
+      } catch (error) {
+        list.replaceChildren(element("div", "empty", error.message));
+      } finally {
+        loading = false;
+      }
+    };
+
+    more.addEventListener("click", () => void load(false));
+    void load(true);
     return section;
   }
 

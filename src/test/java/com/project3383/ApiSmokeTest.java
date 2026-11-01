@@ -1144,4 +1144,95 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.moved").value(false));
     }
+
+    @Test
+    void apiTokensUseBearerAuthAndWriteAuditLog() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        String workspaceId = boot.path("workspaces").get(0).path("id").asText();
+
+        mockMvc.perform(get("/api/tokens").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tokens").isEmpty());
+
+        MvcResult created = mockMvc.perform(post("/api/tokens")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "CI token",
+                    "expiresInDays", 30
+                ))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.token").value(org.hamcrest.Matchers.startsWith("drift_pat_")))
+            .andExpect(jsonPath("$.record.name").value("CI token"))
+            .andExpect(jsonPath("$.record.prefix").isString())
+            .andReturn();
+        JsonNode tokenPayload = objectMapper.readTree(created.getResponse().getContentAsString());
+        String rawToken = tokenPayload.path("token").asText();
+        String tokenId = tokenPayload.path("record").path("id").asText();
+
+        mockMvc.perform(get("/api/audit").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.events[?(@.action == 'api_token.created')]").isNotEmpty())
+            .andExpect(jsonPath("$.events[0].actor.name").value("Guest"));
+
+        mockMvc.perform(get("/api/tasks")
+                .header("Authorization", "Bearer " + rawToken)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tasks").isArray());
+
+        MvcResult team = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "Token other workspace",
+                    "type", "team"
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String otherWorkspaceId = objectMapper.readTree(team.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+        mockMvc.perform(get("/api/tasks")
+                .header("Authorization", "Bearer " + rawToken)
+                .param("workspaceId", otherWorkspaceId))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/tokens/" + tokenId)
+                .session(session)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.revoked").value(true));
+
+        mockMvc.perform(get("/api/tasks")
+                .header("Authorization", "Bearer " + rawToken)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/audit").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.events[?(@.action == 'api_token.revoked')]").isNotEmpty());
+
+        MvcResult expired = mockMvc.perform(post("/api/tokens")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Expired token",
+                    "expiresInDays", 1
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        JsonNode expiredPayload = objectMapper.readTree(expired.getResponse().getContentAsString());
+        String expiredRaw = expiredPayload.path("token").asText();
+        String expiredId = expiredPayload.path("record").path("id").asText();
+        jdbc.update("UPDATE api_token SET expires_at = ? WHERE id = ?",
+            Instant.now().minusSeconds(60).toString(), expiredId);
+        mockMvc.perform(get("/api/tasks")
+                .header("Authorization", "Bearer " + expiredRaw)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isUnauthorized());
+    }
 }

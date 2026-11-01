@@ -13,7 +13,16 @@ CREATE TABLE IF NOT EXISTS workspace (
     name TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'personal',
     created_by TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    retention_days INTEGER NOT NULL DEFAULT 30,
+    audit_retention_days INTEGER NOT NULL DEFAULT 365,
+    require_mfa INTEGER NOT NULL DEFAULT 0,
+    ai_enabled INTEGER NOT NULL DEFAULT 1,
+    automations_enabled INTEGER NOT NULL DEFAULT 1,
+    attachments_enabled INTEGER NOT NULL DEFAULT 1,
+    public_sharing_enabled INTEGER NOT NULL DEFAULT 1,
+    version INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS membership (
