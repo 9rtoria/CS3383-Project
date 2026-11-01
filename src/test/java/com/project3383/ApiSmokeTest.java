@@ -1809,6 +1809,112 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.user.email").value(email));
     }
 
+    @Test
+    void workspacePoliciesVersionMfaGuardAndAttachmentPolicy() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        String personalWorkspaceId = boot.path("workspaces").get(0).path("id").asText();
+        JsonNode personal = objectMapper.readTree(mockMvc.perform(get("/api/workspaces/" + personalWorkspaceId)
+                .session(session)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString())
+            .path("workspace");
+
+        mockMvc.perform(patch("/api/workspaces/" + personalWorkspaceId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "requireMfa", true, "version", personal.path("version").asInt()))))
+            .andExpect(status().isBadRequest());
+
+        MvcResult team = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "Policy team", "type", "team"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String teamWorkspaceId = objectMapper.readTree(team.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+        JsonNode refreshed = objectMapper.readTree(mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode teamWorkspace = null;
+        for (JsonNode workspaceNode : refreshed.path("workspaces")) {
+            if (teamWorkspaceId.equals(workspaceNode.path("id").asText())) teamWorkspace = workspaceNode;
+        }
+        if (teamWorkspace == null) throw new AssertionError("Policy workspace was missing.");
+        String teamBoardId = teamWorkspace.path("boards").get(0).path("id").asText();
+        String teamColumnId = teamWorkspace.path("boards").get(0).path("columns").get(0).path("id").asText();
+        JsonNode teamWorkspaceRow = objectMapper.readTree(mockMvc.perform(get("/api/workspaces/" + teamWorkspaceId)
+                .session(session)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString())
+            .path("workspace");
+        int version = teamWorkspaceRow.path("version").asInt();
+
+        mockMvc.perform(patch("/api/workspaces/" + teamWorkspaceId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "requireMfa", true, "attachmentsEnabled", false, "version", version + 99))))
+            .andExpect(status().isConflict());
+        mockMvc.perform(patch("/api/workspaces/" + teamWorkspaceId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "requireMfa", true, "attachmentsEnabled", false, "version", version))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspace.requireMfa").value(true))
+            .andExpect(jsonPath("$.workspace.attachmentsEnabled").value(false));
+        mockMvc.perform(get("/api/workspaces/" + teamWorkspaceId).session(session))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("MFA_REQUIRED"));
+
+        MvcResult setup = mockMvc.perform(post("/api/security/mfa")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("action", "setup"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String secret = objectMapper.readTree(setup.getResponse().getContentAsString()).path("secret").asText();
+        mockMvc.perform(post("/api/security/mfa")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "enable", "secret", secret, "code", totp(secret)))))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/workspaces/" + teamWorkspaceId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspace.requireMfa").value(true));
+
+        MvcResult createdTask = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", teamWorkspaceId,
+                    "boardId", teamBoardId,
+                    "columnId", teamColumnId,
+                    "title", "Attachment policy task"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String taskId = objectMapper.readTree(createdTask.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+        MockMultipartFile file = new MockMultipartFile("file", "note.txt", "text/plain", "hello".getBytes());
+        mockMvc.perform(multipart("/api/tasks/" + taskId + "/attachments").file(file).session(session))
+            .andExpect(status().isForbidden());
+
+        String memberId = java.util.UUID.randomUUID().toString();
+        jdbc.update("""
+            INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
+            VALUES (?, ?, 'Policy member', NULL, 1, 'UTC', ?)
+            """, memberId, "policy-" + memberId + "@example.com", Instant.now().toString());
+        jdbc.update("""
+            INSERT INTO membership (user_id, workspace_id, role, joined_at) VALUES (?, ?, 'MEMBER', ?)
+            """, memberId, teamWorkspaceId, Instant.now().toString());
+        MockHttpSession memberSession = new MockHttpSession();
+        memberSession.setAttribute(com.project3383.auth.AuthInterceptor.SESSION_USER, memberId);
+        mockMvc.perform(get("/api/workspaces/" + teamWorkspaceId).session(memberSession))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("MFA_REQUIRED"));
+    }
+
     private String totp(String secret) {
         try {
             int buffer = 0;

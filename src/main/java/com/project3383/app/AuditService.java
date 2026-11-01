@@ -17,10 +17,12 @@ public class AuditService {
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final MfaGuard mfaGuard;
 
-    public AuditService(JdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public AuditService(JdbcTemplate jdbc, ObjectMapper objectMapper, MfaGuard mfaGuard) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.mfaGuard = mfaGuard;
     }
 
     public void record(String workspaceId, String actorId, String action, String entityType,
@@ -54,6 +56,7 @@ public class AuditService {
         if (!"OWNER".equals(role) && !"ADMIN".equals(role)) {
             throw ApiException.forbidden("You do not have permission to read the audit log.");
         }
+        mfaGuard.requireSatisfied(userId, workspaceId);
         purge(workspaceId);
         int pageSize = Math.max(1, Math.min(200, limit));
         List<Map<String, Object>> events;

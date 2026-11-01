@@ -41,6 +41,7 @@ public class WebhookService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
+    private final MfaGuard mfaGuard;
     private final boolean allowPrivate;
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))
@@ -51,11 +52,13 @@ public class WebhookService {
         JdbcTemplate jdbc,
         ObjectMapper objectMapper,
         AuditService auditService,
+        MfaGuard mfaGuard,
         @Value("${project3383.webhook.allow-private:false}") boolean allowPrivate
     ) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
+        this.mfaGuard = mfaGuard;
         this.allowPrivate = allowPrivate;
     }
 
@@ -406,6 +409,7 @@ public class WebhookService {
         if (!"OWNER".equals(role) && !"ADMIN".equals(role)) {
             throw ApiException.forbidden("You do not have permission to manage webhooks.");
         }
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private int number(Object value) {

@@ -24,6 +24,17 @@ public class WorkspaceController {
         this.appService = appService;
     }
 
+    @GetMapping
+    public Map<String, Object> get(HttpSession session, @PathVariable String workspaceId) {
+        return appService.workspace(CurrentUser.id(session), workspaceId);
+    }
+
+    @PatchMapping
+    public Map<String, Object> update(HttpSession session, @PathVariable String workspaceId,
+                                      @RequestBody ApiDtos.WorkspaceUpdate input) {
+        return appService.updateWorkspacePolicies(CurrentUser.id(session), workspaceId, input);
+    }
+
     @DeleteMapping
     public Map<String, Object> delete(HttpSession session, @PathVariable String workspaceId) {
         return appService.deleteWorkspace(CurrentUser.id(session), workspaceId);

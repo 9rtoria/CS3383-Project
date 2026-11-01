@@ -3183,6 +3183,9 @@
       { id: "security", label: "Security", render: renderSecuritySettings },
     ];
     if (["OWNER", "ADMIN"].includes(role)) {
+      if ((currentWorkspace?.type ?? "personal") !== "personal") {
+        definitions.push({ id: "policies", label: "Policies", render: renderPolicySettings });
+      }
       definitions.push(
         { id: "automations", label: "Automations", render: renderAutomationSettings },
         { id: "integrations", label: "Integrations", render: renderIntegrationSettings },
@@ -3957,6 +3960,107 @@
     newRule.addEventListener("click", openRuleModal);
     section.refreshSettingsSection = () => void refreshRules();
     void refreshRules();
+    return section;
+  }
+
+  function renderPolicySettings() {
+    const { section, card } = createSettingsSection(
+      "policies",
+      "Policies",
+      "Who can see what, what is retained, and which capabilities are available."
+    );
+    let workspaceData = null;
+    let busy = false;
+
+    const render = () => {
+      card.replaceChildren();
+      if (!workspaceData) {
+        card.append(element("div", "empty", t("Loading policies…")));
+        return;
+      }
+      const draft = { ...workspaceData };
+      const toggle = (key, title, description) => {
+        settingsRow(card, t(title), t(description), makeToggle(Boolean(draft[key]), t(title), (next) => {
+          draft[key] = next;
+        }));
+      };
+      toggle("requireMfa", "Require two-factor authentication", "Members without MFA are locked out of workspace data.");
+      toggle("aiEnabled", "Assistant suggestions", "Local capacity and quick-add heuristics. No customer data leaves Drift.");
+      toggle("automationsEnabled", "Automations", "Allow rules for this workspace.");
+      toggle("attachmentsEnabled", "Attachments", "Files up to 10 MB, type-allowlisted, local storage.");
+      toggle("publicSharingEnabled", "Public share links", "Read-only board links. Disable to revoke all sharing immediately.");
+      settingsRow(card, t("Archived task retention"), t("Soft-deleted content is purged by the jobs worker."),
+        (() => {
+          const input = element("input", "input");
+          input.type = "number";
+          input.min = "1";
+          input.max = "3650";
+          input.style.width = "100px";
+          input.value = String(draft.retentionDays ?? 30);
+          input.addEventListener("input", () => { draft.retentionDays = Number(input.value); });
+          return input;
+        })());
+      settingsRow(card, t("Audit retention"), t("Audit events are retained separately for compliance."),
+        (() => {
+          const input = element("input", "input");
+          input.type = "number";
+          input.min = "30";
+          input.max = "3650";
+          input.style.width = "100px";
+          input.value = String(draft.auditRetentionDays ?? 365);
+          input.addEventListener("input", () => { draft.auditRetentionDays = Number(input.value); });
+          return input;
+        })());
+      settingsRow(card, t("Save policies"), t("Versioned: stale saves are rejected with a conflict."),
+        (() => {
+          const save = element("button", "btn primary sm", t("Save policies"));
+          save.type = "button";
+          save.disabled = busy;
+          save.addEventListener("click", async () => {
+            busy = true;
+            save.disabled = true;
+            try {
+              const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}`, {
+                method: "PATCH",
+                body: {
+                  requireMfa: draft.requireMfa,
+                  aiEnabled: draft.aiEnabled,
+                  automationsEnabled: draft.automationsEnabled,
+                  attachmentsEnabled: draft.attachmentsEnabled,
+                  publicSharingEnabled: draft.publicSharingEnabled,
+                  retentionDays: Number(draft.retentionDays),
+                  auditRetentionDays: Number(draft.auditRetentionDays),
+                  version: draft.version,
+                },
+              });
+              workspaceData = result?.workspace ?? draft;
+              showToast(t("Policies saved."));
+              render();
+            } catch (error) {
+              showToast(error.message);
+              await refresh();
+            } finally {
+              busy = false;
+            }
+          });
+          return save;
+        })());
+    };
+
+    const refresh = async () => {
+      try {
+        const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}`);
+        workspaceData = result?.workspace ?? null;
+      } catch (error) {
+        workspaceData = null;
+        showToast(error.message);
+      }
+      render();
+    };
+
+    section.refreshSettingsSection = () => void refresh();
+    render();
+    void refresh();
     return section;
   }
 

@@ -81,7 +81,7 @@ Status key:
 | `/api/webhooks` | DONE | Admin list/create; Slack, Teams, and generic payloads; signing secret shown once |
 | `/api/webhooks/{id}` | DONE | Enable/disable, URL/events update, delete |
 | `/api/workspaces` | PARTIAL | POST create; no full list/update |
-| `/api/workspaces/{id}` | PARTIAL | DELETE soft-deletes an owner workspace after the only-workspace guard; GET/PATCH policies still missing |
+| `/api/workspaces/{id}` | DONE | GET workspace/policies, versioned PATCH policies, and DELETE owner workspace with the only-workspace guard |
 | `/api/workspaces/{id}/invites` | DONE | Create invite |
 | `/api/workspaces/{id}/members` | DONE | List/change role/remove |
 | `/api/workspaces/{id}/sso` | MISSING | Schema only |
@@ -177,6 +177,7 @@ Status key:
 | Webhooks | DONE | Admin CRUD, Slack/Teams/generic payloads, HMAC signature, async delivery with retries, SSRF/HTTPS guard |
 | Automations | DONE | Admin rules for created/moved/completed with priority/column/label/due-date conditions; priority, label, column, and notify actions; dry-run diff, run history, activity/audit, and undo |
 | MFA | DONE | TOTP setup with QR, encrypted secret, one-time backup codes, sign-in challenge, disable guard, session list |
+| Workspace policies | DONE | Versioned require-MFA, assistant, automations, attachments, sharing, retention, and audit-retention controls; policy enforcement in access/attachment paths |
 | SSO | MISSING | OIDC schema only |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
@@ -227,6 +228,7 @@ Status key:
 - [x] Workspace JSON/CSV export and CSV/JSON task import with audit records
 - [x] Account and workspace deletion with ownership guards, anonymization, access revocation, and audit
 - [x] TOTP MFA with QR setup, encrypted secrets, one-time backup codes, sign-in challenge, disable guard, and audit-ready fields
+- [x] Versioned workspace policies with MFA access guard and attachment-policy enforcement
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -254,5 +256,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. SSO and workspace policy settings.
+7. SSO (OIDC).
 8. Full E2E, screenshots, performance, and final parity sign-off.

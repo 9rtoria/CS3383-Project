@@ -164,6 +164,18 @@ public final class ApiDtos {
     ) {
     }
 
+    public record WorkspaceUpdate(
+        Integer retentionDays,
+        Integer auditRetentionDays,
+        Boolean requireMfa,
+        Boolean aiEnabled,
+        Boolean automationsEnabled,
+        Boolean attachmentsEnabled,
+        Boolean publicSharingEnabled,
+        Integer version
+    ) {
+    }
+
     public record InviteCreate(
         String email,
         String role

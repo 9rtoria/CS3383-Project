@@ -30,11 +30,14 @@ public class AutomationService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
+    private final MfaGuard mfaGuard;
 
-    public AutomationService(JdbcTemplate jdbc, ObjectMapper objectMapper, AuditService auditService) {
+    public AutomationService(JdbcTemplate jdbc, ObjectMapper objectMapper, AuditService auditService,
+                             MfaGuard mfaGuard) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
+        this.mfaGuard = mfaGuard;
     }
 
     public Map<String, Object> list(String userId, String workspaceId) {
@@ -580,6 +583,7 @@ public class AutomationService {
         if (!"OWNER".equals(role) && !"ADMIN".equals(role)) {
             throw ApiException.forbidden("You do not have permission to manage automations.");
         }
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private Integer asInteger(Object value) {

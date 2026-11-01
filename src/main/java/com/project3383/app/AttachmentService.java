@@ -36,13 +36,16 @@ public class AttachmentService {
     );
 
     private final JdbcTemplate jdbc;
+    private final MfaGuard mfaGuard;
     private final Path directory;
 
     public AttachmentService(
         JdbcTemplate jdbc,
+        MfaGuard mfaGuard,
         @Value("${project3383.attachment-dir:data/attachments}") String directory
     ) {
         this.jdbc = jdbc;
+        this.mfaGuard = mfaGuard;
         this.directory = Path.of(directory).toAbsolutePath().normalize();
     }
 
@@ -57,7 +60,14 @@ public class AttachmentService {
         String mimeType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
         if (!ALLOWED.contains(mimeType)) throw ApiException.badRequest("That file type is not allowed.");
         Map<String, Object> task = task(taskId);
-        requireMember(userId, (String) task.get("workspaceId"));
+        String workspaceId = (String) task.get("workspaceId");
+        requireMember(userId, workspaceId);
+        Integer attachmentsEnabled = jdbc.queryForObject("""
+            SELECT attachments_enabled FROM workspace WHERE id = ? AND deleted_at IS NULL
+            """, Integer.class, workspaceId);
+        if (attachmentsEnabled == null || attachmentsEnabled == 0) {
+            throw ApiException.forbidden("Attachments are disabled for this workspace.");
+        }
 
         String original = sanitizeName(file.getOriginalFilename());
         String extension = "";
@@ -143,18 +153,22 @@ public class AttachmentService {
 
     private void requireMembership(String userId, String workspaceId) {
         Integer count = jdbc.queryForObject("""
-            SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
+            SELECT COUNT(*) FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Task not found.");
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private void requireMember(String userId, String workspaceId) {
         String role = jdbc.queryForList("""
-            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
             """, userId, workspaceId).stream().findFirst()
             .map(row -> row.get("role").toString())
             .orElseThrow(() -> ApiException.notFound("Task not found."));
         if ("GUEST".equals(role)) throw ApiException.forbidden("You do not have permission for this action.");
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private String sanitizeName(String name) {

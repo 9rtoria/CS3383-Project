@@ -21,10 +21,12 @@ public class ApiTokenService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private final JdbcTemplate jdbc;
     private final AuditService auditService;
+    private final MfaGuard mfaGuard;
 
-    public ApiTokenService(JdbcTemplate jdbc, AuditService auditService) {
+    public ApiTokenService(JdbcTemplate jdbc, AuditService auditService, MfaGuard mfaGuard) {
         this.jdbc = jdbc;
         this.auditService = auditService;
+        this.mfaGuard = mfaGuard;
     }
 
     public Map<String, Object> list(String userId, String workspaceId) {
@@ -115,6 +117,7 @@ public class ApiTokenService {
         if (!"OWNER".equals(role) && !"ADMIN".equals(role)) {
             throw ApiException.forbidden("You do not have permission to manage API tokens.");
         }
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private String randomToken() {

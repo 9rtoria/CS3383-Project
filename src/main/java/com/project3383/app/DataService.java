@@ -31,15 +31,18 @@ public class DataService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
+    private final MfaGuard mfaGuard;
 
-    public DataService(JdbcTemplate jdbc, ObjectMapper objectMapper, AuditService auditService) {
+    public DataService(JdbcTemplate jdbc, ObjectMapper objectMapper, AuditService auditService, MfaGuard mfaGuard) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
+        this.mfaGuard = mfaGuard;
     }
 
     public ExportFile export(String userId, String workspaceId, String format) {
         String role = roleFor(userId, workspaceId);
+        mfaGuard.requireSatisfied(userId, workspaceId);
         Map<String, Object> workspace = jdbc.queryForList("""
             SELECT id, name, type FROM workspace WHERE id = ? AND deleted_at IS NULL
             """, workspaceId).stream().findFirst()
@@ -90,6 +93,7 @@ public class DataService {
         if (rank(role) < rank("MEMBER")) {
             throw ApiException.forbidden("You do not have permission to import tasks.");
         }
+        mfaGuard.requireSatisfied(userId, input.workspaceId());
         String format = "json".equalsIgnoreCase(input.format()) ? "json" : "csv";
         String content = input.content() == null ? "" : input.content();
         if (content.isBlank()) throw ApiException.badRequest("Choose a CSV or JSON file to import.");

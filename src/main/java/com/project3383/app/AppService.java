@@ -43,10 +43,11 @@ public class AppService {
     private final WebhookService webhookService;
     private final AutomationService automationService;
     private final MfaService mfaService;
+    private final MfaGuard mfaGuard;
 
     public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper,
                       AuditService auditService, WebhookService webhookService,
-                      AutomationService automationService, MfaService mfaService) {
+                      AutomationService automationService, MfaService mfaService, MfaGuard mfaGuard) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
@@ -54,6 +55,7 @@ public class AppService {
         this.webhookService = webhookService;
         this.automationService = automationService;
         this.mfaService = mfaService;
+        this.mfaGuard = mfaGuard;
     }
 
     @Transactional
@@ -181,6 +183,7 @@ public class AppService {
     public Map<String, Object> deleteWorkspace(String userId, String workspaceId) {
         String role = roleFor(userId, workspaceId);
         if (!"OWNER".equals(role)) throw ApiException.forbidden("Only a workspace owner can delete it.");
+        mfaGuard.requireSatisfied(userId, workspaceId);
         Integer active = jdbc.queryForObject("""
             SELECT COUNT(*) FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id <> ? AND w.deleted_at IS NULL
@@ -199,6 +202,88 @@ public class AppService {
             """, now, workspaceId);
         audit(workspaceId, userId, "workspace.deleted", "workspace", workspaceId, Map.of());
         return linked(Map.of("deleted", true));
+    }
+
+    public Map<String, Object> workspace(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        Map<String, Object> workspace = workspaceRow(workspaceId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("workspace", workspace);
+        result.put("role", roleFor(userId, workspaceId));
+        result.put("boards", jdbc.queryForObject("""
+            SELECT COUNT(*) FROM board WHERE workspace_id = ? AND deleted_at IS NULL
+            """, Integer.class, workspaceId));
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> updateWorkspacePolicies(String userId, String workspaceId, ApiDtos.WorkspaceUpdate input) {
+        requireMinimumRole(userId, workspaceId, "ADMIN");
+        if (input == null) throw ApiException.badRequest("Workspace changes are required.");
+        Map<String, Object> workspace = workspaceRow(workspaceId);
+        if ("personal".equals(workspace.get("type"))
+            && (input.requireMfa() != null || input.retentionDays() != null || input.auditRetentionDays() != null)) {
+            throw ApiException.badRequest("Enterprise policies apply to team or organization workspaces.");
+        }
+        int currentVersion = number(workspace.get("version"));
+        if (input.version() != null && input.version() != currentVersion) {
+            throw ApiException.conflict("These settings changed elsewhere.", currentVersion);
+        }
+        int retentionDays = input.retentionDays() == null
+            ? number(workspace.get("retentionDays")) : input.retentionDays();
+        int auditRetentionDays = input.auditRetentionDays() == null
+            ? number(workspace.get("auditRetentionDays")) : input.auditRetentionDays();
+        if (retentionDays < 1 || retentionDays > 3650) {
+            throw ApiException.badRequest("Archived task retention must be between 1 and 3650 days.");
+        }
+        if (auditRetentionDays < 30 || auditRetentionDays > 3650) {
+            throw ApiException.badRequest("Audit retention must be between 30 and 3650 days.");
+        }
+        boolean requireMfa = input.requireMfa() == null
+            ? number(workspace.get("requireMfa")) == 1 : input.requireMfa();
+        boolean aiEnabled = input.aiEnabled() == null
+            ? number(workspace.get("aiEnabled")) == 1 : input.aiEnabled();
+        boolean automationsEnabled = input.automationsEnabled() == null
+            ? number(workspace.get("automationsEnabled")) == 1 : input.automationsEnabled();
+        boolean attachmentsEnabled = input.attachmentsEnabled() == null
+            ? number(workspace.get("attachmentsEnabled")) == 1 : input.attachmentsEnabled();
+        boolean publicSharingEnabled = input.publicSharingEnabled() == null
+            ? number(workspace.get("publicSharingEnabled")) == 1 : input.publicSharingEnabled();
+        jdbc.update("""
+            UPDATE workspace SET retention_days = ?, audit_retention_days = ?, require_mfa = ?,
+                                 ai_enabled = ?, automations_enabled = ?, attachments_enabled = ?,
+                                 public_sharing_enabled = ?, version = version + 1
+            WHERE id = ? AND version = ?
+            """, retentionDays, auditRetentionDays, requireMfa ? 1 : 0, aiEnabled ? 1 : 0,
+            automationsEnabled ? 1 : 0, attachmentsEnabled ? 1 : 0, publicSharingEnabled ? 1 : 0,
+            workspaceId, currentVersion);
+        List<String> fields = new ArrayList<>();
+        if (input.retentionDays() != null) fields.add("retentionDays");
+        if (input.auditRetentionDays() != null) fields.add("auditRetentionDays");
+        if (input.requireMfa() != null) fields.add("requireMfa");
+        if (input.aiEnabled() != null) fields.add("aiEnabled");
+        if (input.automationsEnabled() != null) fields.add("automationsEnabled");
+        if (input.attachmentsEnabled() != null) fields.add("attachmentsEnabled");
+        if (input.publicSharingEnabled() != null) fields.add("publicSharingEnabled");
+        audit(workspaceId, userId, "workspace.policies_updated", "workspace", workspaceId,
+            Map.of("fields", fields));
+        return linked(Map.of("workspace", workspaceRow(workspaceId)));
+    }
+
+    private Map<String, Object> workspaceRow(String workspaceId) {
+        Map<String, Object> workspace = jdbc.queryForList("""
+            SELECT id, name, type, retention_days AS retentionDays, audit_retention_days AS auditRetentionDays,
+                   require_mfa AS requireMfa, ai_enabled AS aiEnabled, automations_enabled AS automationsEnabled,
+                   attachments_enabled AS attachmentsEnabled, public_sharing_enabled AS publicSharingEnabled,
+                   version, created_at AS createdAt
+            FROM workspace WHERE id = ? AND deleted_at IS NULL
+            """, workspaceId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Workspace not found."));
+        for (String field : List.of("requireMfa", "aiEnabled", "automationsEnabled",
+            "attachmentsEnabled", "publicSharingEnabled")) {
+            workspace.put(field, number(workspace.get(field)) == 1);
+        }
+        return linked(workspace);
     }
 
     public AuthResult signin(ApiDtos.Signin input) {
@@ -2061,6 +2146,7 @@ public class AppService {
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Workspace not found.");
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private void requireTokenWorkspace(String workspaceId) {
@@ -2082,6 +2168,7 @@ public class AppService {
         requireTokenWorkspace(workspaceId);
         String role = roleFor(userId, workspaceId);
         if (roleRank(role) < roleRank(minimum)) throw ApiException.forbidden("You do not have permission for this action.");
+        mfaGuard.requireSatisfied(userId, workspaceId);
     }
 
     private int roleRank(String role) {
