@@ -234,6 +234,10 @@ Status key:
 - [x] Magic-link sign-in with session-bound state, one-time tokens, account creation, and MFA handoff, plus the dedicated `/auth` page
 - [x] Redesigned Upcoming horizon, Archive (archived/completed with reopen/restore), and Search (status/priority/board filters) views
 - [x] Timeline and workload Insights views, redesigned Today, Board, Calendar, task drawer, and grouped Settings navigation
+- [x] CSP, referrer, frame, nosniff, and HttpOnly/SameSite session hardening with cross-origin write rejection
+- [x] axe WCAG 2 A/AA + 2.1 A/AA scans with zero violations across all views, dark mode, dialogs, and auth states
+- [x] Lighthouse mobile: 100 accessibility, 100 best practices, 100 SEO, 88 performance (CLS 0.016, TBT 80 ms)
+- [x] Browser acceptance screenshots and the final QA report in `docs/ACCEPTANCE.md`
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -259,5 +263,5 @@ Status key:
 2. Remaining drawer parity for a label manager and reminder editing.
 3. Auto-plan exact safe/delegated recompute and scheduled retention cleanup.
 4. OAuth provider sign-in (GitHub/Google/Apple) if required by the reference scope.
-5. Live-provider SSO verification and deployment hardening.
-6. Full E2E, screenshots, performance, and final parity sign-off.
+5. Live-provider SSO/SMTP verification and production deployment hardening.
+6. Keep the acceptance suite current as the remaining limitations are closed.

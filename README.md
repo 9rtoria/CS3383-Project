@@ -4,7 +4,7 @@ A new implementation of the Drift task planner, built with **Java + Spring Boot 
 
 ## Current milestone
 
-This is a working phased implementation, not the full parity build yet. See `docs/PARITY.md` for the honest API/model/UI status.
+See `docs/PARITY.md` for the API/model/UI status and `docs/ACCEPTANCE.md` for the build, browser, accessibility, performance, and security acceptance report.
 
 Implemented:
 
@@ -76,6 +76,10 @@ The current Phase 0 parity matrix is at:
 The full phased checklist is at:
 
 `C:\Users\yanpi\.opencode\plan\Project3383-rewrite-checklist.md`
+
+The final acceptance report, including screenshots and QA results, is at:
+
+`docs/ACCEPTANCE.md`
 
 ## Run
 

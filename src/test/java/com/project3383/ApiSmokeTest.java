@@ -48,6 +48,30 @@ class ApiSmokeTest {
     private JdbcTemplate jdbc;
 
     @Test
+    void securityHeadersRejectCrossOriginWritesAndRequireSession() throws Exception {
+        mockMvc.perform(get("/api/bootstrap")).andExpect(status().isUnauthorized());
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        mockMvc.perform(get("/api/health"))
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                .string("X-Content-Type-Options", "nosniff"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                .string("X-Frame-Options", "DENY"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                .string("Referrer-Policy", "strict-origin-when-cross-origin"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                .string("Content-Security-Policy", org.hamcrest.Matchers.containsString("default-src 'self'")));
+        mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .header("Origin", "https://evil.example")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "Cross site", "type", "team"))))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("CSRF_REJECTED"));
+    }
+
+    @Test
     void guestCanClaimAnAccountAndSignInAgain() throws Exception {
         MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
             .andExpect(status().isOk())

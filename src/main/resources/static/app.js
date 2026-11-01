@@ -364,10 +364,9 @@
         day: "numeric",
       }).format(new Date());
       renderSidebar();
-      if (state.currentBoardId) await loadBoard(state.currentBoardId);
-      await loadToday();
-      await loadNotifications();
-      await loadSettings();
+      const initialLoads = [loadToday(), loadNotifications(), loadSettings()];
+      if (state.currentBoardId) initialLoads.push(loadBoard(state.currentBoardId));
+      await Promise.all(initialLoads);
       const startView = state.settings?.startView;
       setView(["today", "board", "upcoming"].includes(startView) ? startView : "today");
       const inviteToken = new URLSearchParams(location.search).get("invite");
@@ -1079,6 +1078,9 @@
     }
     if (!dated.length) timeline.append(element("div", "empty", t("No dated tasks yet.")));
     const scroll = element("div", "timeline-scroll");
+    scroll.tabIndex = 0;
+    scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", t("Timeline"));
     scroll.append(timeline);
     grid.append(scroll);
     const unscheduled = tasks.filter((task) => !task.dueDate);
@@ -5073,6 +5075,7 @@
     const boardField = element("div", "field");
     boardField.append(element("label", "", t("Import board")));
     const boardSelect = element("select", "select");
+    boardSelect.setAttribute("aria-label", t("Import board"));
     boardSelect.append(new Option(t("Choose a board"), ""));
     for (const board of boards()) boardSelect.append(new Option(board.name, board.id));
     boardField.append(boardSelect);
@@ -5321,6 +5324,7 @@
     const expiryField = element("div", "field");
     const expiryLabel = element("label", "", t("Expires"));
     const expiry = element("select", "select");
+    expiry.setAttribute("aria-label", t("Expires"));
     expiry.add(new Option(t("30 days"), "30"));
     expiry.add(new Option(t("90 days"), "90"));
     expiry.add(new Option(t("1 year"), "365"));
@@ -5421,6 +5425,7 @@
     const kindField = element("div", "field");
     const kindLabel = element("label", "", t("Type"));
     const kind = element("select", "select");
+    kind.setAttribute("aria-label", t("Type"));
     kind.add(new Option(t("Slack"), "slack"));
     kind.add(new Option(t("Microsoft Teams"), "teams"));
     kind.add(new Option(t("Generic JSON"), "generic"));
@@ -6182,7 +6187,11 @@
     $("offlineRetryButton").addEventListener("click", () => void syncOfflineQueue(true));
     $("offlineSyncButton").addEventListener("click", () => void syncOfflineQueue(true));
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      window.addEventListener("load", () => {
+        window.setTimeout(() => {
+          navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+        }, 1200);
+      });
     }
     window.DriftI18n?.subscribe(() => {
       renderAccount();
