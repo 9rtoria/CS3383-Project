@@ -3548,6 +3548,11 @@
     $("taskTitle").value = task?.title ?? "";
     $("taskDescription").value = task?.description ?? "";
     $("taskPriority").value = task?.priority ?? "none";
+    const priorityBadge = $("taskPriorityBadge");
+    const priorityValue = task?.priority ?? "none";
+    priorityBadge.classList.toggle("hidden", !task || priorityValue === "none");
+    priorityBadge.textContent = priorityLabel(priorityValue);
+    priorityBadge.className = `badge ${priorityValue === "urgent" || priorityValue === "high" ? "rose" : priorityValue === "medium" ? "amber" : priorityValue === "low" ? "blue" : "slate"}${!task || priorityValue === "none" ? " hidden" : ""}`;
     $("taskLabels").value = (task?.labels ?? []).map((label) => label.name).join(", ");
     $("taskEstimate").value = task?.estimateMinutes ?? "";
     $("taskStart").value = task?.startDate ? String(task.startDate).slice(0, 10) : "";
