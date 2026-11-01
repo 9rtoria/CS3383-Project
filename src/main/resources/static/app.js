@@ -22,6 +22,10 @@
     draggingTaskId: null,
     focus: null,
     focusTimer: null,
+    captureRecognition: null,
+    captureListening: false,
+    captureInterim: "",
+    captureSaving: false,
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
     settings: null,
@@ -1366,6 +1370,336 @@
     if (state.currentBoardId) await loadBoard(state.currentBoardId);
   }
 
+  function localDateKey(date = new Date()) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function addDaysToKey(key, days) {
+    const date = new Date(`${key}T12:00:00`);
+    date.setDate(date.getDate() + days);
+    return localDateKey(date);
+  }
+
+  function nextWeekdayKey(base, target, forceNext = false) {
+    const date = new Date(`${base}T12:00:00`);
+    let delta = (target - date.getDay() + 7) % 7;
+    if (forceNext && delta === 0) delta = 7;
+    date.setDate(date.getDate() + delta);
+    return localDateKey(date);
+  }
+
+  function monthDateKey(base, month, day, year) {
+    let chosenYear = year ?? Number(base.slice(0, 4));
+    let candidate = `${chosenYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (!year && candidate < base) {
+      chosenYear++;
+      candidate = `${chosenYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+    return candidate;
+  }
+
+  function parseQuickAdd(input) {
+    let text = ` ${String(input || "").trim()} `;
+    let priority = "none";
+    const labels = [];
+    text = text.replace(/\s!(urgent|high|medium|low)\b/gi, (_, value) => {
+      priority = value.toLowerCase();
+      return " ";
+    });
+    text = text.replace(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu, (_, label) => {
+      if (!labels.some((item) => item.toLowerCase() === label.toLowerCase())) labels.push(label);
+      return " ";
+    });
+    let estimateMinutes = null;
+    text = text.replace(/\s~(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\b/gi, (_, amount, unit) => {
+      const value = Number(amount);
+      estimateMinutes = Math.min(1440, Math.round(unit.toLowerCase().startsWith("h") ? value * 60 : value));
+      return " ";
+    });
+
+    const today = localDateKey();
+    let date = null;
+    let time = null;
+    text = text.replace(/\s(?:on\s+|by\s+|due\s+)?(\d{4})-(\d{2})-(\d{2})(?!\d)/i, (_, year, month, day) => {
+      date = `${year}-${month}-${day}`;
+      return " ";
+    });
+    text = text.replace(/\s(?:on\s+|by\s+|due\s+)?(?:in\s+)?(\d+)\s+(day|days|week|weeks)\b/i, (_, amount, unit) => {
+      date = addDaysToKey(today, Number(amount) * (unit.toLowerCase().startsWith("week") ? 7 : 1));
+      return " ";
+    });
+    text = text.replace(/\s(?:on\s+|by\s+|due\s+)?(today|tonight|tomorrow)\b/i, (_, word) => {
+      if (word.toLowerCase() === "tomorrow") date = addDaysToKey(today, 1);
+      else {
+        date = today;
+        if (word.toLowerCase() === "tonight") time = { hour: 20, minute: 0 };
+      }
+      return " ";
+    });
+    const weekdays = {
+      sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2,
+      wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4,
+      friday: 5, fri: 5, saturday: 6, sat: 6,
+    };
+    text = text.replace(/\s(?:on\s+|by\s+|due\s+)?(?:next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\b/i, (whole, day) => {
+      if (date) return whole;
+      date = nextWeekdayKey(today, weekdays[day.toLowerCase()], /next\s+/i.test(whole));
+      return " ";
+    });
+    const months = {
+      jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+      may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8,
+      sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+    };
+    text = text.replace(/\s(?:on\s+|by\s+|due\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/i, (_, month, day, year) => {
+      date = monthDateKey(today, months[month.toLowerCase()], Number(day), year ? Number(year) : undefined);
+      return " ";
+    });
+    text = text.replace(/\s(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i, (_, hourRaw, minuteRaw, meridiem) => {
+      let hour = Number(hourRaw) % 12;
+      if (meridiem.toLowerCase() === "pm") hour += 12;
+      time = { hour, minute: Number(minuteRaw || 0) };
+      if (!date) date = today;
+      return " ";
+    });
+    if (!time) {
+      const bareTime = text.match(/\s(?:at\s+)(\d{1,2}):(\d{2})\b/);
+      if (bareTime) {
+        time = { hour: Number(bareTime[1]), minute: Number(bareTime[2]) };
+        text = text.replace(bareTime[0], " ");
+      }
+    }
+    const dueAllDay = !time;
+    const dueDate = date
+      ? (time ? `${date}T${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}:00` : date)
+      : null;
+    const title = text
+      .replace(/\s+/g, " ")
+      .replace(/\s+([,.;:!?])/g, "$1")
+      .replace(/\s+(?:at|on|by|due)\s*$/i, "")
+      .trim();
+    return { title, priority, labels, estimateMinutes, dueDate, dueAllDay };
+  }
+
+  function captureDueLabel(parsed) {
+    if (!parsed.dueDate) return "";
+    const day = parsed.dueDate.slice(0, 10);
+    const today = localDateKey();
+    const name = day === today
+      ? "Today"
+      : day === addDaysToKey(today, 1)
+        ? "Tomorrow"
+        : new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
+    if (parsed.dueAllDay) return name;
+    const date = new Date(parsed.dueDate);
+    const format = state.settings?.timeFormat || "auto";
+    if (format === "24") {
+      return `${name}, ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    }
+    if (format === "12") {
+      const suffix = date.getHours() >= 12 ? "PM" : "AM";
+      return `${name}, ${date.getHours() % 12 || 12}:${String(date.getMinutes()).padStart(2, "0")} ${suffix}`;
+    }
+    return `${name}, ${new Intl.DateTimeFormat(state.settings?.locale || undefined, { hour: "numeric", minute: "2-digit" }).format(date)}`;
+  }
+
+  function captureVoiceSupported() {
+    return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+
+  function stopCaptureVoice() {
+    const recognition = state.captureRecognition;
+    state.captureRecognition = null;
+    state.captureListening = false;
+    state.captureInterim = "";
+    if (recognition) {
+      try { recognition.abort(); } catch { /* ignore */ }
+    }
+    const button = $("captureVoiceButton");
+    if (button) {
+      button.textContent = "Speak";
+      button.classList.remove("listening");
+      button.setAttribute("aria-pressed", "false");
+    }
+    $("captureHeard")?.classList.add("hidden");
+    if ($("captureVoiceError")) $("captureVoiceError").classList.add("hidden");
+    if ($("captureVoiceHint")) {
+      $("captureVoiceHint").textContent = captureVoiceSupported()
+        ? "Uses your browser’s speech service. Edit the words before adding; typing always works too."
+        : "Voice isn’t available in this browser — type instead.";
+    }
+  }
+
+  function populateCaptureColumns() {
+    const board = boards().find((item) => item.id === $("captureBoard").value) ?? boards()[0];
+    $("captureColumn").replaceChildren();
+    for (const column of board?.columns ?? []) $("captureColumn").add(new Option(column.name, column.id));
+  }
+
+  function openCapture() {
+    if (!workspace()) return;
+    stopCaptureVoice();
+    const boardList = boards();
+    const preferred = boardList.find((board) => board.id === state.currentBoardId) ?? boardList[0];
+    $("captureBoard").replaceChildren();
+    for (const board of boardList) $("captureBoard").add(new Option(board.name, board.id));
+    $("captureBoard").value = preferred?.id ?? "";
+    populateCaptureColumns();
+    $("captureInput").value = "";
+    $("captureVoiceError").classList.add("hidden");
+    $("captureHeard").classList.add("hidden");
+    $("captureVoice").classList.toggle("hidden", state.settings?.features?.voice === false);
+    const supported = captureVoiceSupported();
+    $("captureVoiceButton").disabled = !supported;
+    $("captureVoiceHint").textContent = supported
+      ? "Uses your browser’s speech service. Edit the words before adding; typing always works too."
+      : "Voice isn’t available in this browser — type instead.";
+    renderCapturePreview();
+    $("captureModal").classList.remove("hidden");
+    window.setTimeout(() => $("captureInput").focus(), 30);
+  }
+
+  function closeCapture() {
+    stopCaptureVoice();
+    $("captureModal").classList.add("hidden");
+  }
+
+  function renderCapturePreview() {
+    const text = $("captureInput").value;
+    const parsed = parseQuickAdd(text);
+    const container = $("capturePreview");
+    container.replaceChildren();
+    if (!text.trim()) {
+      container.append(element("span", "capture-meta", "Plain language works — Drift parses dates, labels and priorities locally."));
+      return;
+    }
+    if (parsed.title) container.append(makeBadge("New task", "accent"));
+    if (parsed.dueDate) container.append(makeBadge(captureDueLabel(parsed), "blue"));
+    if (parsed.priority !== "none") container.append(makeBadge(parsed.priority, "rose"));
+    for (const label of parsed.labels) container.append(makeBadge(`#${label}`, "moss"));
+    if (parsed.estimateMinutes) container.append(makeBadge(`${parsed.estimateMinutes}m`, "slate"));
+  }
+
+  function toggleCaptureVoice() {
+    if (state.captureListening) {
+      stopCaptureVoice();
+      return;
+    }
+    const Constructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Constructor) {
+      $("captureVoiceError").textContent = "Voice input isn’t available in this browser. The text field is always here.";
+      $("captureVoiceError").classList.remove("hidden");
+      return;
+    }
+    const recognition = new Constructor();
+    recognition.lang = navigator.language || "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index++) {
+        const result = event.results[index];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (result?.isFinal) finalText += transcript;
+        else interim += transcript;
+      }
+      if (finalText.trim()) {
+        const current = $("captureInput").value;
+        $("captureInput").value = `${current}${current && !/\s$/.test(current) ? " " : ""}${finalText.trim()}`;
+        renderCapturePreview();
+      }
+      state.captureInterim = interim.trim();
+      $("captureVoiceHint").textContent = state.captureInterim ? `“${state.captureInterim}”` : "Listening… speak now. You can edit the words before adding.";
+      $("captureHeard").classList.toggle("hidden", !finalText.trim() && !state.captureInterim);
+    };
+    recognition.onerror = (event) => {
+      const message = event.error === "not-allowed" || event.error === "service-not-allowed"
+        ? "Microphone permission was denied. You can still type the task."
+        : event.error === "no-speech"
+          ? "No speech detected. Try again, or type instead."
+          : "Voice input stopped. You can type the task instead.";
+      $("captureVoiceError").textContent = message;
+      $("captureVoiceError").classList.remove("hidden");
+      stopCaptureVoice();
+    };
+    recognition.onend = () => {
+      state.captureRecognition = null;
+      state.captureListening = false;
+      $("captureVoiceButton").textContent = "Speak";
+      $("captureVoiceButton").classList.remove("listening");
+      $("captureVoiceButton").setAttribute("aria-pressed", "false");
+      $("captureHeard").classList.add("hidden");
+      $("captureVoiceHint").textContent = "Uses your browser’s speech service. Edit the words before adding; typing always works too.";
+      window.setTimeout(() => $("captureInput").focus(), 30);
+    };
+    state.captureRecognition = recognition;
+    state.captureListening = true;
+    $("captureVoiceError").classList.add("hidden");
+    $("captureVoiceButton").textContent = "Stop listening";
+    $("captureVoiceButton").classList.add("listening");
+    $("captureVoiceButton").setAttribute("aria-pressed", "true");
+    $("captureVoiceHint").textContent = "Listening… speak now. You can edit the words before adding.";
+    try {
+      recognition.start();
+    } catch {
+      $("captureVoiceError").textContent = "Voice input could not start. You can type the task instead.";
+      $("captureVoiceError").classList.remove("hidden");
+      stopCaptureVoice();
+    }
+  }
+
+  async function submitCapture() {
+    if (state.captureSaving) return;
+    const raw = $("captureInput").value.trim();
+    if (!raw) return;
+    const board = boards().find((item) => item.id === $("captureBoard").value) ?? boards()[0];
+    const columnId = $("captureColumn").value;
+    if (!board || !columnId) return;
+    const parsed = parseQuickAdd(raw);
+    const button = $("captureAddButton");
+    state.captureSaving = true;
+    button.disabled = true;
+    button.firstChild.textContent = "Adding…";
+    try {
+      await request("/api/tasks", {
+        method: "POST",
+        body: {
+          workspaceId: workspace().id,
+          boardId: board.id,
+          columnId,
+          title: parsed.title || raw,
+          description: "",
+          priority: parsed.priority,
+          startDate: null,
+          dueDate: parsed.dueDate,
+          dueAllDay: parsed.dueAllDay,
+          estimateMinutes: parsed.estimateMinutes,
+          actualMinutes: null,
+          labels: parsed.labels,
+        },
+      });
+      window.DriftSound?.play("capture");
+      await loadBoard(state.currentBoardId);
+      await loadToday();
+      showToast(`Added to ${board.name}`);
+      if (settingOn(state.settings?.captureCloseAfterAdd)) {
+        closeCapture();
+      } else {
+        $("captureInput").value = "";
+        renderCapturePreview();
+        window.setTimeout(() => $("captureInput").focus(), 30);
+      }
+    } catch (error) {
+      window.DriftSound?.play("error");
+      showToast(error.message);
+    } finally {
+      state.captureSaving = false;
+      button.disabled = false;
+      button.firstChild.textContent = "Add task ";
+    }
+  }
+
   function openTaskModal(task, columnId = null) {
     state.editing = task;
     state.detail = null;
@@ -2519,6 +2853,27 @@
       });
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
+    $("captureButton").addEventListener("click", openCapture);
+    $("closeCaptureModal").addEventListener("click", closeCapture);
+    $("captureModal").addEventListener("click", (event) => {
+      if (event.target === $("captureModal")) closeCapture();
+    });
+    $("captureBoard").addEventListener("change", populateCaptureColumns);
+    $("captureInput").addEventListener("input", renderCapturePreview);
+    $("captureInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        void submitCapture();
+      }
+    });
+    $("captureAddButton").addEventListener("click", () => void submitCapture());
+    $("captureVoiceButton").addEventListener("click", toggleCaptureVoice);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !$("captureModal").classList.contains("hidden")) {
+        event.preventDefault();
+        closeCapture();
+      }
+    });
     $("focusTaskButton").addEventListener("click", () => {
       if (state.editing) void openFocus(state.editing);
     });

@@ -56,6 +56,7 @@
         </div>
         <div class="top-actions">
           <span id="dateChip" class="date-chip"></span>
+          <button type="button" id="captureButton" class="btn">Capture</button>
           <button type="button" id="autoPlanButton" class="btn">Auto-plan</button>
           <button type="button" id="notificationsButton" class="btn">Notifications <span id="notificationCount">0</span></button>
           <button type="button" id="newTaskButton" class="btn primary">New task</button>
@@ -296,6 +297,38 @@
           <button type="submit" id="authSubmit" class="btn primary">Sign in</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="captureModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
+    <div class="modal capture-dialog">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Quick capture</p>
+          <h2 id="captureTitle">What needs doing?</h2>
+        </div>
+        <button type="button" id="closeCaptureModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <textarea id="captureInput" class="capture-input" rows="3" aria-label="What needs doing?" placeholder="What needs doing? Try “Draft launch note tomorrow 2pm !high #Work ~45m”"></textarea>
+      <div id="captureVoice" class="capture-voice">
+        <button type="button" id="captureVoiceButton" class="btn ghost sm" aria-pressed="false">Speak</button>
+        <span id="captureVoiceHint" class="field-hint">Uses your browser’s speech service. Edit the words before adding; typing always works too.</span>
+        <span id="captureHeard" class="badge accent hidden">Heard</span>
+      </div>
+      <p id="captureVoiceError" class="field-error hidden" role="alert"></p>
+      <div id="capturePreview" class="capture-preview" aria-live="polite"></div>
+      <div class="capture-options">
+        <label class="field">
+          <span class="label">Board</span>
+          <select id="captureBoard" class="select" aria-label="Board"></select>
+        </label>
+        <label class="field">
+          <span class="label">Column</span>
+          <select id="captureColumn" class="select" aria-label="Column"></select>
+        </label>
+        <button type="button" id="captureAddButton" class="btn primary">Add task <span class="kbd">↵</span></button>
+      </div>
+      <p class="capture-tip">Keep it small. You can add details, checklists and people later — or press Esc and come back.</p>
     </div>
   </div>
 

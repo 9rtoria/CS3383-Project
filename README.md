@@ -35,6 +35,7 @@ Implemented:
 - Day Flow 24-hour time rail with capacity ring, now marker, chosen/suggested blocks, drag-to-Later, and Rebalance
 - Focus Mode full-screen timer with pause/resume, complete, early leave, and actual-minutes persistence
 - Sound layer and Sound Lab: synthesized interface sounds, three palettes, volume, typing texture, previews, and localStorage persistence
+- Quick Capture with natural-language parsing and browser voice input with text fallback
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
