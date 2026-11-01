@@ -33,6 +33,7 @@ Implemented:
 - Reminders, in-app notifications, and background delivery
 - Workspace-scoped, per-user Today selection with capacity, reasons, and blocked-dependency state
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
+- Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
 - Settings storage/API (`/api/settings` GET/PATCH) and account profile update (`/api/account` PATCH)

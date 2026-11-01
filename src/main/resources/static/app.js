@@ -13,6 +13,7 @@
     workspaceTasks: [],
     notifications: [],
     autoPlan: null,
+    autoPlanSelection: "balanced",
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
     settings: null,
@@ -51,12 +52,27 @@
     return node;
   }
 
-  function showToast(message) {
+  function showToast(message, action = null) {
     const toast = $("toast");
-    toast.textContent = message;
+    toast.replaceChildren();
+    toast.append(element("span", "", message));
+    if (action && action.label && typeof action.onClick === "function") {
+      const button = element("button", "toast-action", action.label);
+      button.type = "button";
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        toast.classList.add("hidden");
+        try {
+          await action.onClick();
+        } finally {
+          button.disabled = false;
+        }
+      });
+      toast.append(button);
+    }
     toast.classList.remove("hidden");
     window.clearTimeout(showToast.timer);
-    showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 3600);
+    showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 8000);
   }
 
   function workspace() {
@@ -711,7 +727,14 @@
         method: "POST",
         body: { action: "preview", workspaceId: workspace().id },
       });
+      if (result.enabled === false || !(result.options ?? []).length) {
+        showToast("Auto-plan is turned off in Settings.");
+        return;
+      }
       state.autoPlan = result;
+      state.autoPlanSelection = result.options.some((option) => option.id === state.autoPlanSelection)
+        ? state.autoPlanSelection
+        : result.options[0].id;
       renderAutoPlan();
       $("autoPlanModal").classList.remove("hidden");
     } catch (error) {
@@ -722,13 +745,21 @@
   function renderAutoPlan() {
     const container = $("autoPlanPreview");
     container.replaceChildren();
-    for (const option of state.autoPlan?.options ?? []) {
-      const panel = element("div", "detail-section");
+    const options = state.autoPlan?.options ?? [];
+    const selected = options.find((option) => option.id === state.autoPlanSelection) ?? options[0] ?? null;
+    if (!options.length) {
+      container.append(element("div", "empty", "Auto-plan is turned off in Settings."));
+    }
+    for (const option of options) {
+      const panel = element("div", `detail-section auto-plan-option${selected?.id === option.id ? " active" : ""}`);
+      panel.tabIndex = 0;
+      panel.setAttribute("role", "button");
+      panel.setAttribute("aria-pressed", String(selected?.id === option.id));
       const head = element("div", "section-head");
       head.append(element("h3", "", option.label));
       head.append(element("span", "muted small", `${option.blocks?.length ?? 0} blocks · ${option.scheduledMinutes ?? 0} min`));
       panel.append(head);
-      for (const block of (option.blocks ?? []).slice(0, 6)) {
+      for (const block of (option.blocks ?? []).slice(0, 8)) {
         const row = element("div", "detail-item");
         row.append(element("span", "grow", `${block.date} ${minutesLabel(block.startMinute)}–${minutesLabel(block.startMinute + block.minutes)} · ${block.title}`));
         panel.append(row);
@@ -736,27 +767,64 @@
       if ((option.unscheduled ?? []).length) {
         panel.append(element("p", "small muted", `${option.unscheduled.length} task(s) could not be placed.`));
       }
+      if (option.needsEstimate) {
+        panel.append(element("p", "small muted", `${option.needsEstimate} task(s) use the default estimate.`));
+      }
+      if ((option.warnings ?? []).length) {
+        panel.append(element("p", "small field-error", option.warnings[0]));
+      }
+      if (option.overCap) {
+        panel.append(element("p", "small field-error", "This plan exceeds the weekly capacity."));
+      }
+      const choose = () => {
+        state.autoPlanSelection = option.id;
+        renderAutoPlan();
+      };
+      panel.addEventListener("click", choose);
+      panel.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          choose();
+        }
+      });
       container.append(panel);
     }
-    $("applyAutoPlanButton").disabled = !(state.autoPlan?.options?.length);
+    const button = $("applyAutoPlanButton");
+    button.textContent = "Apply this plan";
+    button.disabled = !selected || !(selected.blocks ?? []).length;
   }
 
   async function applyAutoPlan() {
     const button = $("applyAutoPlanButton");
     button.disabled = true;
     try {
-      await request("/api/auto-plan", {
+      const result = await request("/api/auto-plan", {
         method: "POST",
-        body: { action: "apply", workspaceId: workspace().id, optionId: "balanced" },
+        body: { action: "apply", workspaceId: workspace().id, optionId: state.autoPlanSelection || "balanced" },
       });
       $("autoPlanModal").classList.add("hidden");
       await loadToday();
       await loadBoard(state.currentBoardId);
-      showToast("Auto-plan applied.");
+      const applied = result.appliedBlocks ?? result.applied ?? 0;
+      showToast(
+        `Auto-plan applied — ${applied} block${applied === 1 ? "" : "s"} scheduled.`,
+        result.undoId ? { label: "Undo", onClick: () => undoAutoPlan(result.undoId) } : null
+      );
     } catch (error) {
       showToast(error.message);
     } finally {
       button.disabled = false;
+    }
+  }
+
+  async function undoAutoPlan(undoId) {
+    try {
+      await request(`/api/undo/${encodeURIComponent(undoId)}`, { method: "POST" });
+      await loadToday();
+      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      showToast("Previous plan restored.");
+    } catch (error) {
+      showToast(error.message);
     }
   }
 
@@ -1237,7 +1305,10 @@
     root.dataset.motion = settings.motion || "system";
     root.lang = settings.locale || "en";
     $("dayFlowPanel")?.classList.toggle("hidden", settings.features?.dayFlow === false);
-    $("autoPlanButton")?.classList.toggle("hidden", settings.features?.smartPlan === false);
+    $("autoPlanButton")?.classList.toggle(
+      "hidden",
+      settings.features?.smartPlan === false || !settingOn(settings.autoPlanEnabled)
+    );
     const toggle = $("settingsThemeToggle");
     if (toggle) toggle.textContent = dark ? "Light" : "Dark";
   }

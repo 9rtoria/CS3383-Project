@@ -35,7 +35,7 @@ Status key:
 | `/api/auth/signup` | DONE | Guest claim supported |
 | `/api/auth/sso/{workspaceId}` | MISSING | |
 | `/api/auth/sso/{workspaceId}/callback` | MISSING | |
-| `/api/auto-plan` | PARTIAL | Preview/apply/clear; no undo, full settings, or task-change recompute |
+| `/api/auto-plan` | PARTIAL | Settings-aware preview/apply/clear + undo; no automation modes, refresh, stale cleanup, or task-change recompute |
 | `/api/automations` | MISSING | Schema only |
 | `/api/automations/preview` | MISSING | |
 | `/api/automations/{id}` | MISSING | |
@@ -73,7 +73,7 @@ Status key:
 | `/api/today` | PARTIAL | Workspace-scoped GET, per-user accept/dismiss, counts; no rebalance/applyPlan actions |
 | `/api/tokens` | MISSING | |
 | `/api/tokens/{id}` | MISSING | |
-| `/api/undo/{id}` | MISSING | Schema only |
+| `/api/undo/{id}` | PARTIAL | Auto-plan apply undo; task/bulk/automation undo not implemented |
 | `/api/upcoming` | DONE | Due-date groups |
 | `/api/views` | MISSING | Schema only |
 | `/api/webhooks` | MISSING | Schema only |
@@ -133,7 +133,7 @@ Status key:
 | Webhook | SCHEMA | |
 | WebhookDelivery | SCHEMA | |
 | IdempotencyKey | SCHEMA | |
-| UndoAction | SCHEMA | No undo service yet |
+| UndoAction | PARTIAL | Auto-plan apply undo records |
 | EmailMessage | SCHEMA | |
 | JobRun | SCHEMA | |
 | ClientError | SCHEMA | |
@@ -156,7 +156,7 @@ Status key:
 | Labels | PARTIAL | Task-scoped labels; no label manager |
 | Today / capacity / accept / dismiss | PARTIAL | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies; rebalance/applyPlan still missing |
 | Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
-| Smart Plan / Auto-plan | PARTIAL | Preview/apply/clear; no undo, no full settings |
+| Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear + undo; automation modes, refresh, stale cleanup missing |
 | Calendar / ICS | DONE | Month calendar and ICS download |
 | Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
 | Insights | PARTIAL | Basic counts; full reference views missing |
@@ -178,7 +178,7 @@ Status key:
 - SQLite schema is managed by Flyway versioned migrations.
 - `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is still mirrored for API compatibility but is no longer the source of truth.
 - Today does not yet implement the reference `rebalance` and `applyPlan` actions.
-- Auto-plan is a deterministic first pass; it does not yet support undo, full user settings, task-change invalidation, or exact reference UI.
+- Auto-plan is settings-aware and undoable; it does not yet implement automation modes, background refresh, delegated stale cleanup, task-change invalidation, or exact reference UI.
 - UI is functionally close but not pixel-parity with ProjectA2.
 - No live SMTP, OAuth/SSO, or production deployment verification.
 
@@ -206,6 +206,7 @@ Status key:
 - [x] Flyway versioned baseline migration
 - [x] Settings table + GET/PATCH `/api/settings`
 - [x] Account profile update + personal Settings UI (appearance, language, planning, auto-plan, focus, notifications, features)
+- [x] Auto-plan consumes capacity/workday/lunch/rest/week/deep-work/estimate settings and supports undo
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
@@ -213,7 +214,7 @@ Status key:
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
 2. Remaining workspace/security/audit/data settings; Today rebalance/applyPlan.
 3. Task recurrence/assignee and full drawer parity.
-4. Auto-plan undo, task-change invalidation, full constraints.
+4. Auto-plan automation modes, refresh, delegated stale cleanup, task-change invalidation.
 5. Calendar, Search, Insights.
 6. Focus, Voice, Settings, i18n, Offline.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.

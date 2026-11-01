@@ -236,7 +236,7 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.options[0].id").value("balanced"));
 
-        mockMvc.perform(post("/api/auto-plan")
+        MvcResult appliedPlan = mockMvc.perform(post("/api/auto-plan")
                 .session(session)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of(
@@ -245,11 +245,20 @@ class ApiSmokeTest {
                     "optionId", "balanced"
                 ))))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.applied").isNumber());
+            .andExpect(jsonPath("$.applied").isNumber())
+            .andExpect(jsonPath("$.undoId").isNotEmpty())
+            .andReturn();
+        String undoId = objectMapper.readTree(appliedPlan.getResponse().getContentAsString())
+            .path("undoId").asText();
 
-        mockMvc.perform(get("/api/today").session(session))
+        mockMvc.perform(post("/api/undo/" + undoId).session(session))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.planBlocks").isArray());
+            .andExpect(jsonPath("$.undone").value(true))
+            .andExpect(jsonPath("$.action").value("auto_plan.apply"));
+
+        mockMvc.perform(get("/api/today").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.planBlocks").isEmpty());
 
         mockMvc.perform(post("/api/tasks")
                 .session(session)
