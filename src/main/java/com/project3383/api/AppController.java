@@ -37,6 +37,11 @@ public class AppController {
         return appService.createBoard(CurrentUser.id(session), input);
     }
 
+    @PostMapping("/workspaces")
+    public Map<String, Object> createWorkspace(HttpSession session, @RequestBody ApiDtos.WorkspaceCreate input) {
+        return appService.createWorkspace(CurrentUser.id(session), input);
+    }
+
     @GetMapping("/today")
     public Map<String, Object> today(HttpSession session) {
         return appService.today(CurrentUser.id(session));

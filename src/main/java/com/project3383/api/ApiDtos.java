@@ -53,6 +53,12 @@ public final class ApiDtos {
     ) {
     }
 
+    public record WorkspaceCreate(
+        String name,
+        String type
+    ) {
+    }
+
     public record Signup(
         String name,
         String email,

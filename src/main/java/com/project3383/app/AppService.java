@@ -105,14 +105,36 @@ public class AppService {
     public record AuthResult(String userId, Map<String, Object> bootstrap) {
     }
 
+    @Transactional
+    public Map<String, Object> createWorkspace(String userId, ApiDtos.WorkspaceCreate input) {
+        if (input == null || blank(input.name())) throw ApiException.badRequest("Workspace name is required.");
+        String type = "team".equals(input.type()) ? "team" : "personal";
+        if ("personal".equals(type)) {
+            Integer personal = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM workspace w JOIN membership m ON m.workspace_id = w.id
+                WHERE m.user_id = ? AND w.type = 'personal' AND w.created_by = ?
+                """, Integer.class, userId, userId);
+            if (personal != null && personal > 0) throw ApiException.badRequest("You already have a personal workspace.");
+        }
+        createStarterWorkspace(userId, input.name().trim(), type);
+        Map<String, Object> workspace = jdbc.queryForList("""
+            SELECT id, name, type FROM workspace WHERE created_by = ? ORDER BY created_at DESC LIMIT 1
+            """, userId).stream().findFirst().orElseThrow();
+        return linked(Map.of("workspace", workspace));
+    }
+
     private void createStarterWorkspace(String userId, String workspaceName) {
+        createStarterWorkspace(userId, workspaceName, "personal");
+    }
+
+    private void createStarterWorkspace(String userId, String workspaceName, String type) {
         String workspaceId = id();
         String boardId = id();
         String now = Instant.now().toString();
         jdbc.update("""
             INSERT INTO workspace (id, name, type, created_by, created_at)
-            VALUES (?, ?, 'personal', ?, ?)
-            """, workspaceId, workspaceName, userId, now);
+            VALUES (?, ?, ?, ?, ?)
+            """, workspaceId, workspaceName, type, userId, now);
         jdbc.update("""
             INSERT INTO membership (user_id, workspace_id, role, joined_at)
             VALUES (?, ?, 'OWNER', ?)

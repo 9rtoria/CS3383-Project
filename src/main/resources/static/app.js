@@ -6,6 +6,7 @@
     board: null,
     today: null,
     view: "today",
+    currentWorkspaceId: null,
     currentBoardId: null,
     editing: null,
     detail: null,
@@ -53,7 +54,8 @@
   }
 
   function workspace() {
-    return state.boot?.workspaces?.[0] ?? null;
+    const workspaces = state.boot?.workspaces ?? [];
+    return workspaces.find((item) => item.id === state.currentWorkspaceId) ?? workspaces[0] ?? null;
   }
 
   function boards() {
@@ -74,8 +76,8 @@
       // creates the first workspace/board. Using it first avoids a noisy 401.
       const boot = await request("/api/auth/guest", { method: "POST" });
       state.boot = boot;
+      state.currentWorkspaceId = boot.workspaces?.[0]?.id ?? null;
       state.currentBoardId = boards()[0]?.id ?? null;
-      $("workspaceName").textContent = workspace()?.name ?? "Workspace";
       renderAccount();
       $("dateChip").textContent = new Intl.DateTimeFormat(undefined, {
         weekday: "short",
@@ -137,9 +139,9 @@
       });
       if (!result) throw new Error("Email or password is incorrect.");
       state.boot = result;
+      state.currentWorkspaceId = result.workspaces?.[0]?.id ?? null;
       state.currentBoardId = boards()[0]?.id ?? null;
       closeAuthModal();
-      $("workspaceName").textContent = workspace()?.name ?? "Workspace";
       renderAccount();
       renderSidebar();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
@@ -154,6 +156,34 @@
 
   function closeAuthModal() {
     $("authModal").classList.add("hidden");
+  }
+
+  async function createWorkspace() {
+    const name = window.prompt("Team workspace name");
+    if (!name || !name.trim()) return;
+    try {
+      const result = await request("/api/workspaces", {
+        method: "POST",
+        body: { name: name.trim(), type: "team" },
+      });
+      state.boot = await request("/api/bootstrap");
+      state.currentWorkspaceId = result.workspace.id;
+      state.currentBoardId = boards()[0]?.id ?? null;
+      renderSidebar();
+      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      setView("board");
+      showToast("Team workspace created.");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function switchWorkspace(workspaceId) {
+    state.currentWorkspaceId = workspaceId;
+    state.currentBoardId = boards()[0]?.id ?? null;
+    renderSidebar();
+    if (state.currentBoardId) await loadBoard(state.currentBoardId);
+    setView("board");
   }
 
   async function createBoard() {
@@ -176,6 +206,13 @@
   }
 
   function renderSidebar() {
+    const workspaceSelect = $("workspaceSelect");
+    workspaceSelect.replaceChildren();
+    for (const item of state.boot?.workspaces ?? []) {
+      workspaceSelect.add(new Option(item.name, item.id));
+    }
+    if (workspace()) workspaceSelect.value = workspace().id;
+
     const list = $("boardList");
     list.replaceChildren();
     for (const board of boards()) {
@@ -550,6 +587,8 @@
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
     $("newBoardButton").addEventListener("click", createBoard);
+    $("newWorkspaceButton").addEventListener("click", createWorkspace);
+    $("workspaceSelect").addEventListener("change", (event) => void switchWorkspace(event.target.value));
     $("closeModal").addEventListener("click", closeModal);
     $("cancelModal").addEventListener("click", closeModal);
     $("taskForm").addEventListener("submit", saveTask);

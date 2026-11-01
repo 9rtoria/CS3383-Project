@@ -13,6 +13,7 @@ Implemented:
 - Guest session creation (`POST /api/auth/guest`)
 - Email/password sign-up, sign-in, guest claim, and sign-out
 - Bootstrap payload with workspace, board, and columns
+- Workspace create/switch, including a new team workspace
 - Board create/read API
 - Task create / update / move / soft-delete APIs
 - Task detail API with comments, checklist items, and labels
@@ -30,7 +31,7 @@ Implemented:
 
 Not implemented yet:
 
-- Multiple workspaces / invites / roles
+- Invites, role administration, and member management UI
 - Task drawer parity (attachments, dependencies, reminders)
 - Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
@@ -81,6 +82,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | DELETE | `/api/auth/signout` | Invalidate the session |
 | GET | `/api/health` | Health check |
 | GET | `/api/bootstrap` | User/workspace/board bootstrap |
+| POST | `/api/workspaces` | Create a personal/team workspace |
 | POST | `/api/boards` | Create a board and its starter columns |
 | GET | `/api/boards/{id}` | Board with columns and tasks |
 | GET | `/api/today` | Open-task list with capacity |
