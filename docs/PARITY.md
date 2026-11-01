@@ -93,7 +93,7 @@ Status key:
 | `GET /api/tasks?workspaceId=...` | DONE | Dependency picker |
 | `POST /api/tasks/{id}/complete` | DONE | Move to Done |
 | `POST /api/tasks/{id}/reopen` | DONE | Move to first open column |
-| `POST /api/tasks/{id}/restore` | DONE | Clear `archived_at` with activity and audit |
+| `POST /api/tasks/{id}/restore` | DONE | Clear `archived_at` with task activity |
 | `POST /api/tasks/{id}/dependencies` | DONE | Cycle check |
 | `DELETE /api/tasks/{id}/dependencies/{dependsOnTaskId}` | DONE | |
 | `POST /api/tasks/{id}/reminders` | DONE | In-app reminder |
@@ -181,7 +181,7 @@ Status key:
 | Workspace policies | DONE | Versioned require-MFA, assistant, automations, attachments, sharing, retention, and audit-retention controls; policy enforcement in access/attachment paths |
 | SSO | DONE | Organization OIDC config with discovery, state/nonce, domain allowlist, encrypted secret, guest linking, MFA handoff, and local fake-provider test |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
-| Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
+| Audit / Retention | DONE | Workspace/identity/enterprise audit events (matching the reference scope), admin feed, configurable retention |
 | Notifications / Reminders | DONE | In-app inbox with `inApp`/`mentions` preferences, assignment/automation/reminder notifications, unread badge, click-to-open task, polling, quiet hours, visible-tab chime, permission-gated browser notifications, reminder offsets, daily digest queue, and optional SMTP delivery |
 | Members / Invites / Roles | DONE | |
 | Account / workspace deletion | DONE | Soft delete with ownership/only-workspace guards, session and token revocation, audit, and offline-cache clearing |
@@ -280,29 +280,61 @@ palette, notifications, account menu, and Focus mode, plus console-error checks.
 
 Fixed during the pass:
 
-- Sidebar width and content offsets, topbar controls, notification dot, and brand/skip links.
+- Design tokens, base typography, control sizing, border radii, shadows, transitions, hover
+  states, and the shared icon set now follow the reference values.
+- Sidebar width, brand mark, workspace switcher, nav rhythm, hover/focus states, user footer,
+  topbar controls, notification dot, and skip link.
 - Auth split layout, quote measure, form rhythm, and vertical centering.
-- Board column width, list column order (Task/Status/Due/Priority), compact priority badges,
-  hover-only "Add a task", board menu labels, and quick-capture entry points from Board,
-  Calendar, Upcoming, and Insights.
-- Task drawer compact property grid, field/accessibility names, Notes/Checklist/Waiting On/
-  Attachments/Comments/Activity order, autosave, footer actions, and overflow menu.
-- Command palette commands, labels, shortcuts, icons, and board hints.
-- Calendar side-panel headings, Upcoming single-line rows and Change range, Insights data
-  source/order/unscheduled filtering, Search result badges and compact priority text.
-- Settings brand/user footer, theme toggle, nav links, Account spacing, and workspace creation.
+- Board page header, filter row, columns, hover-only column actions, compact counts, relative
+  due labels, card density, board/list switch, and quick-capture entry points.
+- Calendar page header and actions, month navigation, weekday scale, day cells, task dots,
+  dated-task copy, and side panel.
+- Upcoming page header, range switch, single-line rows, priority/time/label/assignee metadata,
+  and Change range footer.
+- Search page header, filter chips, search field/keyboard hint, result rows, marker style,
+  descriptions, relative due labels, and status hint.
+- Archive section headings, grouped list container, completion dates, and reopen actions.
+- Insights page header, Timeline/Workload switch, 240px task column, 59px rows, 30-day grid,
+  overdue bars vs future milestones, workload metrics, and Unscheduled table.
+- Settings navigation, spacing, icons, hover states, and section content for Account,
+  Appearance, Language, Planning, Auto-plan, Focus, Notifications, Sound, Keyboard, Features,
+  Security, Workspace, People, Policies, Automations, Integrations (tokens, webhooks, SSO),
+  Audit, Data, and About. The About runtime copy now mirrors the reference.
+- Settings workspace/user hover states, reset buttons, theme icons, preview block, login-state
+  health row, search/empty-state behavior, section heights, and mobile layout with a section
+  picker instead of the desktop sidebar.
+- Audit records board/task events again, matching the reference’s audit scope and live feed.
+- Task drawer width/padding, header badge row, relative due badge, property grid, Notes,
+  Checklist, Waiting On, attachments, footer actions, Escape handling, and autosave.
+- Command palette position, search row, focus ring, command set, footer, keyboard hints, and
+  clipped first-screen height.
+- Quick capture heading, close control, voice icon, options, tip, and Add-task shortcut.
+- Notifications now open as an anchored menu (not a modal), with unread highlighting, relative
+  dates, Mark read, and Notification settings; the topbar account menu gained its icons,
+  dimensions, and Escape/outside-click behavior.
+- Keyboard shortcut sheet now uses the reference card container, scroll clipping, row density,
+  labels, and close control.
+- Board list view uses relative due labels, compact priority tones, no empty-priority badge,
+  and the same toolbar grouping on mobile.
+- Mobile Today/Board padding, toolbar wrapping, and Settings header/picker/theme alignment.
 - Focus mode action icons and task context icon.
-- Demo seed now mirrors the reference workspace, labels, two boards, WIP limits, tasks,
-  checklists, comments, view, automation, and notifications.
+- Demo seed is anchored to the reference seed date (`2026-10-29`) and mirrors the reference
+  workspace, labels, two boards, WIP limits, tasks, descriptions, checklists, comments, view,
+  and notifications.
 
-The remaining visible differences are **state/time drift, not missing UI or behavior**:
+The remaining visible differences are **state/data drift and timing, not missing UI or
+behavior**:
 
-- The reference demo was seeded on 2026-10-29; this demo is seeded on 2026-11-02. Due labels,
-  overdue counts, Today suggestions, and calendar placement therefore differ.
-- The reference database contains six already-applied auto-plan blocks from earlier evaluation;
-  a fresh seed starts with no plan blocks until the evaluator applies a plan.
-- Today's automatically selected minutes and suggestion count can differ by one when dates move.
-- Notification timestamps reflect each database's seed time.
+- The reference database has additional historical activity (for example, a task created by
+  an earlier evaluation and later edited). Search’s “most recently touched” order, the board
+  list row order, the audit event count, and notification timestamps can therefore differ
+  from a freshly seeded database. Filters, row design, audit writes, and notification actions
+  behave the same.
+- Opening `/settings#security` directly loads active sessions immediately in this build; the
+  reference shows its “Open Security to load active sessions” hint until Security is selected.
+  Selecting Security or Refresh produces the same session list in both.
+- Health latency is measured live and can differ by a few milliseconds.
+- Tiny sub-pixel differences remain from font rasterization and browser text metrics.
 
 Live third-party OAuth/SMTP/OIDC verification and manual screen-reader sign-off remain
 environmental checks as listed above.

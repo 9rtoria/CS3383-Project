@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -45,9 +46,19 @@ public class WorkspaceController {
         return appService.members(CurrentUser.id(session), workspaceId);
     }
 
+    @GetMapping("/invites")
+    public Map<String, Object> invites(HttpSession session, @PathVariable String workspaceId) {
+        return appService.pendingInvites(CurrentUser.id(session), workspaceId);
+    }
+
     @PostMapping("/invites")
     public Map<String, Object> invite(HttpSession session, @PathVariable String workspaceId, @RequestBody ApiDtos.InviteCreate input) {
         return appService.invite(CurrentUser.id(session), workspaceId, input);
+    }
+
+    @DeleteMapping("/invites")
+    public Map<String, Object> revokeInvite(HttpSession session, @PathVariable String workspaceId, @RequestParam String inviteId) {
+        return appService.revokeInvite(CurrentUser.id(session), workspaceId, inviteId);
     }
 
     @PatchMapping("/members/{userId}")

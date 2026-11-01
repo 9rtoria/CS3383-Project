@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.lang.management.ManagementFactory;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -26,9 +29,11 @@ import java.util.Map;
 public class AppController {
 
     private final AppService appService;
+    private final JdbcTemplate jdbc;
 
-    public AppController(AppService appService) {
+    public AppController(AppService appService, JdbcTemplate jdbc) {
         this.appService = appService;
+        this.jdbc = jdbc;
     }
 
     @GetMapping("/bootstrap")
@@ -145,6 +150,22 @@ public class AppController {
 
     @GetMapping("/health")
     public Map<String, Object> health() {
-        return Map.of("status", "ok", "service", "Project3383");
+        long started = System.nanoTime();
+        String database = "ok";
+        try {
+            jdbc.queryForObject("SELECT 1", Integer.class);
+        } catch (RuntimeException error) {
+            database = "error";
+        }
+        long latencyMs = Math.max(0, (System.nanoTime() - started) / 1_000_000);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "ok");
+        payload.put("version", "1.0.0");
+        payload.put("database", database);
+        payload.put("latencyMs", latencyMs);
+        payload.put("timestamp", Instant.now().toString());
+        payload.put("uptimeSeconds", ManagementFactory.getRuntimeMXBean().getUptime() / 1000);
+        payload.put("service", "Project3383");
+        return payload;
     }
 }

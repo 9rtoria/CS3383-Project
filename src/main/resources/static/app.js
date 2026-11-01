@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   "use strict";
 
   const state = {
@@ -538,15 +538,18 @@
     const menu = $("themeAccountMenu");
     menu.replaceChildren();
     menu.append(element("div", "menu-label", name));
-    const settings = element("button", "menu-item", t("Account settings"));
+    const settings = element("button", "menu-item");
     settings.type = "button";
+    settings.append(icon("user"), document.createTextNode(t("Account settings")));
     settings.addEventListener("click", () => window.location.assign("/settings"));
-    const workspace = element("button", "menu-item", t("Workspace settings"));
+    const workspace = element("button", "menu-item");
     workspace.type = "button";
+    workspace.append(icon("gear"), document.createTextNode(t("Workspace settings")));
     workspace.addEventListener("click", () => window.location.assign("/settings#workspace"));
     const dark = document.documentElement.dataset.theme === "dark";
-    const theme = element("button", "menu-item", `${t("Switch theme:")} ${t(dark ? "Light" : "Dark")}`);
+    const theme = element("button", "menu-item");
     theme.type = "button";
+    theme.append(icon(dark ? "sun" : "moon"), document.createTextNode(`${t("Switch theme:")} ${t(dark ? "Light" : "Dark")}`));
     theme.addEventListener("click", () => {
       menu.classList.add("hidden");
       $("themeMenuButton").setAttribute("aria-expanded", "false");
@@ -554,13 +557,15 @@
     });
     menu.append(settings, workspace, theme, element("div", "menu-sep"));
     if (guest) {
-      const signIn = element("button", "menu-item", t("Sign in"));
+      const signIn = element("button", "menu-item");
       signIn.type = "button";
+      signIn.append(icon("user"), document.createTextNode(t("Sign in")));
       signIn.addEventListener("click", () => window.location.assign("/auth"));
       menu.append(signIn);
     } else {
-      const signOut = element("button", "menu-item danger", t("Sign out"));
+      const signOut = element("button", "menu-item danger");
       signOut.type = "button";
+      signOut.append(icon("logout"), document.createTextNode(t("Sign out")));
       signOut.addEventListener("click", async () => {
         try {
           await request("/api/auth/signout", { method: "DELETE" });
@@ -747,9 +752,18 @@
   }
 
   async function openNotificationsModal() {
+    const panel = $("notificationsPanel");
+    const opening = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !opening);
+    $("notificationsButton").setAttribute("aria-expanded", String(opening));
+    if (!opening) return;
     await loadNotifications();
     renderNotifications();
-    $("notificationsModal").classList.remove("hidden");
+  }
+
+  function closeNotificationsPanel() {
+    $("notificationsPanel").classList.add("hidden");
+    $("notificationsButton").setAttribute("aria-expanded", "false");
   }
 
   function setUnreadCount(count) {
@@ -766,15 +780,24 @@
   function renderNotifications() {
     const list = $("notificationList");
     list.replaceChildren();
-    if (!state.notifications.length) list.append(element("div", "empty", "No notifications."));
+    if (!state.notifications.length) {
+      list.append(element("div", "notification-empty", t("No notifications. A calm inbox.")));
+    }
+    const locale = state.settings?.locale || "en";
     for (const notification of state.notifications) {
-      const row = element("div", `detail-item${notification.readAt ? "" : " unread"}`);
-      const grow = element("div", "grow");
-      grow.append(element("strong", "", notification.title));
-      if (notification.body) grow.append(element("p", "", notification.body));
-      grow.append(element("p", "small muted", new Date(notification.createdAt).toLocaleString()));
-      row.append(grow);
-      if (!notification.readAt || notification.link) row.classList.add("clickable");
+      const row = element("button", `menu-item${notification.readAt ? "" : " active"}`);
+      row.type = "button";
+      const dot = element("span", `side-dot${notification.readAt ? "" : " today"}`);
+      dot.setAttribute("aria-hidden", "true");
+      const copy = element("span", "notification-copy");
+      copy.append(element("strong", "", notification.title));
+      if (notification.body) copy.append(element("span", "notification-body", notification.body));
+      const when = new Date(notification.createdAt);
+      if (!Number.isNaN(when.getTime())) {
+        const label = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(when);
+        copy.append(element("span", "notification-time", label));
+      }
+      row.append(dot, copy);
       row.addEventListener("click", async () => {
         try {
           if (!notification.readAt) {
@@ -783,10 +806,10 @@
             setUnreadCount(result.unreadCount);
             renderNotifications();
           }
+          closeNotificationsPanel();
           const link = String(notification.link || "");
           const taskId = new URLSearchParams(link.split("?")[1] || "").get("task");
           if (taskId) {
-            $("notificationsModal").classList.add("hidden");
             await openTaskById(taskId);
           } else if (link && link !== "/") {
             window.location.assign(link);
@@ -967,7 +990,7 @@
     for (const task of dueOnly) {
       const row = element("button", "calendar-day-row");
       row.type = "button";
-      const time = dueTimeLabel(task.dueDate);
+      const time = dueTimeLabel(task.dueDate, Boolean(task.dueAllDay));
       row.append(element("span", "calendar-day-time", time || "—"));
       row.append(element("span", "calendar-day-copy", task.title));
       row.addEventListener("click", () => void openTaskById(task.id));
@@ -988,7 +1011,9 @@
     const totalDated = days.reduce((sum, day) => sum + (day.tasks ?? []).length, 0);
     $("calendarDatedCount").textContent = `${totalDated} ${t("dated")}`;
     $("calendarDatedHint").textContent = totalDated
-      ? t("{{count}} dated tasks this month. Untimed work stays in its board.", { count: totalDated })
+      ? totalDated === 1
+        ? t("1 task has a due date this month. Untimed work stays on its board, where it belongs.")
+        : t("{{count}} tasks have a due date this month. Untimed work stays on its board, where it belongs.", { count: totalDated })
       : t("Tasks with a due date stay in their board, where they belong.");
     for (let i = 0; i < 42; i++) {
       const date = new Date(gridStart);
@@ -1023,7 +1048,7 @@
         day.append(item);
       }
       for (const task of visibleDue) {
-        const item = element("button", "calendar-item", task.title);
+        const item = element("button", `calendar-item${task.priority === "urgent" || task.priority === "high" ? " priority-over" : ""}`, task.title);
         item.type = "button";
         item.title = task.title;
         item.addEventListener("click", (event) => {
@@ -1056,7 +1081,12 @@
     return t(label.charAt(0).toUpperCase() + label.slice(1));
   }
 
-  function dueTimeLabel(value) {
+  function priorityTone(value) {
+    return value === "urgent" || value === "high" ? "rose" : value === "medium" ? "amber" : "blue";
+  }
+
+  function dueTimeLabel(value, allDay = false) {
+    if (allDay) return "";
     const raw = value == null ? "" : String(value);
     if (!raw.includes("T")) return "";
     const date = new Date(raw);
@@ -1119,8 +1149,12 @@
     if (task.priority && task.priority !== "none") {
       meta.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
     }
-    const time = dueTimeLabel(task.dueDate);
-    if (time) meta.append(element("span", "upcoming-time", time));
+    const time = dueTimeLabel(task.dueDate, Boolean(task.dueAllDay));
+    if (time) {
+      const timeLabel = element("span", "upcoming-time");
+      timeLabel.append(icon("clock"), document.createTextNode(time));
+      meta.append(timeLabel);
+    }
     for (const pill of labelPills(task)) meta.append(pill);
     if (Number(task.subtaskCount || 0) > 0) {
       meta.append(element("span", "upcoming-time", `${Number(task.subtaskDone || 0)}/${Number(task.subtaskCount)}`));
@@ -1128,7 +1162,7 @@
     copy.append(meta);
     const side = element("span", "upcoming-row-side");
     side.append(element("span", "upcoming-board", task.boardName || ""));
-    side.append(icon("chevron"));
+    side.append(icon("chevron-right"));
     row.append(dot, copy, side);
     row.addEventListener("click", () => void openTaskById(task.id));
     return row;
@@ -1204,8 +1238,9 @@
       const copy = element("div", "archive-copy");
       copy.append(element("strong", "", task.title));
       const when = kind === "archived" ? task.archivedAt : (task.completedAt || task.updatedAt);
+      const whenLabel = captureDueLabel({ dueDate: when, dueAllDay: true });
       copy.append(element("span", "archive-meta",
-        `${task.boardName || t("Board")} · ${kind === "archived" ? t("archived {{when}}", { when: relativeTime(when) }) : t("completed {{when}}", { when: relativeTime(when) })}`));
+        `${task.boardName || t("Board")} · ${kind === "archived" ? t("archived {{when}}", { when: whenLabel }) : t("completed {{when}}", { when: whenLabel })}`));
       const actions = element("div", "archive-actions");
       const open = element("button", "btn ghost sm", t("Open"));
       open.type = "button";
@@ -1274,7 +1309,8 @@
       const tasks = data.results ?? [];
       const total = Number(data.total ?? tasks.length);
       $("searchMeta").textContent = `${total} ${t(total === 1 ? "result" : "results")} · ${query ? t("matching your search") : t("most recently touched")}`;
-      $("searchStatusHint").textContent = status === "all" ? t("all statuses") : t(status);
+      const statusHint = $("searchStatusHint");
+      statusHint.replaceChildren(icon("list"), document.createTextNode(` ${status === "all" ? t("all statuses") : t(status)}`));
       if (!tasks.length) {
         results.append(element("div", "empty", t("No matching tasks.")));
         return;
@@ -1296,11 +1332,13 @@
     copy.append(element("strong", "", task.title));
     if (task.description) copy.append(element("span", "search-row-description", task.description));
     const meta = element("span", "search-row-meta");
-    meta.append(element("span", "badge slate", task.boardName || t("Board")));
-    meta.append(element("span", "badge slate", archived ? t("Archived") : (task.columnName || t("Task"))));
-    if (task.dueDate) meta.append(element("span", `badge ${String(task.dueDate).slice(0, 10) < localDateKey() && !completed ? "rose" : "slate"}`, captureDueLabel(task)));
-    if (Number(task.subtaskCount || 0) > 0) meta.append(element("span", "badge slate", `${Number(task.subtaskDone || 0)}/${Number(task.subtaskCount || 0)}`));
-    for (const pill of labelPills(task)) meta.append(pill);
+    meta.append(element("span", "search-row-meta-text", task.boardName || t("Board")));
+    meta.append(element("span", "search-row-meta-text", archived ? t("Archived") : (task.columnName || t("Task"))));
+    if (task.dueDate) {
+      const due = element("span", `search-row-due${String(task.dueDate).slice(0, 10) < localDateKey() && !completed ? " overdue" : ""}`);
+      due.textContent = captureDueLabel(task);
+      meta.append(due);
+    }
     copy.append(meta);
     const side = element("span", "search-row-side");
     if (task.priority && task.priority !== "none") {
@@ -1384,7 +1422,11 @@
         copy.append(element("span", "timeline-task-title", task.title));
         const meta = element("span", "timeline-task-meta");
         if (task.priority && task.priority !== "none") meta.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
-        if (task.estimateMinutes) meta.append(element("span", "", `${task.estimateMinutes}m`));
+        if (task.estimateMinutes) {
+          const estimate = element("span");
+          estimate.append(icon("clock"), document.createTextNode(`${task.estimateMinutes}m`));
+          meta.append(estimate);
+        }
         const assigneeName = task.assigneeName || task.assignee?.name;
         if (assigneeName) meta.append(element("span", "", assigneeName));
         copy.append(meta);
@@ -1392,9 +1434,11 @@
         const track = element("div", "timeline-track");
         const due = new Date(`${String(task.dueDate).slice(0, 10)}T12:00:00`);
         const barStart = task.startDate ? new Date(`${String(task.startDate).slice(0, 10)}T12:00:00`) : due;
-        const startIndex = Math.max(0, Math.min(range - 1, Math.round((barStart - start) / 86400000)));
-        const endIndex = Math.max(startIndex, Math.min(range - 1, Math.round((due - start) / 86400000)));
-        const bar = element("span", `timeline-bar${task.priority === "urgent" ? " urgent" : ""}${Number(task.completed) === 1 ? " done" : ""}`);
+        const dueIndex = Math.max(0, Math.min(range - 1, Math.round((due - start) / 86400000)));
+        const overdue = due.getTime() < start.getTime();
+        const startIndex = overdue ? 0 : Math.max(0, Math.min(range - 1, Math.round((barStart - start) / 86400000)));
+        const endIndex = overdue ? range - 1 : Math.max(startIndex, dueIndex);
+        const bar = element("span", `timeline-bar${task.priority === "urgent" || task.priority === "high" ? " urgent" : ""}${Number(task.completed) === 1 ? " done" : ""}`);
         bar.style.left = `${(startIndex / range) * 100}%`;
         bar.style.width = `${Math.max(1.6, ((endIndex - startIndex + 1) / range) * 100)}%`;
         bar.title = `${task.title} · ${String(task.dueDate).slice(0, 10)}`;
@@ -1964,6 +2008,16 @@
     try {
       state.today = await request(`/api/today?workspaceId=${encodeURIComponent(current.id)}`);
       window.DriftOffline?.cacheToday(current.id, state.today);
+      if (settingOn(state.settings?.autoPlanEnabled)) {
+        try {
+          state.autoPlan = await request("/api/auto-plan", {
+            method: "POST",
+            body: { action: "preview", workspaceId: current.id },
+          });
+        } catch {
+          // The card can fall back to the stored plan blocks.
+        }
+      }
     } catch (error) {
       if (error.code === "NETWORK_ERROR") {
         const cached = window.DriftOffline?.readCachedToday(current.id);
@@ -2172,12 +2226,12 @@
         copy.append(element("strong", "", task.title));
         const column = (board.columns ?? []).find((item) => item.id === task.columnId);
         const priorityCell = element("span", "row-priority");
-        priorityCell.append(task.priority && task.priority !== "none"
-          ? makeBadge(priorityLabel(task.priority), `priority-${task.priority}`)
-          : makeBadge(t("No priority"), "slate"));
+        if (task.priority && task.priority !== "none") {
+          priorityCell.append(makeBadge(priorityLabel(task.priority), priorityTone(task.priority)));
+        }
         row.append(dot, copy,
           element("span", "row-status row-dim", column?.name || t("Open")),
-          element("span", "row-due row-dim", task.dueDate ? String(task.dueDate).slice(0, 10) : t("No date")),
+          element("span", "row-due row-dim", task.dueDate ? captureDueLabel(task) : t("No date")),
           priorityCell);
         row.addEventListener("click", () => openTaskModal(task));
         table.append(row);
@@ -2320,7 +2374,7 @@
   }
 
   function taskCard(task) {
-    const card = element("article", `card${state.selectedTaskIds.has(task.id) ? " selected" : ""}`);
+    const card = element("article", `card${Number(task.completed) === 1 ? " completed" : ""}${state.selectedTaskIds.has(task.id) ? " selected" : ""}`);
     card.dataset.taskId = task.id;
     card.draggable = true;
     card.tabIndex = 0;
@@ -2416,41 +2470,84 @@
       list.append(element("div", "empty", t("Nothing open. Add a task to begin.")));
     }
     const visibleTasks = state.todayShowAll ? suggestions : suggestions.slice(0, 6);
-    for (const task of visibleTasks) {
-      const row = element("div", "today-row");
-      const grow = element("div", "grow");
-      grow.append(element("h3", "", task.title));
-      const bits = [];
-      if (task.reason) bits.push(translateReason(task.reason));
-      if (task.blocked && task.openDependencies) bits.push(`${task.openDependencies} ${t(task.openDependencies === 1 ? "open dependency" : "open dependencies")}`);
-      if (task.estimateMinutes) bits.push(`${task.estimateMinutes}m`);
-      if (task.actualMinutes) bits.push(`${task.actualMinutes}${t("m tracked")}`);
-      if (task.startDate) bits.push(`${t("starts")} ${task.startDate.slice(0, 10)}`);
-      if (task.dueDate) bits.push(`${t("due")} ${task.dueDate.slice(0, 10)}`);
-      grow.append(element("p", "", bits.join(" · ")));
-      const meta = element("div", "today-row-meta");
+    const toneFor = (priority) => priority === "urgent" || priority === "high" ? "rose" : priority === "medium" ? "amber" : "blue";
+    visibleTasks.forEach((task, index) => {
+      const card = element("article", `focus-card${task.accepted ? " accepted" : ""}${task.blocked ? " blocked" : ""}`);
+      const marker = element("div", "focus-index");
+      marker.setAttribute("aria-hidden", "true");
+      if (task.accepted) marker.append(icon("check"));
+      else marker.textContent = String(index + 1).padStart(2, "0");
+      const main = element("div", "focus-main");
+      const title = element("button", "focus-title", task.title);
+      title.type = "button";
+      title.addEventListener("click", () => openTaskModal(task));
+      const reason = element("div", "focus-reason");
+      reason.append(icon("capture"), document.createTextNode(translateReason(task.reason || "")));
+      const meta = element("div", "focus-meta");
       if (task.accepted) meta.append(makeBadge(t("Chosen today"), "accent"));
-      if (task.priority && task.priority !== "none") meta.append(makeBadge(priorityLabel(task.priority), `priority-${task.priority}`));
-      for (const pill of labelPills(task)) meta.append(pill);
-      if (task.boardName) meta.append(element("span", "field-hint", task.boardName));
-      if (task.assigneeName) meta.append(element("span", "field-hint", task.assigneeName));
-      grow.append(meta);
+      if (task.priority && task.priority !== "none") {
+        const priorityBadge = makeBadge(priorityLabel(task.priority), toneFor(task.priority));
+        priorityBadge.classList.add("focus-priority");
+        meta.append(priorityBadge);
+      }
+      if (task.dueDate) {
+        const due = element("span");
+        due.append(icon("calendar-days"), document.createTextNode(captureDueLabel(task)));
+        meta.append(due);
+      }
+      if (task.estimateMinutes) {
+        const estimate = element("span");
+        estimate.append(icon("clock3"), document.createTextNode(`${task.estimateMinutes}m`));
+        meta.append(estimate);
+      }
+      if (task.actualMinutes) {
+        const actual = element("span", "focus-actual");
+        actual.append(icon("clock3"), document.createTextNode(`${task.actualMinutes}${t("m tracked")}`));
+        meta.append(actual);
+      }
+      for (const label of (task.labels ?? []).slice(0, 2)) meta.append(makeBadge(label.name, label.color || "slate"));
+      if (task.boardName) meta.append(element("span", "focus-board", task.boardName));
+      if (task.assigneeName) meta.append(element("span", "", `· ${task.assigneeName}`));
+      if (task.openDependencies) {
+        const waiting = element("span", "task-foot-meta blocked");
+        waiting.append(icon("link"), document.createTextNode(t("waiting")));
+        meta.append(waiting);
+      }
+      main.append(title, reason, meta);
 
-      const actions = element("div", "top-actions");
-      const choose = element("button", "btn sm", t(task.accepted ? "Chosen" : "Choose"));
-      choose.type = "button";
-      choose.disabled = Boolean(task.accepted || task.blocked);
-      choose.addEventListener("click", () => todayAction("accept", task.id));
-      const dismiss = element("button", "btn ghost sm", t("Dismiss"));
+      const actions = element("div", "focus-actions");
+      if (!task.accepted && !task.blocked) {
+        const choose = element("button", "btn soft sm");
+        choose.type = "button";
+        choose.append(icon("check"), document.createTextNode(` ${t("Choose")}`));
+        choose.setAttribute("aria-label", t("Choose {{name}} for today", { name: task.title }));
+        choose.addEventListener("click", () => todayAction("accept", task.id));
+        actions.append(choose);
+      }
+      if (!task.blocked) {
+        const focus = element("button", "icon-btn sm");
+        focus.type = "button";
+        focus.title = t("Start focus");
+        focus.setAttribute("aria-label", t("Start focus on {{name}}", { name: task.title }));
+        focus.append(icon("play"));
+        focus.addEventListener("click", () => openFocus(task));
+        actions.append(focus);
+      }
+      const dismiss = element("button", "icon-btn sm");
       dismiss.type = "button";
+      dismiss.title = t("Not today");
+      dismiss.setAttribute("aria-label", t("Dismiss {{name}} for today", { name: task.title }));
+      dismiss.append(icon("x"));
       dismiss.addEventListener("click", () => todayAction("dismiss", task.id));
-      const open = element("button", "btn sm", t("Open"));
+      const open = element("button", "icon-btn sm");
       open.type = "button";
+      open.setAttribute("aria-label", t("Open {{name}}", { name: task.title }));
+      open.append(icon("chevron-right"));
       open.addEventListener("click", () => openTaskModal(task));
-      actions.append(choose, dismiss, open);
-      row.append(grow, actions);
-      list.append(row);
-    }
+      actions.append(dismiss, open);
+      card.append(marker, main, actions);
+      list.append(card);
+    });
     if (!state.todayShowAll && suggestions.length > 6) {
       const more = element("button", "btn ghost sm today-show-more", t("Show the other {{count}}", { count: suggestions.length - 6 }));
       more.type = "button";
@@ -2492,26 +2589,25 @@
     $("glanceOpen").textContent = String(Number(state.today?.counts?.open ?? suggestions.length));
     $("glanceOpenLabel").textContent = `${t("Open in")} ${workspace()?.name ?? t("Workspace")}`;
 
-    const blocks = state.today?.planBlocks ?? [];
-    const planned = blocks.reduce((sum, block) => sum + Number(block.minutes || 0), selected);
-    $("todayPlanStats").textContent = `${blocks.length} ${t("blocks today")} · ${Math.floor(planned / 60)}h ${planned % 60}m ${t("planned")}`;
-    const week = [];
-    for (let offset = 0; offset < 5; offset++) {
-      const day = new Date(now);
-      day.setDate(now.getDate() + offset);
-      const key = dateKey(day);
-      const minutes = blocks.filter((block) => block.date === key).reduce((sum, block) => sum + Number(block.minutes || 0), 0)
-        + suggestions.filter((task) => String(task.dueDate || "").slice(0, 10) === key && !task.selected).reduce((sum, task) => sum + Number(task.estimateMinutes || 0), 0);
-      week.push({ key, label: new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "short", day: "numeric" }).format(day), minutes });
-    }
-    $("todayPlanWeek").replaceChildren(...week.map((entry) => {
-      const item = element("span", "auto-plan-week-item");
-      item.append(element("strong", "", entry.label));
-      const bar = element("i");
-      bar.style.width = `${Math.min(100, Math.round((entry.minutes / Math.max(1, total)) * 100))}%`;
-      item.append(bar, element("small", "", entry.minutes ? `${Math.floor(entry.minutes / 60)}h ${entry.minutes % 60}m` : "0m"));
-      return item;
-    }));
+    const autoOptions = state.autoPlan?.options ?? [];
+    const autoCurrent = autoOptions.find((option) => option.id === "balanced") ?? autoOptions[0] ?? null;
+    const blocks = autoCurrent?.blocks?.filter((block) => block.date === state.today?.date) ?? state.today?.planBlocks ?? [];
+    const planned = autoCurrent ? Number(autoCurrent.scheduledMinutes || 0) : blocks.reduce((sum, block) => sum + Number(block.minutes || 0), selected);
+    $("todayPlanStats").textContent = `${blocks.length} ${t("blocks today")} · ${durationLabel(planned)} ${t("planned")}`;
+    const modeLabels = { suggest: "Suggest only", safe: "Safe auto-apply", full: "Full auto-apply", delegated: "Delegated cleanup" };
+    $("todayPlanMode").textContent = `${t("Auto-plan")} · ${t(modeLabels[state.settings?.autoPlanMode] || "Suggest only")}`;
+    const autoLimit = $("todayPlanLimit");
+    const over = (autoCurrent?.weeks ?? []).some((weekEntry) => weekEntry.over);
+    autoLimit.textContent = over ? t("Over weekly limit") : t("Within weekly limit");
+    autoLimit.className = `badge ${over ? "amber" : "accent"}`;
+    $("todayPlanMeta").textContent = (autoCurrent?.weeks ?? []).map((weekEntry) => {
+      const parsed = new Date(`${weekEntry.weekStart}T00:00:00`);
+      const label = new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(parsed);
+      return `${label}: ${durationLabel(Number(weekEntry.actualMinutes || 0) + Number(weekEntry.plannedMinutes || 0))} / ${durationLabel(Number(weekEntry.capMinutes || 0))}`;
+    }).join(" · ");
+    const unscheduled = autoCurrent?.unscheduled?.length ?? 0;
+    $("todayPlanUnscheduled").textContent = unscheduled ? `${unscheduled} ${t("not placed")}` : "";
+    $("todayPlanCard").classList.toggle("hidden", !settingOn(state.settings?.autoPlanEnabled));
     $("applyTodayPlanButton").disabled = !suggestions.some((task) => task.selected);
     $("applyTodayPlanButton").textContent = t("Apply plan");
     renderDayFlow(suggestions);
@@ -2590,8 +2686,8 @@
     const scheduled = (state.today?.planBlocks ?? [])
       .map((block) => {
         const task = suggestions.find((entry) => entry.id === block.taskId);
-        if (!task || (!task.accepted && !task.selected)) return null;
-        return { task: { ...task, accepted: true }, start: Number(block.startMinute), duration: Number(block.minutes), blockId: block.id };
+        if (!task) return null;
+        return { task, start: Number(block.startMinute), duration: Number(block.minutes), blockId: block.id };
       })
       .filter(Boolean);
     const scheduledIds = new Set(scheduled.map((block) => block.task.id));
@@ -2700,6 +2796,14 @@
     const hour = Math.floor(value / 60);
     const minute = value % 60;
     return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  function durationLabel(minutes) {
+    const value = Math.max(0, Number(minutes) || 0);
+    const hours = Math.floor(value / 60);
+    const rest = value % 60;
+    if (!hours) return `${rest}m`;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
   }
 
   async function openAutoPlan() {
@@ -3032,7 +3136,11 @@
 
     const badges = $("focusBadges");
     badges.replaceChildren();
-    if (focus.task.estimateMinutes) badges.append(makeBadge(`${focus.task.estimateMinutes}m ${t("estimate")}`, "slate"));
+    if (focus.task.estimateMinutes) {
+      const estimateBadge = makeBadge(`${focus.task.estimateMinutes}m ${t("estimate")}`, "slate");
+      estimateBadge.prepend(icon("clock"));
+      badges.append(estimateBadge);
+    }
     if (focus.task.actualMinutes) badges.append(makeBadge(`${focus.task.actualMinutes}${t("m tracked before")}`, "accent"));
     if (focus.task.priority && focus.task.priority !== "none") badges.append(makeBadge(t(focus.task.priority), "rose"));
     for (const label of (focus.task.labels ?? []).slice(0, 3)) {
@@ -3345,22 +3453,42 @@
     if (!parsed.dueDate) return "";
     const day = parsed.dueDate.slice(0, 10);
     const today = localDateKey();
-    const name = day === today
-      ? t("Today")
-      : day === addDaysToKey(today, 1)
-        ? t("Tomorrow")
-        : new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
-    if (parsed.dueAllDay) return name;
     const date = new Date(parsed.dueDate);
+    const locale = state.settings?.locale || undefined;
+    const start = new Date(`${today}T00:00:00`);
+    const target = new Date(`${day}T00:00:00`);
+    const diff = Math.round((target.getTime() - start.getTime()) / 86_400_000);
+    const capitalize = (value) => value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+    let relative;
+    try {
+      relative = capitalize(new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(diff, "day"));
+    } catch {
+      relative = diff === 0 ? t("Today") : diff === 1 ? t("Tomorrow") : diff === -1 ? t("Yesterday") : `${Math.abs(diff)} ${t("days ago")}`;
+    }
     const format = state.settings?.timeFormat || "auto";
-    if (format === "24") {
-      return `${name}, ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    let time = "";
+    if (!parsed.dueAllDay) {
+      if (format === "24") {
+        time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      } else if (format === "12") {
+        time = `${date.getHours() % 12 || 12}:${String(date.getMinutes()).padStart(2, "0")} ${date.getHours() >= 12 ? "PM" : "AM"}`;
+      } else {
+        try {
+          time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(date);
+        } catch {
+          time = "";
+        }
+      }
     }
-    if (format === "12") {
-      const suffix = date.getHours() >= 12 ? "PM" : "AM";
-      return `${name}, ${date.getHours() % 12 || 12}:${String(date.getMinutes()).padStart(2, "0")} ${suffix}`;
+    if (diff === 0) return time ? `${t("Today")} ${time}` : t("Today");
+    if (diff === 1) return time ? `${t("Tomorrow")} ${time}` : t("Tomorrow");
+    if (diff === -1 || (diff < -1 && diff >= -7)) return relative;
+    if (diff > 1 && diff < 7) {
+      const weekday = new Intl.DateTimeFormat(locale, { weekday: "long" }).format(date);
+      return time ? `${weekday} ${time}` : weekday;
     }
-    return `${name}, ${new Intl.DateTimeFormat(state.settings?.locale || undefined, { hour: "numeric", minute: "2-digit" }).format(date)}`;
+    const absolute = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
+    return time ? `${absolute} ${time}` : absolute;
   }
 
   function captureVoiceSupported() {
@@ -3589,9 +3717,14 @@
     }
     const completed = Number(task.completed) === 1;
     container.append(makeBadge(t(completed ? "Done" : "Open"), completed ? "accent" : "slate"));
-    if (task.dueDate) container.append(makeBadge(captureDueLabel(task), "blue"));
+    if (task.dueDate) {
+      const overdue = String(task.dueDate).slice(0, 10) < localDateKey() && !completed;
+      const dueBadge = element("span", `badge ${overdue ? "rose" : "slate"}`);
+      dueBadge.append(icon("calendar-days"), document.createTextNode(captureDueLabel(task)));
+      container.append(dueBadge);
+    }
     if (task.recurrenceRule) container.append(makeBadge(describeRecurrence(task.recurrenceRule), "violet"));
-    if (task.version) container.append(element("span", "field-hint", `v${task.version}`));
+    if (task.version) container.append(element("span", "field-hint task-version", `v${task.version}`));
     if (toggle) {
       toggle.classList.remove("hidden");
       toggle.classList.toggle("done", completed);
@@ -3616,7 +3749,8 @@
     $("attachmentList").replaceChildren();
     $("reminderList").replaceChildren();
     $("activityList").replaceChildren();
-    $("subtaskProgress").textContent = "";
+    $("subtaskProgress").replaceChildren();
+    $("subtaskProgress").hidden = true;
     const board = currentBoard();
     const columns = board?.columns ?? [];
     $("taskModalTitle").textContent = task?.title ?? t("New task");
@@ -3767,10 +3901,15 @@
     if (!task) return;
     const subtasks = task.subtasks ?? [];
     const completed = subtasks.filter((item) => Number(item.completed) === 1).length;
-    $("subtaskProgress").textContent = subtasks.length ? `${completed}/${subtasks.length}` : "";
+    const meter = $("subtaskProgress");
+    meter.replaceChildren();
+    const fill = element("i");
+    fill.style.width = subtasks.length ? `${Math.round((completed / subtasks.length) * 100)}%` : "0%";
+    meter.append(fill);
+    meter.hidden = !subtasks.length;
     const list = $("subtaskList");
     list.replaceChildren();
-    if (!subtasks.length) list.append(element("div", "empty", "No checklist items yet."));
+    if (!subtasks.length) list.classList.add("hidden"); else list.classList.remove("hidden");
     for (const subtask of subtasks) {
       const row = element("label", `detail-item${Number(subtask.completed) === 1 ? " done" : ""}`);
       const checkbox = element("input");
@@ -3806,7 +3945,7 @@
     const dependencies = task.dependencies ?? [];
     const dependencyList = $("dependencyList");
     dependencyList.replaceChildren();
-    if (!dependencies.length) dependencyList.append(element("div", "empty", "No blockers."));
+    if (!dependencies.length) dependencyList.append(element("p", "field-hint", "No blockers. This task can move freely."));
     for (const dependency of dependencies) {
       const row = element("div", "detail-item");
       const title = element("span", "grow", dependency.title);
@@ -3819,6 +3958,7 @@
     }
     const select = $("dependencySelect");
     select.replaceChildren();
+    select.add(new Option(t("Choose a task to wait on..."), ""));
     const existing = new Set(dependencies.map((item) => item.id));
     for (const item of state.workspaceTasks) {
       if (item.id === task.id || existing.has(item.id)) continue;
@@ -4454,17 +4594,11 @@
   }
 
   function formatHour(hour, settings = state.settings) {
-    const value = Number(hour) % 24;
-    if (settings?.timeFormat === "24") return `${String(value).padStart(2, "0")}:00`;
-    if (settings?.timeFormat === "12") {
-      const suffix = value < 12 ? "AM" : "PM";
-      return `${value % 12 || 12} ${suffix}`;
-    }
-    try {
-      return new Intl.DateTimeFormat(settings?.locale || undefined, { hour: "numeric" }).format(new Date(2000, 0, 1, value));
-    } catch {
-      return `${value}:00`;
-    }
+    const value = ((Math.round(Number(hour)) % 24) + 24) % 24;
+    const use24 = settings?.timeFormat === "24" || (settings?.timeFormat !== "12" && settings?.locale === "zh-TW");
+    if (use24) return `${String(value).padStart(2, "0")}:00`;
+    const suffix = value >= 12 ? "PM" : "AM";
+    return `${value % 12 || 12}:00 ${suffix}`;
   }
 
   function hourOptions(includeMidnightEnd) {
@@ -4578,7 +4712,7 @@
     copy.append(element("strong", "", title));
     if (description) copy.append(element("span", "", description));
     if (hint) copy.append(element("small", "field-hint", hint));
-    const wrap = element("div", "settings-control");
+    const wrap = element("div", Array.isArray(control) ? "settings-control inline" : "settings-control");
     for (const node of Array.isArray(control) ? control : [control]) {
       if (node) wrap.append(node);
     }
@@ -4598,8 +4732,9 @@
     copy.append(heading, element("p", "", description));
     head.append(copy);
     if (resetKey) {
-      const reset = element("button", "btn ghost sm", "Restore defaults");
+      const reset = element("button", "btn ghost sm");
       reset.type = "button";
+      reset.append(icon("rotate"), document.createTextNode("Restore defaults"));
       reset.addEventListener("click", () => restoreSettingsSection(resetKey));
       head.append(reset);
     }
@@ -4625,34 +4760,40 @@
     const container = $("settingsSections");
     nav.replaceChildren();
     container.replaceChildren();
+    const isAdmin = ["OWNER", "ADMIN"].includes(role);
+    const enterprise = (currentWorkspace?.type ?? "personal") !== "personal";
     const definitions = [
       { id: "account", label: "Account", group: "You", icon: "user", render: renderAccountSettings },
-      { id: "appearance", label: "Appearance", group: "You", icon: "sun", render: renderAppearanceSettings },
-      { id: "language", label: "Language & region", group: "You", icon: "search", render: renderLanguageSettings },
-      { id: "planning", label: "Planning", group: "You", icon: "calendar", render: renderPlanningSettings },
-      { id: "auto-plan", label: "Auto-plan", group: "You", icon: "insights", render: renderAutoPlanSettings },
-      { id: "focus", label: "Focus & capture", group: "You", icon: "capture", render: renderFocusSettings },
+      { id: "appearance", label: "Appearance", group: "You", icon: "palette", render: renderAppearanceSettings },
+      { id: "language", label: "Language & region", group: "You", icon: "languages", render: renderLanguageSettings },
+      { id: "planning", label: "Planning", group: "You", icon: "sliders", render: renderPlanningSettings },
+      { id: "auto-plan", label: "Auto-plan", group: "You", icon: "refresh", render: renderAutoPlanSettings },
+      { id: "focus", label: "Focus & capture", group: "You", icon: "timer", render: renderFocusSettings },
       { id: "notifications", label: "Notifications", group: "You", icon: "bell", render: renderNotificationSettings },
-      { id: "sound", label: "Sound", group: "You", icon: "volume", render: renderSoundSettings },
-      { id: "keyboard", label: "Keyboard", group: "You", icon: "command", render: renderKeyboardSettings },
-      { id: "features", label: "Features", group: "You", icon: "command", render: renderFeatureSettings },
-      { id: "security", label: "Security", group: "You", icon: "settings", render: renderSecuritySettings },
+      { id: "sound", label: "Sound", group: "You", icon: "capture", render: renderSoundSettings },
+      { id: "keyboard", label: "Keyboard", group: "You", icon: "keyboard", render: renderKeyboardSettings },
+      { id: "features", label: "Features", group: "You", icon: "capture", render: renderFeatureSettings },
+      { id: "security", label: "Security", group: "You", icon: "shield", render: renderSecuritySettings },
+      { id: "workspace", label: "Workspace", group: "Workspace", icon: "board", render: renderWorkspaceSettings },
     ];
-    if (["OWNER", "ADMIN"].includes(role)) {
-      definitions.push({ id: "workspace", label: "Workspace", group: "Workspace", icon: "board", render: renderWorkspaceSettings });
-      if ((currentWorkspace?.type ?? "personal") !== "personal") {
-        definitions.push({ id: "people", label: "People", group: "Workspace", icon: "user", render: renderPeopleSettings });
-        definitions.push({ id: "policies", label: "Policies", group: "Workspace", icon: "archive", render: renderPolicySettings });
-      }
+    if (enterprise) {
       definitions.push(
-        { id: "automations", label: "Automations", group: "Workspace", icon: "insights", render: renderAutomationSettings },
-        { id: "integrations", label: "Integrations", group: "Workspace", icon: "command", render: renderIntegrationSettings },
-        { id: "audit", label: "Audit log", group: "Workspace", icon: "archive", render: renderAuditSettings },
+        { id: "members", label: "People", group: "Workspace", icon: "users", render: renderPeopleSettings },
+        { id: "policies", label: "Policies", group: "Workspace", icon: "lock", render: renderPolicySettings },
+        { id: "automations", label: "Automations", group: "Workspace", icon: "workflow", render: renderAutomationSettings },
       );
     }
+    if (isAdmin) {
+      definitions.push(
+        { id: "integrations", label: "Integrations", group: "Workspace", icon: "code", render: renderIntegrationSettings },
+      );
+    }
+    if (enterprise && isAdmin) {
+      definitions.push({ id: "audit", label: "Audit log", group: "Workspace", icon: "history", render: renderAuditSettings });
+    }
     definitions.push(
-      { id: "data", label: "Data & export", group: "Data", icon: "list", render: renderDataSettings },
-      { id: "about", label: "About Drift", group: "Data", icon: "help", render: renderAboutSettings },
+      { id: "data", label: "Data & export", group: "Data", icon: "database", render: renderDataSettings },
+      { id: "about", label: "About Drift", group: "Data", icon: "lifebuoy", render: renderAboutSettings },
     );
     let group = null;
     definitions.forEach((definition, index) => {
@@ -4667,6 +4808,7 @@
       button.addEventListener("click", (event) => {
         event.preventDefault();
         nav.querySelectorAll(".settings-nav-item").forEach((node) => node.classList.toggle("active", node === button));
+        $("settingsMobileSection").value = definition.id;
         const target = document.getElementById(`settings-${definition.id}`);
         target?.scrollIntoView({ behavior: "smooth", block: "start" });
         target?.refreshSettingsSection?.();
@@ -4675,8 +4817,33 @@
       nav.append(button);
       container.append(definition.render());
     });
+    const mobileSelect = $("settingsMobileSection");
+    mobileSelect.replaceChildren();
+    let mobileGroup = null;
+    let mobileGroupNode = null;
+    for (const definition of definitions) {
+      if (definition.group !== mobileGroup) {
+        mobileGroup = definition.group;
+        mobileGroupNode = document.createElement("optgroup");
+        mobileGroupNode.label = t(mobileGroup);
+        mobileSelect.append(mobileGroupNode);
+      }
+      const option = new Option(t(definition.label), definition.id);
+      mobileGroupNode.append(option);
+    }
+    mobileSelect.value = location.hash.replace(/^#/, "") || definitions[0]?.id || "";
+    mobileSelect.onchange = () => {
+      const id = mobileSelect.value;
+      const target = document.getElementById(`settings-${id}`);
+      const button = nav.querySelector(`[data-section="${id}"]`);
+      nav.querySelectorAll(".settings-nav-item").forEach((node) => node.classList.toggle("active", node === button));
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.refreshSettingsSection?.();
+      history.replaceState({}, "", `/settings#${id}`);
+    };
     window.DriftI18n?.translateSubtree(nav);
     window.DriftI18n?.translateSubtree(container);
+    window.DriftI18n?.translateSubtree(mobileSelect);
     window.setTimeout(focusSettingsHash, 30);
   }
 
@@ -4688,6 +4855,7 @@
     const button = nav?.querySelector(`[data-section="${hash}"]`);
     if (!target || !button) return;
     nav.querySelectorAll(".settings-nav-item").forEach((node) => node.classList.toggle("active", node === button));
+    $("settingsMobileSection").value = hash;
     target.scrollIntoView({ block: "start" });
     target.refreshSettingsSection?.();
   }
@@ -4713,12 +4881,13 @@
 
     const timezoneInput = makeTextInput(user.timezone || "Asia/Hong_Kong", "Time zone", () => {}, "Asia/Hong_Kong");
 
-    const save = element("button", "btn primary sm", "Save");
+    const save = element("button", "btn primary sm");
     save.type = "button";
+    save.append(icon("check"), document.createTextNode(" Save"));
     save.addEventListener("click", () => void saveAccount(nameInput, timezoneInput, save));
     const status = element("div", "inline");
     status.append(makeBadge(guest ? "Guest" : "Account", guest ? "amber" : "accent"), save);
-    settingsRow(card, "Account status", `${guest ? t("Guest, not yet claimable across devices.") : t("Verified account.")} ${t("Two-factor is off.")}`, status);
+    settingsRow(card, "Account status", `${guest ? t("Guest, not yet claimable across devices.") : t("Verified account.")} ${user.mfaEnabled ? t("Two-factor is on.") : t("Two-factor is off.")}`, status);
     return section;
   }
 
@@ -4775,7 +4944,7 @@
       const visual = element("span", `settings-theme-visual ${value}`);
       visual.append(element("i"), element("i"), element("i"));
       const caption = element("span");
-      caption.append(document.createTextNode(label));
+      caption.append(icon(value === "system" ? "monitor" : value === "light" ? "sun" : "moon"), document.createTextNode(label));
       option.append(visual, caption, icon("check", "icon settings-check"));
       option.addEventListener("click", () => {
         themeGrid.querySelectorAll(".settings-theme-card").forEach((node) => {
@@ -4837,7 +5006,9 @@
     const block = element("div", "settings-preview-block");
     const head = element("div", "settings-preview-head");
     const copy = element("div");
-    copy.append(element("span", "eyebrow", "Preview"), element("strong", "", "Today, at a glance"));
+    const eyebrow = element("span", "eyebrow");
+    eyebrow.append(icon("capture"), document.createTextNode(" Preview"));
+    copy.append(eyebrow, element("strong", "", "Today, at a glance"));
     head.append(copy, makeBadge("4h 45m", "accent"));
     const live = element("div", "settings-live-preview");
     const intro = element("div", "settings-preview-copy");
@@ -4851,12 +5022,19 @@
       plan.append(segment);
     }
     const task = element("div", "settings-preview-task");
-    task.append(element("span", "settings-preview-check", "✓"));
+    const check = element("span", "settings-preview-check");
+    check.append(icon("check"));
     const taskCopy = element("span");
-    taskCopy.append(element("strong", "", "Ship the pricing page"), element("small", "", `${formatHour(18)} · 120m · Focus next`));
-    task.append(taskCopy, makeBadge("95%", "accent"));
+    const meta = element("small");
+    meta.append(icon("clock3"), document.createTextNode(`${formatHour(18)} · 120m · ${t("Focus next")}`));
+    taskCopy.append(element("strong", "", "Ship the pricing page"), meta);
+    task.append(check, taskCopy, makeBadge("95%", "accent"));
     live.append(intro, plan, task);
-    block.append(head, live, element("p", "field-hint", "Editorial · Moss · Comfortable · Default text"));
+    const font = state.settings.displayFont === "modern" ? "Modern" : state.settings.displayFont === "classic" ? "Classic" : "Editorial";
+    const accent = state.settings.accent === "ink" ? "Ink" : state.settings.accent === "clay" ? "Clay" : "Moss";
+    const density = state.settings.density === "compact" ? "Compact" : "Comfortable";
+    const reading = state.settings.readingSize === "large" ? "Large text" : "Default text";
+    block.append(head, live, element("p", "field-hint", `${t(font)} · ${t(accent)} · ${t(density)} · ${t(reading)}`));
     return block;
   }
 
@@ -4864,7 +5042,7 @@
     const settings = state.settings;
     const { section, card } = createSettingsSection("language", "Language & region", "The planner stays local. Language, dates, and the week start with you.", "language");
     const datePreview = makeBadge(new Intl.DateTimeFormat(settings.locale, { dateStyle: "medium" }).format(new Date()), "slate");
-    settingsRow(card, "Language", "Preview: the app shell, Today, planning, capture, and Settings are translated.", makeSelect([{ value: "en", label: "English" }, { value: "zh-TW", label: "Traditional Chinese" }], settings.locale, "Language", (value) => {
+    settingsRow(card, "Language", "Preview: the app shell, Today, planning, capture, and Settings are translated. Workspace admin remains English for now.", makeSelect([{ value: "en", label: "English" }, { value: "zh-TW", label: "Traditional Chinese" }], settings.locale, "Language", (value) => {
       updateSettings({ locale: value });
       datePreview.textContent = new Intl.DateTimeFormat(value, { dateStyle: "medium" }).format(new Date());
     }));
@@ -4928,7 +5106,7 @@
     const settings = state.settings;
     const { section, card } = createSettingsSection("auto-plan", "Auto-plan", "Let Drift shape a realistic plan from your tasks and limits. It schedules the plan layer, never your due dates or completed work.", "auto-plan");
     settingsRow(card, "Enable Auto-plan", "Generate plans in Today and keep them fresh while the app is open.", makeToggle(settingOn(settings.autoPlanEnabled), "Enable Auto-plan", (next) => updateSettings({ autoPlanEnabled: next ? 1 : 0 })));
-    settingsRow(card, "Automation level", "Start with suggestions. Higher levels may move flexible plan blocks automatically.", makeSelect([{ value: "suggest", label: "Suggest only" }, { value: "safe", label: "Safe auto-apply" }, { value: "full", label: "Full plan auto-apply" }, { value: "delegated", label: "Delegated cleanup" }], settings.autoPlanMode, "Automation level", (value) => updateSettings({ autoPlanMode: value })));
+    settingsRow(card, "Automation level", "Start with suggestions. Higher levels may move flexible plan blocks automatically; every apply is undoable.", makeSelect([{ value: "suggest", label: "Suggest only" }, { value: "safe", label: "Safe auto-apply" }, { value: "full", label: "Full plan auto-apply" }, { value: "delegated", label: "Delegated cleanup" }], settings.autoPlanMode, "Automation level", (value) => updateSettings({ autoPlanMode: value })));
     settingsRow(card, "Rest between tasks", "Every scheduled block leaves this much space before the next one.", makeSelect([0, 5, 10, 15, 20, 30].map((minutes) => ({ value: minutes, label: minutes ? `${minutes} min` : "None" })), settings.autoPlanRestMinutes, "Rest between tasks", (value) => updateSettings({ autoPlanRestMinutes: Number(value) })));
     settingsRow(card, "Weekly work limit", `${Math.round((settings.autoPlanWeeklyMinutes / 60) * 10) / 10}h per week. If the limit is reached, Auto-plan stops recommending new work even when a day has free time.`, (() => {
       const wrap = element("div", "settings-range");
@@ -4974,13 +5152,14 @@
   function renderSoundSettings() {
     const sound = window.DriftSound;
     const prefs = sound?.getPrefs() ?? { enabled: true, volume: 0.32, palette: "hybrid", typing: false };
-    const { section, card } = createSettingsSection("sound", "Sound", "Quiet feedback for captures, completions, moves, and reminders. Generated locally; nothing is downloaded.", "sound");
+    const { section, card } = createSettingsSection("sound", "Sound", "A quiet material texture, not an alarm. Test it here before turning it on for a demo.");
+    card.classList.add("sound-settings");
     const update = (patch) => {
       const next = sound?.setPrefs(patch) ?? { ...prefs, ...patch };
       Object.assign(prefs, next);
     };
 
-    settingsRow(card, "Interface sounds", "Quiet feedback for captures, completions, moves, and reminders.", makeToggle(prefs.enabled, "Interface sounds", (next) => {
+    settingsRow(card, "Interface sounds", "Quiet feedback for captures, completions, moves, and reminders. Generated locally; nothing is downloaded.", makeToggle(prefs.enabled, "Interface sounds", (next) => {
       update({ enabled: next });
       if (next) sound?.play("tap");
     }));
@@ -5008,9 +5187,10 @@
       });
       palettes.append(button);
     }
-    settingsRow(card, "Sound character", "Try each palette on your speakers and headphones.", palettes);
+    settingsRow(card, "Sound character", "Try each palette on your laptop speakers and headphones. There is no single right answer.", palettes);
 
     const volumeWrap = element("div", "inline sound-volume");
+    volumeWrap.append(icon("volume"));
     const volume = element("input", "");
     volume.type = "range";
     volume.min = "0";
@@ -5018,65 +5198,69 @@
     volume.step = "1";
     volume.value = String(Math.round(prefs.volume * 100));
     volume.setAttribute("aria-label", "Sound volume");
-    const volumeValue = element("strong", "settings-range-value", `${Math.round(prefs.volume * 100)}%`);
+    const volumeRow = settingsRow(card, "Volume", `${Math.round(prefs.volume * 100)}% · ${t("deliberately low by default.")}`, volumeWrap);
+    const volumeDesc = volumeRow.querySelector(".settings-copy span");
     volume.addEventListener("input", () => {
-      volumeValue.textContent = `${volume.value}%`;
+      volumeDesc.textContent = `${volume.value}% · ${t("deliberately low by default.")}`;
       update({ volume: Number(volume.value) / 100 });
     });
     volume.addEventListener("change", () => sound?.play("tap"));
-    volumeWrap.append(volume, volumeValue);
-    settingsRow(card, "Volume", "Deliberately low by default.", volumeWrap);
+    volumeWrap.append(volume);
 
-    settingsRow(card, "Typing texture", "A very quiet tick while writing in a field. Off by default.", makeToggle(prefs.typing, "Typing texture", (next) => {
+    settingsRow(card, "Typing texture", "An optional, very quiet tick while writing in a field. Off by default so long notes stay calm.", makeToggle(prefs.typing, "Typing texture", (next) => {
       update({ typing: next });
       if (next) sound?.play("key");
     }));
 
     const previews = element("div", "sound-previews");
-    for (const [name, label] of [
-      ["capture", "Capture"],
-      ["complete", "Complete"],
-      ["reminder", "Reminder"],
-      ["move", "Move"],
-      ["error", "Error"],
-      ["focus", "Focus"],
+    for (const [name, label, iconName] of [
+      ["capture", "Capture", "capture"],
+      ["complete", "Complete", "check"],
+      ["reminder", "Reminder", "bell"],
+      ["move", "Move", "play"],
+      ["error", "Error", "volume-x"],
+      ["focus", "Focus", "music"],
     ]) {
-      const button = element("button", "btn ghost sm", label);
+      const button = element("button", "btn ghost sm");
       button.type = "button";
+      button.append(icon(iconName), document.createTextNode(` ${t(label)}`));
       button.addEventListener("click", () => {
         if (!prefs.enabled) update({ enabled: true });
         sound?.play(name);
       });
       previews.append(button);
     }
-    settingsRow(card, "Preview", "Listen before you choose.", previews);
+    settingsRow(card, "Listen before you choose", "Preview the whole kit in the current palette.", previews);
+    settingsRow(card, "Keyboard shortcuts", "Shortcut feedback is always part of the kit. Typing texture is the only per-key option.", icon("keyboard", "icon muted-icon"));
     return section;
   }
 
   function renderNotificationSettings() {
     const settings = state.settings;
     const notifications = { ...DEFAULT_NOTIFICATIONS, ...settings.notifications };
-    const { section, card } = createSettingsSection("notifications", "Notifications", "In-app notifications are the source of truth. Email is delivered when SMTP is configured.", "notifications");
-    const toggleNotification = (key, title, description) => {
+    const { section, card } = createSettingsSection("notifications", "Notifications", "In-app notifications are the source of truth. Email is delivered when SMTP is configured.");
+    const toggleNotification = (key, title, description, hint) => {
       return settingsRow(card, title, description, makeToggle(settingOn(notifications[key]), title, (next) => {
         notifications[key] = next;
         if (key === "browser" && next && "Notification" in window && window.Notification.permission === "default") {
           void window.Notification.requestPermission();
         }
         patchNotifications({ [key]: next });
-      }));
+      }), hint);
     };
     toggleNotification("inApp", "In-app notifications", "Assignments, comments, reminders, and automations.");
-    toggleNotification("mentions", "Mentions and assignments", "Only notify me when someone mentions me or assigns work.");
-    toggleNotification("email", "Email reminders", "Delivered when SMTP is configured.");
-    const browserRow = toggleNotification("browser", "Browser reminders", "Ask the browser for permission when this workspace is open.");
+    toggleNotification("mentions", "Mentions and assignments", "Only notify me when someone needs my attention.");
+    toggleNotification("email", "Email reminders", "Reminder emails use the development outbox when SMTP is not configured.");
+    const permission = "Notification" in window ? window.Notification.permission : "denied";
+    const browserHint = permission === "granted" ? "Browser enabled" : permission === "denied" ? "Blocked in browser settings" : undefined;
+    const browserRow = toggleNotification("browser", "Browser reminders", "When this tab is hidden, a browser notification can use the system sound. The operating system decides.", browserHint);
     const notificationControls = browserRow.querySelector(".settings-control");
-    if ("Notification" in window && window.Notification.permission === "default") {
+    if (permission === "default") {
       const allow = element("button", "btn ghost sm", t("Allow notifications"));
       allow.type = "button";
       allow.addEventListener("click", async () => {
-        const permission = await window.Notification.requestPermission();
-        showToast(permission === "granted" ? t("Notifications allowed.") : t("Background reminders require browser permission."));
+        const next = await window.Notification.requestPermission();
+        showToast(next === "granted" ? t("Notifications allowed.") : t("Background reminders require browser permission."));
         renderSettings();
       });
       notificationControls.append(allow);
@@ -5093,12 +5277,12 @@
     });
     notificationControls.append(sendTest);
     settingsRow(card, "Daily email digest", "A short morning plan. Requires SMTP in production.", makeToggle(settingOn(settings.emailDigest), "Daily email digest", (next) => updateSettings({ emailDigest: next ? 1 : 0 })));
-    settingsRow(card, "Digest hour", "Local time for the daily email summary.", makeSelect(Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatHour(hour) })), settings.digestHour, "Digest hour", (value) => updateSettings({ digestHour: Number(value) })));
+    settingsRow(card, "Digest hour", "Local time, 0–23.", makeSelect(Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: `${String(hour).padStart(2, "0")}:00` })), settings.digestHour, "Digest hour", (value) => updateSettings({ digestHour: Number(value) })));
     const quiet = element("div", "settings-inline-controls settings-quiet-hours");
-    quiet.append(makeSelect([{ value: "", label: "Off" }, ...Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatHour(hour) }))], settings.quietStart ?? "", "Quiet hours start", (value) => updateSettings({ quietStart: value === "" ? null : Number(value) })));
+    quiet.append(makeSelect([{ value: "", label: "Off" }, ...Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: String(hour).padStart(2, "0") }))], settings.quietStart ?? "", "Quiet hours start", (value) => updateSettings({ quietStart: value === "" ? null : Number(value) })));
     quiet.append(element("span", "field-hint", "to"));
-    quiet.append(makeSelect([{ value: "", label: "Off" }, ...Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatHour(hour) }))], settings.quietEnd ?? "", "Quiet hours end", (value) => updateSettings({ quietEnd: value === "" ? null : Number(value) })));
-    settingsRow(card, "Quiet hours", "Pause in-app and browser notifications during this window.", quiet);
+    quiet.append(makeSelect([{ value: "", label: "Off" }, ...Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: String(hour).padStart(2, "0") }))], settings.quietEnd ?? "", "Quiet hours end", (value) => updateSettings({ quietEnd: value === "" ? null : Number(value) })));
+    settingsRow(card, "Quiet hours", "In-app still records; email and digests pause. Cross-midnight windows are supported.", quiet);
     return section;
   }
 
@@ -5113,8 +5297,7 @@
     };
     toggleFeature("dayFlow", "Day Flow", "The 24-hour rail, capacity ring, and focus-next card.");
     toggleFeature("smartPlan", "Smart Plan", "Preview a local rules plan, then apply or undo it. No model call.");
-    toggleFeature("voice", "Voice capture (experimental)", "Show the browser speech shortcut. Text capture is always available.");
-    settingsRow(card, "Single-key shortcuts", "C, /, ? and G sequences. Saved on this device.", makeToggle(state.singleKeyShortcuts, "Single-key shortcuts", setSingleKeyShortcuts));
+    toggleFeature("voice", "Voice capture", "Show the browser speech shortcut. Text capture is always available.");
     return section;
   }
 
@@ -5139,8 +5322,8 @@
     );
     const toolbar = element("div", "inline");
     toolbar.style.cssText = "justify-content:flex-end;margin-bottom:10px";
-    const newRule = element("button", "btn primary sm", t("New rule"));
-    newRule.prepend(icon("plus"), document.createTextNode(" "));
+    const newRule = element("button", "btn primary sm");
+    newRule.append(icon("plus"), document.createTextNode("New rule"));
     newRule.type = "button";
     toolbar.append(newRule);
     section.insertBefore(toolbar, card);
@@ -5181,13 +5364,9 @@
           const row = element("div", "settings-row");
           const copy = element("div", "settings-copy");
           copy.append(element("strong", "", rule.name));
-          const parts = [
-            labelFor(AUTOMATION_TRIGGERS, rule.trigger),
-            `${labelFor(AUTOMATION_ACTIONS, rule.actionType)}: ${rule.actionValue}`,
-          ];
-          if (rule.boardId) parts.push(boardName(rule.boardId));
-          if (rule.lastRunAt) parts.push(`${t("Last ran")} ${relativeTime(rule.lastRunAt)}`);
-          copy.append(element("span", "", parts.join(" · ")));
+          let detail = `${labelFor(AUTOMATION_TRIGGERS, rule.trigger)} → ${labelFor(AUTOMATION_ACTIONS, rule.actionType)}: ${rule.actionValue}`;
+          if (rule.lastRunAt) detail += ` · ${t("last ran")} ${new Date(rule.lastRunAt).toLocaleDateString(state.settings?.locale || undefined, { month: "short", day: "numeric" })}`;
+          copy.append(element("span", "", detail));
           const controls = element("div", "settings-control inline");
           controls.append(makeToggle(Boolean(rule.enabled), rule.name, async (next) => {
             try {
@@ -5202,8 +5381,10 @@
               await refreshRules();
             }
           }));
-          const remove = element("button", "btn ghost sm", t("Delete"));
+          const remove = element("button", "icon-btn sm");
           remove.type = "button";
+          remove.setAttribute("aria-label", t("Delete {{name}}", { name: rule.name }));
+          remove.append(icon("trash"));
           remove.addEventListener("click", async () => {
             if (!window.confirm(t("Delete this automation?"))) return;
             try {
@@ -5520,7 +5701,9 @@
           await refresh();
         }
       });
-      settingsRow(card, t("Save workspace name"), t("Policy controls below are saved separately."), save);
+      if (["OWNER", "ADMIN"].includes(workspace()?.role)) {
+        settingsRow(card, t("Save workspace name"), t("Policy controls below are saved separately."), save);
+      }
     };
     const refresh = async () => {
       try {
@@ -5534,13 +5717,13 @@
     render();
     void refresh();
 
-    const create = createSettingsSection(
-      "workspace-create",
-      "Create a workspace",
-      "A fresh team space with a starter board. You will be the owner.",
-      undefined,
-      "h3"
-    );
+    const createHead = element("div", "section-head");
+    createHead.style.marginTop = "26px";
+    const createHeadCopy = element("div");
+    createHeadCopy.append(element("h3", "section-title", t("Create a workspace")));
+    createHeadCopy.append(element("p", "section-subtitle", t("A fresh team space with a starter board. You will be the owner.")));
+    createHead.append(createHeadCopy);
+    const createCard = element("div", "settings-card");
     const createName = makeTextInput("", "New workspace name", () => {}, "Acme product");
     createName.maxLength = 80;
     createName.style.width = "260px";
@@ -5550,10 +5733,10 @@
       "New workspace type",
       () => {}
     );
-    const createButton = element("button", "btn primary sm", t("Create workspace"));
+    const createButton = element("button", "btn primary sm");
     createButton.type = "button";
     createButton.disabled = true;
-    createButton.prepend(icon("plus"), document.createTextNode(" "));
+    createButton.append(icon("plus"), document.createTextNode(" Create workspace"));
     createName.addEventListener("input", () => {
       createButton.disabled = createName.value.trim().length < 2;
     });
@@ -5583,123 +5766,177 @@
         createButton.disabled = false;
       }
     });
-    settingsRow(create.card, t("Workspace name"), t("At least two characters."), createName);
-    settingsRow(create.card, t("Type"), t("Organizations unlock SSO configuration and stricter policy defaults."), createType);
-    settingsRow(create.card, t("Start from a template"), t("Creates a shared board with backlog, in progress, review, and done."), createButton);
-    section.append(create.section);
+    settingsRow(createCard, t("Workspace name"), t("At least two characters."), createName);
+    settingsRow(createCard, t("Type"), t("Organizations unlock SSO configuration and stricter policy defaults."), createType);
+    settingsRow(createCard, t("Start from a template"), t("Creates a shared board with backlog, in progress, review, and done."), createButton);
+    section.append(createHead, createCard);
     return section;
   }
 
   function renderPeopleSettings() {
     const { section, card } = createSettingsSection(
-      "people",
+      "members",
       "People",
-      t("Members in {{workspace}}. Roles are workspace-scoped.", { workspace: workspace()?.name ?? t("this workspace") })
+      t("{{count}} member{{plural}} in {{workspace}}. Roles are workspace-scoped.", { count: 0, plural: "s", workspace: workspace()?.name ?? t("this workspace") })
     );
-    const canManage = ["OWNER", "ADMIN"].includes(workspace()?.role);
-    const list = element("div", "detail-list");
-    list.append(element("div", "empty", t("Loading people…")));
-    card.append(list);
-    const inviteEmail = makeTextInput("", t("Invite email"), () => {}, "teammate@example.com");
-    inviteEmail.style.width = "220px";
-    const inviteRole = makeSelect(
-      [{ value: "MEMBER", label: t("Member") }, { value: "ADMIN", label: t("Admin") }],
-      "MEMBER",
-      t("Invite role"),
-      () => {}
-    );
-    const inviteButton = element("button", "btn primary sm", t("Invite"));
-    inviteButton.type = "button";
-    inviteButton.addEventListener("click", async () => {
+    const description = section.querySelector(".settings-section-head p");
+    const role = workspace()?.role ?? "MEMBER";
+    const canManage = ["OWNER", "ADMIN"].includes(role);
+    const roleLabel = (value) => t(value === "OWNER" ? "Owner" : value === "ADMIN" ? "Admin" : value === "MEMBER" ? "Member" : "Guest");
+    let memberCount = 0;
+
+    const inviteForm = element("form", "settings-row");
+    inviteForm.style.background = "var(--surface-2)";
+    inviteForm.append(icon("mail", "icon muted-icon"));
+    const inviteEmail = element("input", "input");
+    inviteEmail.type = "email";
+    inviteEmail.required = true;
+    inviteEmail.placeholder = "person@company.com";
+    inviteEmail.style.flex = "1";
+    inviteEmail.setAttribute("aria-label", t("Invite email"));
+    const inviteRole = element("select", "select");
+    inviteRole.style.width = "105px";
+    inviteRole.setAttribute("aria-label", t("Invite role"));
+    inviteRole.add(new Option(t("Member"), "MEMBER"));
+    inviteRole.add(new Option(t("Admin"), "ADMIN"));
+    inviteRole.add(new Option(t("Guest"), "GUEST"));
+    const inviteButton = element("button", "btn primary sm");
+    inviteButton.type = "submit";
+    inviteButton.append(icon("plus"), document.createTextNode(" Invite"));
+    inviteForm.append(inviteEmail, inviteRole, inviteButton);
+    if (canManage) card.append(inviteForm);
+
+    inviteForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
       const email = inviteEmail.value.trim();
       if (!email) return;
       inviteButton.disabled = true;
       try {
-        const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites`, {
+        await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites`, {
           method: "POST",
           body: { email, role: inviteRole.value },
         });
-        const link = `${location.origin}/invite/${encodeURIComponent(result.token)}`;
-        try {
-          await navigator.clipboard.writeText(link);
-          showToast(t("Invite link copied."));
-        } catch {
-          showToast(link);
-        }
         inviteEmail.value = "";
+        showToast(t("Invite created."));
+        await refresh();
       } catch (error) {
         showToast(error.message);
       } finally {
         inviteButton.disabled = false;
       }
     });
-    if (canManage) {
-      settingsRow(card, t("Invite someone"), t("They receive a link to join this workspace."),
-        [inviteEmail, inviteRole, inviteButton]);
-    }
+
+    const leave = element("button", "btn danger sm", t("Leave workspace"));
+    leave.type = "button";
+    leave.style.marginTop = "12px";
+    leave.addEventListener("click", async () => {
+      if (!window.confirm(t("Leave this workspace?"))) return;
+      try {
+        await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(state.boot?.user?.id)}`, { method: "DELETE" });
+        showToast(t("You left the workspace."));
+        await refreshBootstrap();
+        navigate("today");
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+
     const refresh = async () => {
       try {
-        const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members`);
-        const members = result?.members ?? [];
-        list.replaceChildren();
+        const [memberResult, inviteResult] = await Promise.all([
+          request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members`),
+          canManage ? request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites`).catch(() => ({ invites: [] })) : Promise.resolve({ invites: [] }),
+        ]);
+        const members = memberResult?.members ?? [];
+        const invites = inviteResult?.invites ?? [];
+        memberCount = members.length;
+        description.textContent = `${memberCount} ${memberCount === 1 ? t("member") : t("members")} in ${workspace()?.name ?? t("this workspace")}. ${t("Roles are workspace-scoped.")}`;
+        card.replaceChildren();
         for (const member of members) {
-          const row = element("div", "settings-row");
-          const avatar = element("span", "avatar-sm", String(member.name || member.email || "M").trim().slice(0, 2).toUpperCase());
+          const row = element("div", "member-row");
+          const avatar = element("span", "account-avatar", String(member.name || member.email || "M").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "M");
           avatar.setAttribute("aria-hidden", "true");
-          const copy = element("div", "settings-copy");
+          const copy = element("div", "member-copy");
           const isSelf = (member.userId || member.id) === state.boot?.user?.id;
-          copy.append(element("strong", "", `${member.name || member.email || t("Member")}${isSelf ? ` (${t("you")})` : ""}`));
-          copy.append(element("span", "", `${member.email || t("Guest member")}${member.joinedAt ? ` · ${t("joined")} ${relativeTime(member.joinedAt)}` : ""}`));
-          const controls = element("div", "settings-control inline");
-          if (canManage && member.role !== "OWNER") {
-            const role = makeSelect(
-              [
-                { value: "MEMBER", label: t("Member") },
-                { value: "ADMIN", label: t("Admin") },
-                { value: "GUEST", label: t("Guest") },
-              ],
-              member.role,
-              t("Role"),
-              async (value) => {
-                try {
-                  await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, {
-                    method: "PATCH",
-                    body: { role: value },
-                  });
-                  showToast(t("Role updated."));
-                  await refresh();
-                } catch (error) {
-                  showToast(error.message);
-                  await refresh();
-                }
+          const name = element("strong");
+          name.append(document.createTextNode(member.name || member.email || t("Member")));
+          if (isSelf) name.append(element("span", "field-hint", ` (${t("you")})`));
+          copy.append(name);
+          copy.append(element("span", "", `${member.email || t("No email")} · ${t("joined")}`));
+          row.append(avatar, copy);
+          if (canManage && !isSelf) {
+            const select = element("select", "select");
+            select.style.width = "110px";
+            select.setAttribute("aria-label", t("Role for {{name}}", { name: member.name || member.email || t("member") }));
+            select.add(new Option(t("Admin"), "ADMIN"));
+            select.add(new Option(t("Member"), "MEMBER"));
+            select.add(new Option(t("Guest"), "GUEST"));
+            select.value = member.role || "MEMBER";
+            select.addEventListener("change", async () => {
+              try {
+                await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, {
+                  method: "PATCH",
+                  body: { role: select.value },
+                });
+                showToast(t("Role updated."));
+                await refresh();
+              } catch (error) {
+                showToast(error.message);
+                await refresh();
               }
-            );
-            role.style.width = "112px";
-            controls.append(role);
-            const remove = element("button", "btn ghost sm", t("Remove"));
+            });
+            row.append(select);
+            const remove = element("button", "icon-btn sm");
             remove.type = "button";
+            remove.setAttribute("aria-label", t("Remove {{name}}", { name: member.name || member.email || t("member") }));
+            remove.append(icon("x"));
             remove.addEventListener("click", async () => {
               if (!window.confirm(t("Remove {{name}} from this workspace?", { name: member.name || member.email || t("member") }))) return;
               try {
-                await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, {
-                  method: "DELETE",
-                });
+                await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, { method: "DELETE" });
                 showToast(t("Member removed."));
                 await refresh();
               } catch (error) {
                 showToast(error.message);
               }
             });
-            controls.append(remove);
+            row.append(remove);
           } else {
-            controls.append(makeBadge(t(member.role === "OWNER" ? "Owner" : member.role === "ADMIN" ? "Admin" : member.role === "MEMBER" ? "Member" : "Guest"), member.role === "OWNER" ? "moss" : "slate"));
+            row.append(makeBadge(roleLabel(member.role || "MEMBER"), member.role === "OWNER" ? "amber" : member.role === "ADMIN" ? "accent" : "slate"));
           }
-          row.prepend(avatar);
-          row.append(copy, controls);
-          list.append(row);
+          card.append(row);
         }
+        if (canManage) card.append(inviteForm);
+        if (canManage && invites.length) {
+          const wrap = element("div");
+          wrap.style.cssText = "padding:10px 16px;border-top:1px solid var(--border)";
+          const label = element("div", "field-hint", t("Pending invitations"));
+          label.style.marginBottom = "6px";
+          wrap.append(label);
+          for (const invite of invites) {
+            const row = element("div", "inline");
+            row.style.cssText = "justify-content:space-between;padding:5px 0;font-size:11px";
+            row.append(element("span", "", `${invite.email} · ${roleLabel(invite.role)}`));
+            const revoke = element("button", "btn ghost sm", t("Revoke"));
+            revoke.type = "button";
+            revoke.addEventListener("click", async () => {
+              try {
+                await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites?inviteId=${encodeURIComponent(invite.id)}`, { method: "DELETE" });
+                showToast(t("Invite revoked."));
+                await refresh();
+              } catch (error) {
+                showToast(error.message);
+              }
+            });
+            row.append(revoke);
+            wrap.append(row);
+          }
+          card.append(wrap);
+        }
+        if (leave.isConnected) leave.remove();
+        if (role !== "OWNER") section.append(leave);
       } catch (error) {
-        list.replaceChildren(element("div", "empty", error.message));
+        card.replaceChildren(element("div", "empty", error.message));
       }
     };
     section.refreshSettingsSection = () => void refresh();
@@ -5711,25 +5948,9 @@
     const { section, card } = createSettingsSection(
       "keyboard",
       "Keyboard",
-      "A quiet power path. Turn single-key shortcuts off if they conflict with assistive technology."
+      "Keyboard-first by default. This setting stays on this device."
     );
-    settingsRow(card, t("Single-key shortcuts"), t("C capture · / search · ? shortcuts · G then T/U/C/A/S/B"), makeToggle(state.singleKeyShortcuts, t("Single-key shortcuts"), setSingleKeyShortcuts));
-    const shortcuts = [
-      ["Ctrl / ⌘ + K", t("Command palette")],
-      ["C", t("Quick capture")],
-      ["/", t("Search")],
-      ["G then T / U / C / A / S / B", t("Jump to Today, Upcoming, Calendar, Archive, Search, or Board")],
-      ["Alt + ← / →", t("Move a focused card between columns")],
-      ["Alt + ↑ / ↓", t("Reorder a focused card")],
-      ["?", t("Keyboard shortcuts")],
-    ];
-    for (const [keys, label] of shortcuts) {
-      const row = element("div", "settings-row");
-      const copy = element("div", "settings-copy");
-      copy.append(element("strong", "", label));
-      row.append(copy, element("kbd", "kbd", keys));
-      card.append(row);
-    }
+    settingsRow(card, t("Single-key shortcuts"), t("Press C to capture, / to search, ? for the shortcut sheet."), makeToggle(state.singleKeyShortcuts, t("Single-key shortcuts"), setSingleKeyShortcuts));
     return section;
   }
 
@@ -5739,20 +5960,34 @@
       "About Drift",
       "Version 1.0. Build with care. No third-party tracking scripts."
     );
-    settingsRow(card, t("Runtime"), t("Spring Boot + SQLite + vanilla HTML, CSS, and JavaScript."),
-      makeBadge("Spring Boot", "accent"));
-    settingsRow(card, t("Health"), t("Open the health endpoint to check the local service."),
+    const runtimeBadge = makeBadge(t("checking…"), "accent");
+    settingsRow(card, t("Runtime"), t("Next.js + React + Prisma. SQLite locally; PostgreSQL path documented."), runtimeBadge);
+    const healthRow = settingsRow(card, t("Health"), t("Open this section to check /api/health."),
       (() => {
-        const link = element("a", "btn ghost sm", "API");
+        const link = element("a", "btn ghost sm");
+        link.append(icon("insights"), document.createTextNode(" API"));
         link.href = "/api/health";
         link.target = "_blank";
         link.rel = "noreferrer";
         return link;
       })());
+    const healthDesc = healthRow.querySelector(".settings-copy span");
     settingsRow(card, t("Keyboard"), t("Ctrl/⌘ K palette · C capture · G then T/U/C/A/S/B · ? shortcuts"),
       element("kbd", "kbd", "?"));
-    settingsRow(card, t("Support"), t("Documentation, operations, security, and data notes ship in docs/."),
-      makeBadge(t("Local-first"), "slate"));
+    const support = element("span", "badge slate");
+    support.append(icon("globe"), document.createTextNode(t("Local-first")));
+    settingsRow(card, t("Support"), t("Documentation, operations, security, and data-processing notes ship with the project in docs/."), support);
+    const loadHealth = async () => {
+      try {
+        const health = await request("/api/health");
+        runtimeBadge.textContent = health?.status ?? "ok";
+        if (health) healthDesc.textContent = `${health.latencyMs} ms database latency · v${health.version}`;
+      } catch {
+        runtimeBadge.textContent = "error";
+      }
+    };
+    section.refreshSettingsSection = () => void loadHealth();
+    void loadHealth();
     return section;
   }
 
@@ -5778,10 +6013,10 @@
         }));
       };
       toggle("requireMfa", "Require two-factor authentication", "Members without MFA are locked out of workspace data.", "Require MFA");
-      toggle("aiEnabled", "Enable assistant suggestions", "Local capacity and quick-add heuristics. No customer data leaves Drift.");
-      toggle("automationsEnabled", "Enable automations", "Allow rules for this workspace.");
-      toggle("attachmentsEnabled", "Enable attachments", "Files up to 10 MB, type-allowlisted, local storage.");
-      toggle("publicSharingEnabled", "Enable public sharing", "Read-only board links. Disable to revoke all sharing immediately.");
+      toggle("aiEnabled", "Assistant suggestions", "Local capacity and quick-add heuristics. No customer data leaves Drift.", "Enable assistant suggestions");
+      toggle("automationsEnabled", "Automations", "Allow rules for this workspace.", "Enable automations");
+      toggle("attachmentsEnabled", "Attachments", "Files up to 10 MB, type-allowlisted, local storage.", "Enable attachments");
+      toggle("publicSharingEnabled", "Public share links", "Read-only board links. Disable to revoke all sharing immediately.", "Enable public sharing");
       settingsRow(card, t("Archived task retention"), t("Soft-deleted content is purged by the jobs worker."),
         (() => {
           const input = element("input", "input");
@@ -5880,13 +6115,17 @@
     const render = () => {
       card.replaceChildren();
       const enabled = Boolean(status?.mfaEnabled);
+      const mfaBadge = element("span", `badge ${enabled ? "accent" : "slate"}`);
+      if (enabled) mfaBadge.append(icon("shield"));
+      mfaBadge.append(document.createTextNode(enabled ? t("On") : t("Off")));
       settingsRow(card, t("Two-factor authentication"),
-        enabled ? t("Enabled with an authenticator app.") : t("Add a second factor for password and sign-in."),
+        enabled ? t("Enabled with an authenticator app.") : t("Add a second factor for password and magic-link sign-in."),
         [
-          makeBadge(enabled ? t("On") : t("Off"), enabled ? "moss" : "slate"),
+          mfaBadge,
           enabled ? null : (() => {
-            const setupButton = element("button", "btn primary sm", t("Set up"));
+            const setupButton = element("button", "btn primary sm");
             setupButton.type = "button";
+            setupButton.append(icon("key"), document.createTextNode(" Set up"));
             setupButton.disabled = busy;
             setupButton.addEventListener("click", async () => {
               busy = true;
@@ -6040,8 +6279,9 @@
       const sessionsCopy = element("div", "settings-copy");
       sessionsCopy.append(element("strong", "", t("Active sessions")));
       sessionsCopy.append(element("span", "", t("Revoke anything you do not recognize. The current session stays.")));
-      const refreshButton = element("button", "btn ghost sm", t("Refresh"));
+      const refreshButton = element("button", "btn ghost sm");
       refreshButton.type = "button";
+      refreshButton.append(icon("refresh"), document.createTextNode(" Refresh"));
       refreshButton.addEventListener("click", () => void refresh());
       sessionsHead.append(sessionsCopy, refreshButton);
       sessionsRow.append(sessionsHead);
@@ -6058,7 +6298,7 @@
         hint.textContent = `${t("Last used")} ${relativeTime(entry.lastUsedAt || entry.createdAt)}`;
         copy.append(hint);
         if (entry.current) {
-          item.append(copy, makeBadge(t("Current"), "moss"));
+          item.append(copy, makeBadge(t("Current"), "accent"));
         } else {
           const revoke = element("button", "btn ghost sm", t("Revoke"));
           revoke.type = "button";
@@ -6100,11 +6340,13 @@
     const download = (format) => {
       window.location.assign(`/api/export?workspaceId=${encodeURIComponent(workspace().id)}&format=${format}`);
     };
-    const jsonButton = element("button", "btn sm", "JSON");
+    const jsonButton = element("button", "btn sm");
     jsonButton.type = "button";
+    jsonButton.append(icon("download"), document.createTextNode(" JSON"));
     jsonButton.addEventListener("click", () => download("json"));
-    const csvButton = element("button", "btn sm", "CSV");
+    const csvButton = element("button", "btn sm");
     csvButton.type = "button";
+    csvButton.append(icon("download"), document.createTextNode(" CSV"));
     csvButton.addEventListener("click", () => download("csv"));
     settingsRow(card, t("Export workspace"),
       t("Boards, columns, tasks, labels, checklist items, and comments. Private boards only if you can see them."),
@@ -6119,25 +6361,21 @@
     const form = element("div", "form-grid");
     form.style.marginTop = "10px";
 
-    const boardField = element("div", "field");
-    boardField.append(element("label", "", t("Import board")));
     const boardSelect = element("select", "select");
     boardSelect.setAttribute("aria-label", t("Import board"));
     boardSelect.append(new Option(t("Choose a board"), ""));
     for (const board of boards()) boardSelect.append(new Option(board.name, board.id));
-    boardField.append(boardSelect);
 
-    const fileField = element("div", "field");
     const fileRow = element("div", "inline");
-    const pick = element("label", "btn sm", t("Choose file"));
+    const pick = element("label", "btn sm");
+    pick.append(icon("upload"), document.createTextNode(" Choose file"));
     const fileInput = element("input");
     fileInput.type = "file";
     fileInput.accept = ".csv,.json,text/csv,application/json";
     fileInput.hidden = true;
     pick.append(fileInput);
-    const status = element("span", "badge slate hidden");
-    fileRow.append(pick, status);
-    fileField.append(fileRow);
+    const status = element("span", "badge accent hidden");
+    fileRow.append(boardSelect, pick, status);
 
     const actionRow = element("div", "inline");
     actionRow.style.cssText = "align-items:flex-end;gap:8px;flex-wrap:wrap";
@@ -6151,9 +6389,8 @@
     const accessNote = canImport ? null : element("span", "field-hint", t("Member access is required to import tasks."));
     if (accessNote) actionRow.append(accessNote);
 
-    form.append(boardField, fileField, actionRow);
-    importCopy.append(form);
-    importRow.append(importCopy);
+    form.append(fileRow, actionRow);
+    importRow.append(importCopy, form);
     card.append(importRow);
 
     const current = workspace();
@@ -6352,43 +6589,50 @@
     const { section, card } = createSettingsSection(
       "integrations",
       "Integrations",
-      "Create personal API tokens for scripts, CLI tools, and external integrations. The raw token is shown once."
+      "API tokens, webhooks, calendar feed, and organization SSO. Secrets are shown once."
     );
-    const calendarLink = element("a", "btn sm", t("Download .ics"));
+    const calendarLink = element("a", "btn sm");
     calendarLink.href = `/api/calendar/ics?workspaceId=${encodeURIComponent(workspace().id)}`;
+    calendarLink.append(icon("download"), document.createTextNode(" Download .ics"));
     settingsRow(card, t("Calendar feed"), t("An ICS subscription for every due task you can see."), calendarLink);
-    const created = element("div", "detail-list");
-    const list = element("div", "detail-list");
-    list.append(element("div", "empty", t("Loading tokens…")));
-    const form = element("form", "settings-card");
-    form.style.marginTop = "12px";
-    const nameField = element("div", "field");
-    const nameLabel = element("label", "", t("Token name"));
-    const nameInput = element("input", "input");
-    nameInput.maxLength = 80;
-    nameInput.placeholder = t("Token name");
-    nameInput.setAttribute("aria-label", t("Token name"));
-    nameField.append(nameLabel, nameInput);
-    const row = element("div", "form-row");
-    row.append(nameField);
-    const submit = element("button", "btn primary sm", t("Create"));
-    submit.type = "submit";
-    form.append(row, submit);
-    card.append(created, list, form);
 
-    const refresh = async () => {
+    const tokenRow = element("div", "settings-row");
+    tokenRow.style.display = "block";
+    const tokenHead = element("div", "inline");
+    tokenHead.style.justifyContent = "space-between";
+    const tokenCopy = element("div", "settings-copy");
+    tokenCopy.append(element("strong", "", t("API tokens")));
+    tokenCopy.append(element("span", "", t("Scoped to this workspace and your account. Requires an Authorization bearer header.")));
+    tokenHead.append(tokenCopy);
+    const tokenForm = element("form", "inline");
+    tokenForm.style.marginTop = "10px";
+    const tokenName = element("input", "input");
+    tokenName.placeholder = t("Token name");
+    tokenName.maxLength = 80;
+    tokenName.style.flex = "1";
+    tokenName.setAttribute("aria-label", t("Token name"));
+    const tokenCreate = element("button", "btn sm primary");
+    tokenCreate.type = "submit";
+    tokenCreate.append(icon("plus"), document.createTextNode(" Create"));
+    tokenForm.append(tokenName, tokenCreate);
+    const tokenCreated = element("div");
+    const tokenList = element("div");
+    tokenRow.append(tokenHead, tokenForm, tokenCreated, tokenList);
+    card.append(tokenRow);
+
+    const refreshTokens = async () => {
       try {
         const result = await request(`/api/tokens?workspaceId=${encodeURIComponent(workspace().id)}`);
         const tokens = result?.tokens ?? [];
-        list.replaceChildren();
-        if (!tokens.length) list.append(element("div", "empty", t("No API tokens yet.")));
+        tokenList.replaceChildren();
         for (const token of tokens) {
-          const item = element("div", "detail-item");
-          const grow = element("div", "grow");
-          grow.append(element("strong", "", token.name));
-          grow.append(element("p", "", `${token.prefix}… · ${t("Created")} ${new Date(token.createdAt).toLocaleDateString(state.settings?.locale || undefined)}`));
-          if (token.expiresAt) grow.append(element("p", "field-hint", `${t("Expires")} ${new Date(token.expiresAt).toLocaleDateString(state.settings?.locale || undefined)}`));
-          if (token.lastUsedAt) grow.append(element("p", "field-hint", `${t("Last used")} ${relativeTime(token.lastUsedAt)}`));
+          const row = element("div", "inline");
+          row.style.cssText = "justify-content:space-between;border-top:1px solid var(--border);padding:8px 0;font-size:11px";
+          const label = element("span");
+          const meta = element("span", "field-hint");
+          const expires = token.expiresAt ? new Date(token.expiresAt).toLocaleDateString(state.settings?.locale || undefined) : t("never");
+          meta.textContent = ` ${token.prefix}… · ${t("expires")} ${expires}`;
+          label.append(document.createTextNode(token.name), meta);
           const revoke = element("button", "btn ghost sm", t("Revoke"));
           revoke.type = "button";
           revoke.addEventListener("click", async () => {
@@ -6396,155 +6640,99 @@
             try {
               await request(`/api/tokens/${encodeURIComponent(token.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
               showToast(t("Token revoked."));
-              await refresh();
+              await refreshTokens();
             } catch (error) {
               showToast(error.message);
             }
           });
-          item.append(grow, revoke);
-          list.append(item);
+          row.append(label, revoke);
+          tokenList.append(row);
         }
       } catch (error) {
-        list.replaceChildren(element("div", "empty", error.message));
+        tokenList.replaceChildren(element("div", "empty", error.message));
       }
     };
 
-    form.addEventListener("submit", async (event) => {
+    tokenForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const name = nameInput.value.trim();
+      const name = tokenName.value.trim();
       if (!name) {
-        nameInput.focus();
+        tokenName.focus();
         return;
       }
-      submit.disabled = true;
+      tokenCreate.disabled = true;
       try {
         const result = await request("/api/tokens", {
           method: "POST",
           body: { workspaceId: workspace().id, name, expiresInDays: 90 },
         });
-        created.replaceChildren();
-        const cardNode = element("div", "detail-item");
-        const grow = element("div", "grow");
-        grow.append(element("strong", "", t("Token created. Copy it now — it will not be shown again.")));
-        const output = element("input", "input");
-        output.value = result.token;
-        output.readOnly = true;
-        output.setAttribute("aria-label", t("New API token"));
-        const copy = element("button", "btn ghost sm", t("Copy"));
-        copy.type = "button";
-        copy.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard?.writeText(result.token);
-            showToast(t("Token copied."));
-          } catch {
-            output.select();
-          }
-        });
-        grow.append(output);
-        cardNode.append(grow, copy);
-        created.append(cardNode);
-        nameInput.value = "";
-        await refresh();
+        tokenCreated.replaceChildren();
+        const box = element("div", "dev-link");
+        box.append(document.createTextNode(`${t("Copy now, it will not be shown again:")} `));
+        box.append(element("code", "", result.token));
+        tokenCreated.append(box);
+        tokenName.value = "";
+        await refreshTokens();
       } catch (error) {
         showToast(error.message);
       } finally {
-        submit.disabled = false;
+        tokenCreate.disabled = false;
       }
     });
 
-    const hookHeader = element("div", "section-head");
-    hookHeader.style.marginTop = "24px";
-    const hookTitle = element("h3", "", t("Webhooks"));
-    const hookHint = element("span", "field-hint", t("Send selected events to Slack, Teams, or a generic JSON endpoint."));
-    hookHeader.append(hookTitle, hookHint);
-    const createdHook = element("div", "detail-list");
-    const hookList = element("div", "detail-list");
-    hookList.append(element("div", "empty", t("Loading webhooks…")));
-    const hookForm = element("form", "settings-card");
-    hookForm.style.marginTop = "12px";
-    const kindField = element("div", "field");
-    const kindLabel = element("label", "", t("Type"));
-    const kind = element("select", "select");
-    kind.setAttribute("aria-label", t("Webhook destination"));
-    kind.add(new Option(t("Slack"), "slack"));
-    kind.add(new Option(t("Microsoft Teams"), "teams"));
-    kind.add(new Option(t("Generic JSON"), "generic"));
-    kindField.append(kindLabel, kind);
-    const urlField = element("div", "field");
-    const urlLabel = element("label", "", t("Webhook URL"));
-    const url = element("input", "input");
-    url.type = "url";
-    url.placeholder = "https://hooks.example.com/...";
-    urlField.append(urlLabel, url);
-    const hookRow = element("div", "form-row");
-    hookRow.append(kindField, urlField);
-    const eventField = element("div", "field");
-    eventField.append(element("label", "", t("Events")));
-    const eventWrap = element("div");
-    eventWrap.style.cssText = "display:flex;flex-wrap:wrap;gap:8px 14px";
-    const hookEvents = ["task.created", "task.moved", "task.completed", "task.deleted", "comment.created"];
-    const eventBoxes = [];
-    for (const eventName of hookEvents) {
-      const label = element("label", "");
-      label.style.cssText = "display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)";
-      const box = element("input");
-      box.type = "checkbox";
-      box.value = eventName;
-      box.checked = eventName !== "task.deleted" && eventName !== "comment.created";
-      label.append(box, document.createTextNode(eventName));
-      eventWrap.append(label);
-      eventBoxes.push(box);
-    }
-    eventField.append(eventWrap);
-    const hookSubmit = element("button", "btn primary sm", t("Add"));
-    hookSubmit.type = "submit";
-    hookForm.append(hookRow, eventField, hookSubmit);
-    card.append(hookHeader, createdHook, hookList, hookForm);
+    const hookRow = element("div", "settings-row");
+    hookRow.style.display = "block";
+    const hookCopy = element("div", "settings-copy");
+    hookCopy.append(element("strong", "", t("Webhooks")));
+    hookCopy.append(element("span", "", t("HTTPS only. Failures are recorded; requests never block task writes.")));
+    const hookForm = element("form", "inline");
+    hookForm.style.marginTop = "10px";
+    const hookKind = element("select", "select");
+    hookKind.setAttribute("aria-label", t("Webhook destination"));
+    hookKind.style.width = "108px";
+    hookKind.add(new Option(t("Slack"), "slack"));
+    hookKind.add(new Option(t("Teams"), "teams"));
+    hookKind.add(new Option(t("Generic"), "generic"));
+    const hookUrl = element("input", "input");
+    hookUrl.type = "url";
+    hookUrl.placeholder = "https://hooks.example.com/…";
+    hookUrl.style.flex = "1";
+    hookUrl.setAttribute("aria-label", t("Webhook URL"));
+    const hookAdd = element("button", "btn sm primary");
+    hookAdd.type = "submit";
+    hookAdd.append(icon("plus"), document.createTextNode(" Add"));
+    hookForm.append(hookKind, hookUrl, hookAdd);
+    const hookList = element("div");
+    hookRow.append(hookCopy, hookForm, hookList);
+    card.append(hookRow);
 
     const refreshHooks = async () => {
       try {
         const result = await request(`/api/webhooks?workspaceId=${encodeURIComponent(workspace().id)}`);
         const hooks = result?.webhooks ?? [];
         hookList.replaceChildren();
-        if (!hooks.length) hookList.append(element("div", "empty", t("No webhooks yet.")));
         for (const hook of hooks) {
-          const item = element("div", "detail-item");
-          const grow = element("div", "grow");
-          grow.append(element("strong", "", `${hook.kind} · ${hook.url}`));
-          grow.append(element("p", "field-hint", `${(hook.events || []).join(", ")} · ${hook.deliveries || 0} ${t("deliveries")}`));
-          grow.append(element("p", "field-hint",
-            hook.lastStatus == null
-              ? t("No deliveries yet.")
-              : `HTTP ${hook.lastStatus} · ${relativeTime(hook.lastDeliveryAt)}`));
-          const toggle = element("button", "btn ghost sm", hook.enabled ? t("Disable") : t("Enable"));
-          toggle.type = "button";
-          toggle.addEventListener("click", async () => {
-            try {
-              await request(`/api/webhooks/${encodeURIComponent(hook.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, {
-                method: "PATCH",
-                body: { enabled: !hook.enabled },
-              });
-              showToast(t("Webhook updated."));
-              await refreshHooks();
-            } catch (error) {
-              showToast(error.message);
-            }
-          });
-          const remove = element("button", "btn danger sm", t("Delete"));
+          const row = element("div", "inline");
+          row.style.cssText = "justify-content:space-between;border-top:1px solid var(--border);padding:8px 0;font-size:11px";
+          const label = element("span");
+          const url = hook.url.length > 55 ? `${hook.url.slice(0, 55)}…` : hook.url;
+          const status = element("span", "field-hint");
+          status.textContent = ` ${hook.lastStatus ? `${t("last")} ${hook.lastStatus}` : t("not delivered yet")}`;
+          label.append(document.createTextNode(`${hook.kind} · ${url}`), status);
+          const remove = element("button", "btn ghost sm", t("Remove"));
           remove.type = "button";
           remove.addEventListener("click", async () => {
             if (!window.confirm(t("Delete this webhook?"))) return;
             try {
               await request(`/api/webhooks/${encodeURIComponent(hook.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
-              createdHook.replaceChildren();
               showToast(t("Webhook deleted."));
               await refreshHooks();
             } catch (error) {
               showToast(error.message);
             }
           });
-          item.append(grow, toggle, remove);
-          hookList.append(item);
+          row.append(label, remove);
+          hookList.append(row);
         }
       } catch (error) {
         hookList.replaceChildren(element("div", "empty", error.message));
@@ -6553,150 +6741,109 @@
 
     hookForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const selectedEvents = eventBoxes.filter((box) => box.checked).map((box) => box.value);
-      if (!url.value.trim() || !selectedEvents.length) {
-        showToast(t("Choose a webhook URL and at least one event."));
+      if (!hookUrl.value.trim()) {
+        hookUrl.focus();
         return;
       }
-      hookSubmit.disabled = true;
+      hookAdd.disabled = true;
       try {
-        const result = await request("/api/webhooks", {
+        await request("/api/webhooks", {
           method: "POST",
           body: {
             workspaceId: workspace().id,
-            kind: kind.value,
-            url: url.value.trim(),
-            events: selectedEvents,
+            kind: hookKind.value,
+            url: hookUrl.value.trim(),
+            events: ["task.created", "task.moved", "task.completed", "task.deleted"],
           },
         });
-        createdHook.replaceChildren();
-        const secret = result?.webhook?.secret;
-        if (secret) {
-          const item = element("div", "detail-item");
-          const grow = element("div", "grow");
-          grow.append(element("strong", "", t("Webhook created. Copy the signing secret now.")));
-          const output = element("input", "input");
-          output.value = secret;
-          output.readOnly = true;
-          output.setAttribute("aria-label", t("Webhook signing secret"));
-          grow.append(output);
-          const copy = element("button", "btn ghost sm", t("Copy"));
-          copy.type = "button";
-          copy.addEventListener("click", async () => {
-            try {
-              await navigator.clipboard?.writeText(secret);
-              showToast(t("Signing secret copied."));
-            } catch {
-              output.select();
-            }
-          });
-          item.append(grow, copy);
-          createdHook.append(item);
-        }
-        url.value = "";
-        showToast(t("Webhook created."));
+        hookUrl.value = "";
+        showToast(t("Webhook added."));
         await refreshHooks();
       } catch (error) {
         showToast(error.message);
       } finally {
-        hookSubmit.disabled = false;
+        hookAdd.disabled = false;
       }
     });
 
-    let ssoWrap = null;
     let ssoState = null;
-    if ((workspace()?.type ?? "personal") === "org") {
-      ssoWrap = element("div");
-      ssoWrap.style.marginTop = "24px";
-      section.append(ssoWrap);
-    }
+    let ssoRow = null;
     const renderSso = () => {
-      if (!ssoWrap) return;
-      ssoWrap.replaceChildren();
+      if (!ssoRow) return;
+      ssoRow.replaceChildren();
       const configured = Boolean(ssoState?.configured);
       const config = ssoState?.config ?? {};
-      const head = element("div", "section-head");
-      const headCopy = element("div");
-      headCopy.append(element("h3", "section-title", t("Single sign-on")));
-      headCopy.append(element("p", "section-subtitle", t("OIDC for organization workspaces. Client secrets are encrypted at rest.")));
-      head.append(headCopy, makeBadge(configured ? t("Configured") : t("Not configured"), configured ? "moss" : "slate"));
-      const ssoCard = element("div", "settings-card");
-      const form = element("form", "form-grid");
-      const issuerField = element("label", "field");
-      issuerField.append(element("span", "", t("Issuer URL")));
-      const issuer = element("input", "input");
-      issuer.placeholder = "https://login.example.com";
-      issuer.value = config.issuer ?? "";
-      issuerField.append(issuer);
-      const clientField = element("label", "field");
-      clientField.append(element("span", "", t("Client ID")));
-      const clientId = element("input", "input");
-      clientId.value = config.clientId ?? "";
-      clientField.append(clientId);
-      const secretField = element("label", "field");
-      secretField.append(element("span", "", t("Client secret")));
-      const secret = element("input", "input");
-      secret.type = "password";
-      secret.autocomplete = "new-password";
-      secret.placeholder = configured ? t("Leave blank to keep the current secret") : "";
-      secretField.append(secret);
-      const domainsField = element("label", "field");
-      domainsField.append(element("span", "", t("Allowed email domains")));
-      const domains = element("input", "input");
-      domains.placeholder = "example.com, example.org";
-      domains.value = config.allowedDomains ?? "";
-      domainsField.append(domains);
-      const enabled = config.enabled !== false;
-      const enforceSso = Boolean(config.enforceSso);
-      let enabledValue = enabled;
-      let enforceValue = enforceSso;
-      const actions = element("div", "inline");
-      const save = element("button", "btn primary", t("Save SSO"));
-      save.type = "submit";
-      const remove = configured ? element("button", "btn danger", t("Remove SSO")) : null;
-      if (remove) {
+      const head = element("div", "inline");
+      head.style.justifyContent = "space-between";
+      const copy = element("div", "settings-copy");
+      copy.append(element("strong", "", t("Single sign-on (OIDC)")));
+      copy.append(element("span", "", t("Configuration is encrypted. End-to-end external provider verification requires deployment credentials.")));
+      head.append(copy);
+      if (configured) {
+        const remove = element("button", "btn danger sm", t("Remove"));
         remove.type = "button";
         remove.addEventListener("click", async () => {
           if (!window.confirm(t("Remove the SSO configuration?"))) return;
           try {
             await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/sso`, { method: "DELETE" });
+            ssoState = { configured: false, config: null };
             showToast(t("SSO configuration removed."));
-            await loadSso();
+            renderSso();
           } catch (error) {
             showToast(error.message);
           }
         });
+        head.append(remove);
       }
-      const startLink = configured ? element("a", "btn ghost", t("Try SSO")) : null;
-      if (startLink) {
-        startLink.href = `/api/auth/sso/${encodeURIComponent(workspace().id)}`;
-      }
+      const form = element("form", "form-grid");
+      form.style.marginTop = "12px";
+      form.style.maxWidth = "640px";
+      const issuerField = element("label", "field");
+      issuerField.append(element("span", "", t("Issuer URL")));
+      const issuer = element("input", "input");
+      issuer.type = "url";
+      issuer.required = true;
+      issuer.placeholder = "https://login.example.com";
+      issuer.value = config.issuer ?? "";
+      issuerField.append(issuer);
+      const clientField = element("label", "field");
+      clientField.append(element("span", "", t("Client ID")));
+      const client = element("input", "input");
+      client.required = true;
+      client.value = config.clientId ?? "";
+      clientField.append(client);
+      const secretField = element("label", "field");
+      secretField.append(element("span", "", t("Client secret")));
+      const secret = element("input", "input");
+      secret.type = "password";
+      secret.autocomplete = "new-password";
+      secret.required = !configured;
+      secret.placeholder = configured ? t("Leave blank to keep current secret") : t("Required");
+      secretField.append(secret);
+      const domainsField = element("label", "field");
+      domainsField.append(element("span", "", t("Allowed email domains")));
+      const domains = element("input", "input");
+      domains.value = config.allowedDomains ?? "";
+      domains.placeholder = "example.com, example.org";
+      domainsField.append(domains);
+      const actions = element("div");
+      const save = element("button", "btn primary sm", t("Save SSO configuration"));
+      save.type = "submit";
       actions.append(save);
-      if (startLink) actions.append(startLink);
-      if (remove) actions.append(remove);
-      form.append(issuerField, clientField, secretField, domainsField,
-        settingsRow(form, t("Enable SSO"), t("Show the organization sign-in entry point."),
-          makeToggle(enabledValue, t("Enable SSO"), (next) => { enabledValue = next; })),
-        settingsRow(form, t("Require SSO"), t("Mark password sign-in as restricted for this organization."),
-          makeToggle(enforceValue, t("Require SSO"), (next) => { enforceValue = next; })),
-        actions);
+      form.append(issuerField, clientField, secretField, domainsField, actions);
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        if (!issuer.value.trim() || !clientId.value.trim() || !domains.value.trim()) {
-          showToast(t("Issuer, client ID, and allowed domains are required."));
-          return;
-        }
         save.disabled = true;
         try {
           const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/sso`, {
             method: "PUT",
             body: {
               issuer: issuer.value.trim(),
-              clientId: clientId.value.trim(),
-              clientSecret: secret.value.trim(),
+              clientId: client.value.trim(),
+              clientSecret: secret.value,
               allowedDomains: domains.value.trim(),
-              enabled: enabledValue,
-              enforceSso: enforceValue,
+              enabled: true,
+              enforceSso: false,
             },
           });
           ssoState = { configured: true, config: result?.config ?? null };
@@ -6707,27 +6854,41 @@
           save.disabled = false;
         }
       });
-      ssoCard.append(form);
-      ssoWrap.append(head, ssoCard);
+      ssoRow.append(head, form);
+      if (configured) {
+        const hint = element("p", "field-hint");
+        hint.style.marginTop = "8px";
+        hint.append(document.createTextNode(`${t("Members can start OIDC sign-in at")} `));
+        const link = element("a", "", `/api/auth/sso/${workspace().id}`);
+        link.href = `/api/auth/sso/${encodeURIComponent(workspace().id)}`;
+        hint.append(link, document.createTextNode(`. ${t("Discovery and callback require the provider to allow this redirect URI.")}`));
+        ssoRow.append(hint);
+      }
     };
     const loadSso = async () => {
-      if (!ssoWrap) return;
+      if (!ssoRow) return;
       try {
         ssoState = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/sso`);
-      } catch (error) {
+      } catch {
         ssoState = { configured: false, config: null };
       }
       renderSso();
     };
+    if ((workspace()?.type ?? "personal") === "org") {
+      ssoRow = element("div", "settings-row");
+      ssoRow.style.display = "block";
+      card.append(ssoRow);
+      renderSso();
+      void loadSso();
+    }
 
     section.refreshSettingsSection = () => {
-      void refresh();
+      void refreshTokens();
       void refreshHooks();
-      if (ssoWrap) void loadSso();
+      if (ssoRow) void loadSso();
     };
-    void refresh();
+    void refreshTokens();
     void refreshHooks();
-    if (ssoWrap) void loadSso();
     return section;
   }
 
@@ -6735,16 +6896,26 @@
     const { section, card } = createSettingsSection(
       "audit",
       "Audit log",
-      "Privileged workspace actions, newest first. Retention is configured by the workspace policy."
+      "Every policy and content mutation is attributable. Retained per workspace policy."
     );
-    const list = element("div", "detail-list");
-    list.append(element("div", "empty", t("Loading audit log…")));
-    const more = element("button", "btn ghost sm", t("Load more"));
-    more.type = "button";
-    more.classList.add("hidden");
-    card.append(list, more);
+    const toolbar = element("div", "inline");
+    toolbar.style.cssText = "justify-content:flex-end;margin-bottom:10px";
+    const refresh = element("button", "btn ghost sm");
+    refresh.type = "button";
+    refresh.append(icon("refresh"), document.createTextNode(" Refresh"));
+    toolbar.append(refresh);
+    section.insertBefore(toolbar, card);
     let cursor = null;
     let loading = false;
+
+    const renderEmpty = () => {
+      const row = element("div", "settings-row");
+      const copy = element("div", "settings-copy");
+      copy.append(element("strong", "", t("No audit events yet")));
+      copy.append(element("span", "", t("Changes in this workspace will appear here.")));
+      row.append(copy);
+      card.append(row);
+    };
 
     const load = async (reset = false) => {
       if (loading) return;
@@ -6753,31 +6924,44 @@
         const query = new URLSearchParams({ workspaceId: workspace().id, limit: "40" });
         if (!reset && cursor) query.set("cursor", cursor);
         const result = await request(`/api/audit?${query.toString()}`);
-        if (reset) list.replaceChildren();
+        if (reset) card.replaceChildren();
         const events = result?.events ?? [];
-        if (!events.length && reset) list.append(element("div", "empty", t("No audit events yet.")));
+        if (!events.length && reset) renderEmpty();
         for (const event of events) {
-          const item = element("div", "activity-item");
-          item.append(element("span", "side-dot"));
-          const grow = element("div", "grow");
-          const copy = element("div", "activity-copy");
-          copy.append(element("strong", "", event.actor?.name || t("Someone")));
-          copy.append(document.createTextNode(` ${String(event.action).replace(/[._]/g, " ")}`));
-          grow.append(copy);
-          grow.append(element("div", "activity-time", `${event.entityType || ""} · ${relativeTime(event.createdAt)}`));
-          item.append(grow);
-          list.append(item);
+          const row = element("div", "settings-row");
+          const copy = element("div", "settings-copy");
+          copy.append(element("strong", "", String(event.action).replace(/[._]/g, " ")));
+          const meta = [event.actor?.name || t("System"), event.entityType || "", new Date(event.createdAt).toLocaleString(state.settings?.locale || undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })];
+          if (event.metadata) meta.push(JSON.stringify(event.metadata).slice(0, 100));
+          copy.append(element("span", "", meta.filter(Boolean).join(" · ")));
+          const control = element("div", "settings-control");
+          control.append(makeBadge(String(event.entityId || "").slice(0, 8), "slate"));
+          row.append(copy, control);
+          card.append(row);
         }
         cursor = result?.nextCursor ?? null;
-        more.classList.toggle("hidden", !cursor);
+        if (cursor) {
+          const row = element("div", "settings-row");
+          row.append(element("div", "settings-copy"));
+          const control = element("div", "settings-control");
+          const more = element("button", "btn ghost sm", t("Load more"));
+          more.type = "button";
+          more.addEventListener("click", () => void load(false));
+          control.append(more);
+          row.append(control);
+          card.append(row);
+        }
       } catch (error) {
-        list.replaceChildren(element("div", "empty", error.message));
+        card.replaceChildren(element("div", "empty", error.message));
       } finally {
         loading = false;
       }
     };
 
-    more.addEventListener("click", () => void load(false));
+    refresh.addEventListener("click", () => {
+      cursor = null;
+      void load(true);
+    });
     section.refreshSettingsSection = () => {
       cursor = null;
       void load(true);
@@ -6869,30 +7053,13 @@
     }
     items.push(
       { id: "capture", label: t("Capture a new task"), hint: t("Opens quick capture"), group: "Create", icon: "plus", shortcut: "C", run: openCapture },
-      { id: "shortcuts", label: t("Keyboard shortcuts"), hint: t("Learn the whole app"), group: "Create", icon: "command", shortcut: "?", run: openShortcuts },
-      { id: "theme", label: t("Toggle light and dark"), hint: t("Saved on this device"), group: "Create", icon: document.documentElement.dataset.theme === "dark" ? "sun" : "moon", run: () => updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" }) },
-      { id: "settings", label: t("Open settings"), hint: t("Account, team and data"), group: "Create", icon: "settings", run: () => goToView("settings") },
     );
-    for (const board of boards().slice(0, 8)) {
-      items.push({
-        id: `board-${board.id}`,
-        label: board.name,
-        hint: `${Number(board.taskCount || 0)} ${t("tasks")} ? ${t(board.visibility === "private" ? "private" : "shared")}`,
-        group: "Boards",
-        icon: "board",
-        run: async () => {
-          state.currentBoardId = board.id;
-          await loadBoard(board.id);
-          setView("board");
-        },
-      });
-    }
     const needle = state.paletteQuery.trim().toLowerCase();
     const commands = items.filter((item) => !needle || `${item.label} ${item.hint} ${item.group}`.toLowerCase().includes(needle));
     const tasks = needle.length >= 2 ? state.paletteResults.slice(0, 6).map((task) => ({
       id: `task-${task.id}`,
       label: task.title,
-      hint: [task.boardName, task.columnName].filter(Boolean).join(" ? "),
+      hint: [task.boardName, task.columnName].filter(Boolean).join(" · "),
       group: "Tasks",
       icon: "command",
       run: () => openTaskById(task.id),
@@ -7033,27 +7200,28 @@
     ["Go to Archive", ["G", "then", "A"]],
     ["Go to Insights", ["G", "then", "I"]],
     ["Go to Search", ["G", "then", "S"]],
-    ["Go to Board", ["G", "then", "B"]],
+    ["Go to current board", ["G", "then", "B"]],
     ["New board", ["Shift", "N"]],
+    ["Move card between columns", ["Alt", "+", "←", "/", "→"]],
+    ["Reorder card in column", ["Alt", "+", "↑", "/", "↓"]],
     ["Show shortcuts", ["?"]],
     ["Close a dialog", ["Esc"]],
     ["Save quick capture or comment", ["Ctrl", "/", "⌘", "Enter"]],
-    ["Move a focused card", ["Alt", "←", "→"]],
-    ["Reorder a focused card", ["Alt", "↑", "↓"]],
   ];
 
   function renderShortcutList() {
     const list = $("shortcutList");
     list.replaceChildren();
     for (const [label, keys] of SHORTCUT_ROWS) {
-      const row = element("div", "shortcut-row");
-      row.append(element("span", "", t(label)));
-      const keyWrap = element("span", "shortcut-keys");
+      const row = element("div", "settings-row");
+      const copy = element("div", "settings-copy");
+      copy.append(element("strong", "", t(label)));
+      const keyWrap = element("div", "settings-control shortcut-keys");
       for (const key of keys) {
-        if (key === "then") keyWrap.append(element("span", "muted small", t("then")));
+        if (key === "then") keyWrap.append(element("span", "shortcut-then", t("then")));
         else keyWrap.append(element("span", "kbd", key));
       }
-      row.append(keyWrap);
+      row.append(copy, keyWrap);
       list.append(row);
     }
     $("singleKeyShortcutsToggle").checked = state.singleKeyShortcuts;
@@ -7155,6 +7323,11 @@
       closeShortcuts();
       return;
     }
+    if (event.key === "Escape" && !$("taskModal").classList.contains("hidden")) {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
     if (isTypingTarget(event.target)) return;
     if (state.paletteOpen || !$("shortcutsModal").classList.contains("hidden")) return;
     if (anyModalOpen()) return;
@@ -7253,10 +7426,14 @@
       setView("today");
       history.replaceState({}, "", "/");
     });
-    $("settingsSearch").addEventListener("input", (event) => {
+    const settingsSearch = $("settingsSearch");
+    const settingsSearchEmpty = element("p", "settings-search-empty hidden", t("No settings found."));
+    $("settingsNav").before(settingsSearchEmpty);
+    settingsSearch.addEventListener("input", (event) => {
       const query = event.target.value.trim().toLowerCase();
       const nav = $("settingsNav");
       let group = null;
+      let matches = 0;
       for (const node of nav.children) {
         if (node.classList.contains("settings-group")) {
           group = node;
@@ -7266,10 +7443,28 @@
         if (!node.matches(".settings-nav-item")) continue;
         const match = !query || node.textContent.toLowerCase().includes(query);
         node.classList.toggle("hidden", !match);
+        if (match) matches += 1;
         if (match && group) group.classList.remove("hidden");
+      }
+      settingsSearchEmpty.classList.toggle("hidden", !query || matches > 0);
+    });
+    settingsSearch.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        const first = $("settingsNav").querySelector(".settings-nav-item:not(.hidden)");
+        if (first) {
+          event.preventDefault();
+          first.click();
+          settingsSearch.value = "";
+          settingsSearch.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
+      if (event.key === "Escape") {
+        settingsSearch.value = "";
+        settingsSearch.dispatchEvent(new Event("input", { bubbles: true }));
       }
     });
     $("settingsThemeToggle").addEventListener("click", () => updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" }));
+    window.addEventListener("hashchange", focusSettingsHash);
     window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
       if (state.settings?.theme === "system") applySettings();
     });
@@ -7596,17 +7791,26 @@
         void loadInsights();
       });
     });
-    $("notificationsButton").addEventListener("click", openNotificationsModal);
-    $("closeNotificationsModal").addEventListener("click", () => $("notificationsModal").classList.add("hidden"));
+    $("notificationsButton").addEventListener("click", (event) => {
+      event.stopPropagation();
+      void openNotificationsModal();
+    });
+    $("notificationsPanel").addEventListener("click", (event) => event.stopPropagation());
     $("markAllReadButton").addEventListener("click", markAllRead);
     $("notificationSettingsButton").addEventListener("click", () => {
-      $("notificationsModal").classList.add("hidden");
+      closeNotificationsPanel();
       history.replaceState({}, "", "/settings#notifications");
       setView("settings");
       renderSettings();
     });
-    $("notificationsModal").addEventListener("click", (event) => {
-      if (event.target === $("notificationsModal")) $("notificationsModal").classList.add("hidden");
+    document.addEventListener("click", () => closeNotificationsPanel());
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (!$("notificationsPanel").classList.contains("hidden")) closeNotificationsPanel();
+      if (!$("themeAccountMenu").classList.contains("hidden")) {
+        $("themeAccountMenu").classList.add("hidden");
+        $("themeMenuButton").setAttribute("aria-expanded", "false");
+      }
     });
     $("closeMembersModal").addEventListener("click", () => $("membersModal").classList.add("hidden"));
     $("inviteButton").addEventListener("click", inviteMember);

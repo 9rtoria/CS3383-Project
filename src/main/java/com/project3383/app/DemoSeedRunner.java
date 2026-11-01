@@ -18,6 +18,8 @@ import java.util.UUID;
 public class DemoSeedRunner implements CommandLineRunner {
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Hong_Kong");
+    private static final LocalDate SEED_ANCHOR = LocalDate.parse(
+        System.getenv().getOrDefault("SEED_DATE", "2026-10-29"));
     private static final String DEMO_EMAIL = "demo@drift.local";
     private static final String DEMO_PASSWORD = "DriftDemo123!";
 
@@ -83,31 +85,31 @@ public class DemoSeedRunner implements CommandLineRunner {
         List<String> personalColumns = columns(personalBoard);
         List<String> launchColumns = columns(launchBoard);
 
-        LocalDate today = LocalDate.now(ZONE);
+        LocalDate today = SEED_ANCHOR;
         List<TaskSpec> launchTasks = List.of(
             new TaskSpec("Shape the launch story", "Next up",
                 "One sentence for the homepage, three proof points, and the demo path. Keep the promise concrete.",
-                "high", at(1, 14, 0), false, 45, today,
+                "high", at(1, 14, 0), false, 45, null,
                 null, true, List.of("Strategy", "Writing"),
                 List.of("Write the one-liner", "Choose three proof points", "Read it aloud"),
                 "Start from the customer's words, not our feature list."),
             new TaskSpec("Draft the announcement", "In progress",
                 "Short, warm, and specific. Link the demo instead of explaining every feature.",
                 "medium", at(2, 16, 0), false, 60, today.plusDays(1),
-                null, false, List.of("Writing"),
+                null, true, List.of("Writing"),
                 List.of("Opening paragraph", "What changed", "Call to action"), null),
             new TaskSpec("Review onboarding copy", "Review",
                 "Check the first-run screen, empty states, and the guest claim path.",
-                "high", at(0, 15, 0), false, 30, today,
-                null, false, List.of("Writing"), List.of(), null),
+                "high", at(0, 15, 0), false, 30, null,
+                null, true, List.of("Writing"), List.of(), null),
             new TaskSpec("Ship the pricing page", "In progress",
                 "Two plans, no fake urgency, and a clear explanation of what stays free.",
-                "urgent", at(0, 18, 0), false, 120, today,
-                null, true, List.of("Web", "Strategy"),
+                "urgent", at(0, 18, 0), false, 120, null,
+                null, false, List.of("Web", "Strategy"),
                 List.of("Plan comparison", "FAQ", "Mobile pass"), null),
             new TaskSpec("Collect five customer quotes", "Backlog", "",
                 "low", at(5, 17, 0), true, 40, null,
-                null, false, List.of("Research"), List.of(), null),
+                null, true, List.of("Research"), List.of(), null),
             new TaskSpec("QA mobile quick capture", "Backlog",
                 "Test keyboard, offline capture, and the bottom navigation on a small screen.",
                 "medium", at(3, 17, 0), true, 35, today.plusDays(2),
@@ -131,7 +133,7 @@ public class DemoSeedRunner implements CommandLineRunner {
 
         List<TaskSpec> personalTasks = List.of(
             new TaskSpec("Book the dentist", "Today", "",
-                "medium", at(0, 17, 0), true, null, today,
+                "medium", at(0, 17, 0), true, null, null,
                 null, false, List.of(), List.of(), null),
             new TaskSpec("Long walk without headphones", "This week", "",
                 "low", at(2, 17, 0), true, null, null,
@@ -148,17 +150,23 @@ public class DemoSeedRunner implements CommandLineRunner {
         );
         seedTasks(workspaceId, userId, personalBoard, personalColumns, personalTasks, labels, now);
 
+        Map<String, Object> seededTask = jdbc.queryForMap("""
+            SELECT id, board_id AS boardId, column_id AS columnId
+            FROM task WHERE board_id = ? ORDER BY created_at, id LIMIT 1
+            """, launchBoard);
+        jdbc.update("""
+            INSERT INTO audit_event (id, workspace_id, actor_id, action, entity_type,
+                                     entity_id, metadata, request_id, ip_hash, created_at)
+            VALUES (?, ?, ?, 'task.created', 'task', ?, ?, 'seed', NULL, ?)
+            """, id(), workspaceId, userId, seededTask.get("id"),
+            "{\"boardId\":\"" + seededTask.get("boardId") + "\",\"columnId\":\"" + seededTask.get("columnId") + "\"}",
+            SEED_ANCHOR.atTime(21, 6).atZone(ZONE).toInstant().toString());
+
         jdbc.update("""
             INSERT INTO view (id, user_id, workspace_id, name, type, filters_json, is_favorite, created_at, updated_at)
             VALUES (?, ?, ?, 'High priority launch work', 'board', ?, 1, ?, ?)
             """, id(), userId, workspaceId,
             "{\"boardId\":\"" + launchBoard + "\",\"priority\":\"high\"}", now, now);
-
-        jdbc.update("""
-            INSERT INTO automation_rule (id, workspace_id, board_id, name, enabled, trigger,
-                                         conditions_json, action_type, action_value, created_at, updated_at)
-            VALUES (?, ?, ?, 'Flag urgent work for review', 1, 'task.created', ?, 'add_label', 'Strategy', ?, ?)
-            """, id(), workspaceId, launchBoard, "{\"priority\":\"urgent\"}", now, now);
 
         jdbc.update("""
             INSERT INTO notification (id, user_id, workspace_id, type, title, body, link, created_at)
@@ -250,7 +258,7 @@ public class DemoSeedRunner implements CommandLineRunner {
     }
 
     private static LocalDateTime at(int daysFromNow, int hour, int minute) {
-        return LocalDate.now(ZONE).plusDays(daysFromNow).atTime(hour, minute);
+        return SEED_ANCHOR.plusDays(daysFromNow).atTime(hour, minute);
     }
 
     private String id() {

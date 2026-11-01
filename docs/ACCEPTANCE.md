@@ -33,9 +33,12 @@ Playwright browser runs verified:
 - Archive split into archived and completed, reopen, restore.
 - Search empty-query recents, tokenized query, status/priority/board filters, result drawer over Search.
 - Insights timeline ranges, workload view, unscheduled list.
-- Settings navigation groups/search, account, appearance, language, planning, auto-plan, focus, sound, notifications, keyboard, features, security/MFA, workspace, people, policies, automations, integrations, audit, data/export, danger zone.
+- Settings navigation groups/search, workspace/user hover states, account, appearance, language, planning, auto-plan, focus, sound, notifications, keyboard, features, security/MFA, workspace, people, policies, automations, integrations, audit, data/export, danger zone, About, and mobile section picker/header.
+- Notifications anchored dropdown (unread styling, relative timestamps, Mark read, settings link), account menu with icons/theme/sign-out, and Escape/outside-click closing.
+- Keyboard shortcut sheet card layout, scroll clipping, row labels, single-key toggle, and close button.
+- Board list view with relative due labels, compact priority tones, and mobile toolbar grouping.
 - Auth page: password sign-in, sign-up, guest claim, magic-link request/sent state, dev link, magic-link sign-in, MFA challenge handoff, and magic-link replay rejection.
-- Mobile: Today, Upcoming, Search, single-row topbar, bottom navigation, hidden desktop sidebar.
+- Mobile: Today, Board, Settings, Upcoming, Search, single-row topbar, bottom navigation, hidden desktop sidebar, and settings section picker.
 - Service worker/PWA registration and offline queue render path remain present.
 - No browser console errors were observed across the main views and auth flows.
 

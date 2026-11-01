@@ -469,6 +469,26 @@ public class AppService {
             """, workspaceId)));
     }
 
+    public Map<String, Object> pendingInvites(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        return linked(Map.of("invites", jdbc.queryForList("""
+            SELECT id, email, role, expires_at AS expiresAt, created_at AS createdAt
+            FROM invite
+            WHERE workspace_id = ? AND accepted_at IS NULL AND expires_at > ?
+            ORDER BY created_at DESC
+            """, workspaceId, Instant.now().toString())));
+    }
+
+    @Transactional
+    public Map<String, Object> revokeInvite(String userId, String workspaceId, String inviteId) {
+        requireMinimumRole(userId, workspaceId, "ADMIN");
+        if (blank(inviteId)) throw ApiException.badRequest("Choose an invitation.");
+        int removed = jdbc.update("DELETE FROM invite WHERE id = ? AND workspace_id = ?", inviteId, workspaceId);
+        if (removed == 0) throw ApiException.notFound("Invitation not found.");
+        audit(workspaceId, userId, "invite.revoked", "invite", inviteId, Map.of());
+        return linked(Map.of("ok", true));
+    }
+
     @Transactional
     public Map<String, Object> invite(String userId, String workspaceId, ApiDtos.InviteCreate input) {
         requireMinimumRole(userId, workspaceId, "ADMIN");
@@ -1480,7 +1500,7 @@ public class AppService {
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND (c.is_done = 1 OR t.archived_at IS NOT NULL)
               AND b.workspace_id = t.workspace_id
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-            ORDER BY t.updated_at DESC LIMIT 500
+            ORDER BY t.updated_at ASC LIMIT 500
             """, workspaceId, userId, canSeePrivate);
         for (Map<String, Object> task : tasks) {
             task.put("completed", number(task.get("completed")));
@@ -1872,7 +1892,6 @@ public class AppService {
             suggestion.put("labels", labelsForTask((String) task.get("id")));
             attachAssignee(suggestion);
             boolean accepted = number(task.get("selectedFlag")) == 1;
-            boolean selected = accepted;
             boolean blocked = number(task.get("openDependencies")) > 0;
             String due = task.get("dueDate") == null ? null : String.valueOf(task.get("dueDate"));
             String dueDay = due != null && due.length() >= 10 ? due.substring(0, 10) : null;
@@ -1881,6 +1900,18 @@ public class AppService {
             String priority = String.valueOf(task.get("priority"));
             int estimate = task.get("estimateMinutes") == null ? 30 : number(task.get("estimateMinutes"));
             if (overdue) overdueCount++;
+            int score = switch (priority) {
+                case "urgent" -> 50;
+                case "high" -> 35;
+                case "medium" -> 18;
+                case "low" -> 8;
+                default -> 0;
+            };
+            if (overdue) score += 70;
+            if (dueToday) score += 45;
+            if (accepted) score += 60;
+            if (blocked) score -= 100;
+            if (dueDay == null && !accepted) score += 4;
             String reason;
             if (blocked) reason = "Waiting on a task that is not done yet";
             else if (overdue) reason = "Overdue since " + dueDay;
@@ -1893,26 +1924,29 @@ public class AppService {
             } else {
                 reason = "Next best use of your available time";
             }
-            suggestion.put("selected", selected);
+            suggestion.put("selected", false);
             suggestion.put("accepted", accepted);
             suggestion.put("blocked", blocked);
             suggestion.put("reason", reason);
+            suggestion.put("score", score);
+            suggestion.put("suggestedMinutes", estimate);
             suggestion.put("focusDate", accepted ? today : null);
-            if (accepted) {
-                selectedMinutes += Math.max(0, estimate);
-                selectedCount++;
-            }
             suggestions.add(suggestion);
         }
-        int autoRemaining = Math.max(0, capacity - selectedMinutes);
+        suggestions.sort((left, right) -> {
+            int byScore = Integer.compare(number(right.get("score")), number(left.get("score")));
+            if (byScore != 0) return byScore;
+            return Integer.compare(number(left.get("suggestedMinutes")), number(right.get("suggestedMinutes")));
+        });
+        int remainingCapacity = Math.max(15, capacity);
         for (Map<String, Object> suggestion : suggestions) {
-            if (Boolean.TRUE.equals(suggestion.get("selected")) || Boolean.TRUE.equals(suggestion.get("blocked"))) continue;
-            int estimate = suggestion.get("estimateMinutes") == null ? 30 : number(suggestion.get("estimateMinutes"));
-            if (estimate <= autoRemaining) {
+            if (Boolean.TRUE.equals(suggestion.get("blocked"))) continue;
+            int estimate = number(suggestion.get("suggestedMinutes"));
+            if (estimate <= remainingCapacity) {
                 suggestion.put("selected", true);
                 selectedMinutes += Math.max(0, estimate);
                 selectedCount++;
-                autoRemaining -= Math.max(0, estimate);
+                remainingCapacity -= Math.max(0, estimate);
             }
         }
         List<Map<String, Object>> planBlocks = jdbc.queryForList("""
