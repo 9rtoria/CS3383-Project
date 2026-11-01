@@ -70,6 +70,23 @@ CREATE TABLE IF NOT EXISTS task (
     FOREIGN KEY (created_by) REFERENCES app_user(id)
 );
 
+CREATE TABLE IF NOT EXISTS invite (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'MEMBER',
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    accepted_at TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES app_user(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_workspace ON invite(workspace_id, email);
+CREATE INDEX IF NOT EXISTS idx_invite_hash ON invite(token_hash);
+
 CREATE TABLE IF NOT EXISTS label (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,

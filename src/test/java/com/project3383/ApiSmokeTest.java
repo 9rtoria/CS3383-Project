@@ -126,6 +126,17 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.task.comments[0].body").value("First comment"))
             .andExpect(jsonPath("$.task.subtasks[0].title").value("First step"));
 
+        mockMvc.perform(post("/api/workspaces/" + workspaceId + "/invites")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "email", "invitee@example.com",
+                    "role", "MEMBER"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.token").isNotEmpty())
+            .andExpect(jsonPath("$.invite.email").value("invitee@example.com"));
+
         mockMvc.perform(get("/api/today").session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.suggestions[0].title").value("Smoke task"));

@@ -59,6 +59,17 @@ public final class ApiDtos {
     ) {
     }
 
+    public record InviteCreate(
+        String email,
+        String role
+    ) {
+    }
+
+    public record MemberRole(
+        String role
+    ) {
+    }
+
     public record Signup(
         String name,
         String email,

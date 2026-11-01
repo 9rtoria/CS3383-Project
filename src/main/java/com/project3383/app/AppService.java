@@ -8,8 +8,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,6 +124,89 @@ public class AppService {
             SELECT id, name, type FROM workspace WHERE created_by = ? ORDER BY created_at DESC LIMIT 1
             """, userId).stream().findFirst().orElseThrow();
         return linked(Map.of("workspace", workspace));
+    }
+
+    public Map<String, Object> members(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        return linked(Map.of("members", jdbc.queryForList("""
+            SELECT m.user_id AS userId, m.role, m.joined_at AS joinedAt,
+                   u.display_name AS name, u.email, u.is_guest AS isGuest
+            FROM membership m JOIN app_user u ON u.id = m.user_id
+            WHERE m.workspace_id = ? ORDER BY m.joined_at
+            """, workspaceId)));
+    }
+
+    @Transactional
+    public Map<String, Object> invite(String userId, String workspaceId, ApiDtos.InviteCreate input) {
+        requireMinimumRole(userId, workspaceId, "ADMIN");
+        if (input == null || blank(input.email()) || !input.email().contains("@")) {
+            throw ApiException.badRequest("A valid invite email is required.");
+        }
+        String email = input.email().trim().toLowerCase();
+        String role = "ADMIN".equalsIgnoreCase(input.role()) ? "ADMIN" : "MEMBER";
+        String token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        String inviteId = id();
+        String now = Instant.now().toString();
+        String expiresAt = Instant.now().plus(7, ChronoUnit.DAYS).toString();
+        jdbc.update("""
+            INSERT INTO invite (id, workspace_id, email, role, token_hash, expires_at, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, inviteId, workspaceId, email, role, sha256(token), expiresAt, userId, now);
+        return linked(Map.of(
+            "invite", Map.of("id", inviteId, "email", email, "role", role, "expiresAt", expiresAt),
+            "token", token
+        ));
+    }
+
+    @Transactional
+    public Map<String, Object> acceptInvite(String userId, String token) {
+        Map<String, Object> invite = jdbc.queryForList("""
+            SELECT id, workspace_id AS workspaceId, email, role, expires_at AS expiresAt, accepted_at AS acceptedAt
+            FROM invite WHERE token_hash = ?
+            """, sha256(token)).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Invitation not found."));
+        if (invite.get("acceptedAt") != null) throw ApiException.badRequest("Invitation already accepted.");
+        if (Instant.parse((String) invite.get("expiresAt")).isBefore(Instant.now())) {
+            throw ApiException.badRequest("Invitation has expired.");
+        }
+        Map<String, Object> user = userRow(userId);
+        String email = (String) user.get("email");
+        if (email == null || !email.equalsIgnoreCase((String) invite.get("email"))) {
+            throw ApiException.forbidden("Sign in with the invited email address.");
+        }
+        jdbc.update("""
+            INSERT INTO membership (user_id, workspace_id, role, joined_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, workspace_id) DO UPDATE SET role = excluded.role
+            """, userId, invite.get("workspaceId"), invite.get("role"), Instant.now().toString());
+        jdbc.update("UPDATE invite SET accepted_at = ? WHERE id = ?", Instant.now().toString(), invite.get("id"));
+        return bootstrap(userId);
+    }
+
+    public Map<String, Object> changeRole(String userId, String workspaceId, String targetUserId, String role) {
+        requireMinimumRole(userId, workspaceId, "ADMIN");
+        if (!"ADMIN".equals(role) && !"MEMBER".equals(role) && !"GUEST".equals(role)) {
+            throw ApiException.badRequest("Invalid member role.");
+        }
+        Map<String, Object> target = jdbc.queryForList("""
+            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            """, targetUserId, workspaceId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Member not found."));
+        if ("OWNER".equals(target.get("role"))) throw ApiException.forbidden("The workspace owner role cannot be changed here.");
+        jdbc.update("UPDATE membership SET role = ? WHERE user_id = ? AND workspace_id = ?", role, targetUserId, workspaceId);
+        return members(userId, workspaceId);
+    }
+
+    public Map<String, Object> removeMember(String userId, String workspaceId, String targetUserId) {
+        requireMinimumRole(userId, workspaceId, "ADMIN");
+        if (targetUserId.equals(userId)) throw ApiException.badRequest("You cannot remove yourself.");
+        Map<String, Object> target = jdbc.queryForList("""
+            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            """, targetUserId, workspaceId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Member not found."));
+        if ("OWNER".equals(target.get("role"))) throw ApiException.forbidden("The workspace owner cannot be removed.");
+        jdbc.update("DELETE FROM membership WHERE user_id = ? AND workspace_id = ?", targetUserId, workspaceId);
+        return members(userId, workspaceId);
     }
 
     private void createStarterWorkspace(String userId, String workspaceName) {
@@ -576,6 +662,36 @@ public class AppService {
             SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Workspace not found.");
+    }
+
+    private void requireMinimumRole(String userId, String workspaceId, String minimum) {
+        String role = jdbc.queryForList("""
+            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            """, userId, workspaceId).stream().findFirst()
+            .map(row -> row.get("role").toString())
+            .orElseThrow(() -> ApiException.notFound("Workspace not found."));
+        if (roleRank(role) < roleRank(minimum)) throw ApiException.forbidden("You do not have permission for this action.");
+    }
+
+    private int roleRank(String role) {
+        return switch (role) {
+            case "OWNER" -> 4;
+            case "ADMIN" -> 3;
+            case "MEMBER" -> 2;
+            case "GUEST" -> 1;
+            default -> 0;
+        };
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder out = new StringBuilder();
+            for (byte b : digest) out.append(String.format("%02x", b));
+            return out.toString();
+        } catch (Exception exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     private String priority(String value) {

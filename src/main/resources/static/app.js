@@ -88,6 +88,14 @@
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
       await loadToday();
       setView("today");
+      const inviteToken = new URLSearchParams(location.search).get("invite");
+      if (inviteToken) {
+        await acceptInviteFromUrl(inviteToken);
+        state.currentBoardId = boards()[0]?.id ?? null;
+        renderSidebar();
+        if (state.currentBoardId) await loadBoard(state.currentBoardId);
+        await loadToday();
+      }
     } catch (error) {
       showToast(error.message || "Could not start the app.");
     }
@@ -156,6 +164,86 @@
 
   function closeAuthModal() {
     $("authModal").classList.add("hidden");
+  }
+
+  async function openMembersModal() {
+    $("membersModal").classList.remove("hidden");
+    $("inviteResult").textContent = "";
+    try {
+      const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members`);
+      renderMembers(result.members ?? []);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function renderMembers(members) {
+    const list = $("memberList");
+    list.replaceChildren();
+    const canManage = ["OWNER", "ADMIN"].includes(workspace()?.role);
+    for (const member of members) {
+      const row = element("div", "detail-item");
+      const grow = element("div", "grow");
+      grow.append(element("strong", "", member.name || member.email || "Member"));
+      grow.append(element("p", "", `${member.email || "guest"} · ${member.role.toLowerCase()}`));
+      row.append(grow);
+      if (canManage && member.role !== "OWNER") {
+        const select = element("select", "select");
+        select.style.width = "auto";
+        for (const role of ["MEMBER", "ADMIN", "GUEST"]) select.add(new Option(role.toLowerCase(), role));
+        select.value = member.role;
+        select.addEventListener("change", () => changeMemberRole(member.userId, select.value));
+        row.append(select);
+      }
+      list.append(row);
+    }
+  }
+
+  async function changeMemberRole(userId, role) {
+    try {
+      const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        body: { role },
+      });
+      renderMembers(result.members ?? []);
+    } catch (error) {
+      showToast(error.message);
+      await openMembersModal();
+    }
+  }
+
+  async function inviteMember() {
+    const email = $("inviteEmail").value.trim();
+    if (!email) return;
+    try {
+      const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites`, {
+        method: "POST",
+        body: { email, role: $("inviteRole").value },
+      });
+      $("inviteEmail").value = "";
+      const link = `${location.origin}/?invite=${encodeURIComponent(result.token)}`;
+      $("inviteResult").textContent = `Invite link: ${link}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("Invite link copied.");
+      } catch {
+        showToast("Invite created. Copy the link from the dialog.");
+      }
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function acceptInviteFromUrl(token) {
+    try {
+      const result = await request(`/api/invites/${encodeURIComponent(token)}`, { method: "POST" });
+      state.boot = result;
+      state.currentWorkspaceId = result.workspaces?.at(-1)?.id ?? state.currentWorkspaceId;
+      history.replaceState({}, "", "/");
+      showToast("Invitation accepted.");
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   async function createWorkspace() {
@@ -588,6 +676,12 @@
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
     $("newBoardButton").addEventListener("click", createBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);
+    $("membersButton").addEventListener("click", openMembersModal);
+    $("closeMembersModal").addEventListener("click", () => $("membersModal").classList.add("hidden"));
+    $("inviteButton").addEventListener("click", inviteMember);
+    $("membersModal").addEventListener("click", (event) => {
+      if (event.target === $("membersModal")) $("membersModal").classList.add("hidden");
+    });
     $("workspaceSelect").addEventListener("change", (event) => void switchWorkspace(event.target.value));
     $("closeModal").addEventListener("click", closeModal);
     $("cancelModal").addEventListener("click", closeModal);

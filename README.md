@@ -14,6 +14,7 @@ Implemented:
 - Email/password sign-up, sign-in, guest claim, and sign-out
 - Bootstrap payload with workspace, board, and columns
 - Workspace create/switch, including a new team workspace
+- Workspace members, invite links, role changes, and member removal
 - Board create/read API
 - Task create / update / move / soft-delete APIs
 - Task detail API with comments, checklist items, and labels
@@ -31,7 +32,6 @@ Implemented:
 
 Not implemented yet:
 
-- Invites, role administration, and member management UI
 - Task drawer parity (attachments, dependencies, reminders)
 - Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
@@ -83,6 +83,11 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | GET | `/api/health` | Health check |
 | GET | `/api/bootstrap` | User/workspace/board bootstrap |
 | POST | `/api/workspaces` | Create a personal/team workspace |
+| GET | `/api/workspaces/{id}/members` | List workspace members |
+| POST | `/api/workspaces/{id}/invites` | Create an invite link |
+| PATCH | `/api/workspaces/{id}/members/{userId}` | Change a member role |
+| DELETE | `/api/workspaces/{id}/members/{userId}` | Remove a member |
+| POST | `/api/invites/{token}` | Accept an invitation |
 | POST | `/api/boards` | Create a board and its starter columns |
 | GET | `/api/boards/{id}` | Board with columns and tasks |
 | GET | `/api/today` | Open-task list with capacity |

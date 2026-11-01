@@ -26,6 +26,7 @@
         <div class="side-label">Workspace</div>
         <select id="workspaceSelect" class="select" aria-label="Workspace" style="margin-bottom:6px"></select>
         <button type="button" id="newWorkspaceButton" class="btn ghost sm" style="margin-bottom:10px;padding-left:0">+ New team</button>
+        <button type="button" id="membersButton" class="btn ghost sm" style="margin-bottom:10px;padding-left:0">Members</button>
         <div class="side-label">Boards</div>
         <div id="boardList" class="board-list"></div>
         <button type="button" id="newBoardButton" class="btn ghost sm" style="margin-top:6px;padding-left:0">+ New board</button>
@@ -74,6 +75,31 @@
         <div id="board" class="board"></div>
       </section>
     </main>
+  </div>
+
+  <div id="membersModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="membersTitle">
+    <div class="modal" style="max-width:620px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <h2 id="membersTitle">Members</h2>
+        </div>
+        <button type="button" id="closeMembersModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <div id="memberList" class="detail-list"></div>
+      <div class="detail-section">
+        <h3>Invite someone</h3>
+        <div class="comment-compose">
+          <input id="inviteEmail" class="input" type="email" placeholder="teammate@example.com" aria-label="Invite email">
+          <select id="inviteRole" class="select" aria-label="Invite role">
+            <option value="MEMBER">Member</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+          <button type="button" id="inviteButton" class="btn primary">Invite</button>
+        </div>
+        <div id="inviteResult" class="small muted" style="margin-top:10px"></div>
+      </div>
+    </div>
   </div>
 
   <div id="authModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="authTitle">
