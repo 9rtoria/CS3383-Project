@@ -600,7 +600,8 @@ public class AppService {
         }
         return linked(Map.of(
             "user", user,
-            "workspaces", workspaces
+            "workspaces", workspaces,
+            "templates", BoardTemplates.catalog()
         ));
     }
 
@@ -613,7 +614,8 @@ public class AppService {
             throw ApiException.badRequest("Board name must be 120 characters or fewer.");
         }
         requireMinimumRole(userId, input.workspaceId(), "MEMBER");
-        String description = input.description() == null ? "" : input.description().trim();
+        BoardTemplates.Template template = BoardTemplates.find(input.template());
+        String description = input.description() == null ? template.description() : input.description().trim();
         if (description.length() > 1000) throw ApiException.badRequest("Board description must be 1000 characters or fewer.");
         String visibility = normalizeVisibility(input.visibility());
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM board WHERE workspace_id = ? AND deleted_at IS NULL AND archived_at IS NULL", Integer.class, input.workspaceId());
@@ -628,14 +630,228 @@ public class AppService {
             INSERT INTO board (id, workspace_id, name, description, position, visibility, version, created_by, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
             """, boardId, input.workspaceId(), input.name().trim(), description, position, visibility, userId, now);
-        String[] columns = {"To do", "In progress", "Done"};
-        for (int i = 0; i < columns.length; i++) {
+        List<BoardTemplates.ColumnTemplate> columns = template.columns();
+        for (int i = 0; i < columns.size(); i++) {
+            BoardTemplates.ColumnTemplate column = columns.get(i);
             jdbc.update("""
-                INSERT INTO board_column (id, board_id, name, position, is_done) VALUES (?, ?, ?, ?, ?)
-                """, id(), boardId, columns[i], i, i == columns.length - 1 ? 1 : 0);
+                INSERT INTO board_column (id, board_id, name, position, is_done, wip_limit, wip_enforced)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, id(), boardId, column.name(), i, column.done() ? 1 : 0,
+                column.wipLimit(), column.wipLimit() == null ? 0 : 1);
         }
-        audit(input.workspaceId(), userId, "board.created", "board", boardId, Map.of("name", input.name().trim()));
+        audit(input.workspaceId(), userId, "board.created", "board", boardId,
+            Map.of("name", input.name().trim(), "template", template.id()));
         return linked(Map.of("board", boardRow(boardId)));
+    }
+
+    @Transactional
+    public Map<String, Object> createColumn(String userId, ApiDtos.ColumnCreate input) {
+        if (input == null || blank(input.workspaceId()) || blank(input.boardId()) || blank(input.name())) {
+            throw ApiException.badRequest("Choose a board and give the column a name.");
+        }
+        Map<String, Object> board = boardRow(input.boardId());
+        if (!input.workspaceId().equals(board.get("workspaceId"))) throw ApiException.notFound("Board not found.");
+        requireMinimumRole(userId, input.workspaceId(), "MEMBER");
+        requireBoardVisible(userId, board);
+        String name = normalizeColumnName(input.name());
+        List<Map<String, Object>> columns = activeColumns(input.boardId());
+        if (columns.size() >= 100) throw ApiException.badRequest("Boards support up to 100 columns.");
+        int index = columns.size();
+        if (!blank(input.afterId())) {
+            int after = -1;
+            for (int i = 0; i < columns.size(); i++) {
+                if (input.afterId().equals(String.valueOf(columns.get(i).get("id")))) after = i;
+            }
+            if (after >= 0) index = after + 1;
+        }
+        String columnId = id();
+        String now = Instant.now().toString();
+        jdbc.update("""
+            INSERT INTO board_column (id, board_id, name, position, is_done, wip_limit, wip_enforced)
+            VALUES (?, ?, ?, ?, 0, NULL, 0)
+            """, columnId, input.boardId(), name, index);
+        for (int i = index; i < columns.size(); i++) {
+            jdbc.update("UPDATE board_column SET position = ? WHERE id = ?", i + 1, columns.get(i).get("id"));
+        }
+        audit(input.workspaceId(), userId, "column.created", "column", columnId,
+            Map.of("boardId", input.boardId(), "name", name));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("column", columnRow(columnId));
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> updateColumn(String userId, String columnId, ApiDtos.ColumnUpdate input) {
+        if (input == null) throw ApiException.badRequest("Column changes are required.");
+        Map<String, Object> column = columnRowWithBoard(columnId);
+        requireMinimumRole(userId, stringValue(column.get("workspaceId")), "MEMBER");
+        requireBoardVisible(userId, boardRowRaw(String.valueOf(column.get("boardId"))));
+        String name = input.name() == null ? String.valueOf(column.get("name")) : normalizeColumnName(input.name());
+        Integer wipLimit = numberOrNull(column.get("wipLimit"));
+        if (input.wipLimit() != null) {
+            Integer requested = input.wipLimit().orElse(null);
+            if (requested != null && (requested < 1 || requested > 999)) {
+                throw ApiException.badRequest("WIP limit must be between 1 and 999.");
+            }
+            wipLimit = requested;
+        }
+        boolean wipEnforced = input.wipEnforced() == null
+            ? number(column.get("wipEnforced")) == 1 : input.wipEnforced();
+        boolean isDone = input.isDone() == null
+            ? number(column.get("isDone")) == 1 : input.isDone();
+        if (!isDone && number(column.get("isDone")) == 1) {
+            Integer doneColumns = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM board_column
+                WHERE board_id = ? AND deleted_at IS NULL AND is_done = 1
+                """, Integer.class, column.get("boardId"));
+            if (doneColumns != null && doneColumns <= 1) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONFLICT",
+                    "At least one column must remain a done column.");
+            }
+        }
+        jdbc.update("""
+            UPDATE board_column SET name = ?, wip_limit = ?, wip_enforced = ?, is_done = ?
+            WHERE id = ? AND deleted_at IS NULL
+            """, name, wipLimit, wipEnforced ? 1 : 0, isDone ? 1 : 0, columnId);
+        if (input.position() != null) {
+            List<Map<String, Object>> columns = activeColumns(String.valueOf(column.get("boardId")));
+            int target = Math.max(0, Math.min(columns.size() - 1, input.position()));
+            Map<String, Object> moving = columns.stream()
+                .filter(item -> columnId.equals(String.valueOf(item.get("id")))).findFirst().orElse(null);
+            if (moving != null) {
+                columns.remove(moving);
+                columns.add(target, moving);
+                for (int i = 0; i < columns.size(); i++) {
+                    jdbc.update("UPDATE board_column SET position = ? WHERE id = ?", i, columns.get(i).get("id"));
+                }
+            }
+        }
+        audit(stringValue(column.get("workspaceId")), userId, "column.updated", "column", columnId,
+            Map.of("boardId", column.get("boardId")));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("column", columnRow(columnId));
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> deleteColumn(String userId, String columnId, String workspaceId) {
+        Map<String, Object> column = columnRowWithBoard(columnId);
+        if (workspaceId == null || !workspaceId.equals(column.get("workspaceId"))) {
+            throw ApiException.notFound("Column not found.");
+        }
+        requireMinimumRole(userId, workspaceId, "MEMBER");
+        requireBoardVisible(userId, boardRowRaw(String.valueOf(column.get("boardId"))));
+        List<Map<String, Object>> columns = activeColumns(String.valueOf(column.get("boardId")));
+        if (columns.size() <= 1) {
+            throw new ApiException(HttpStatus.CONFLICT, "CONFLICT", "A board needs at least one column.");
+        }
+        Integer taskCount = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM task WHERE column_id = ? AND deleted_at IS NULL
+            """, Integer.class, columnId);
+        if (taskCount != null && taskCount > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "CONFLICT",
+                "Move or delete the " + taskCount + " task" + (taskCount == 1 ? "" : "s")
+                    + " in this column first.");
+        }
+        jdbc.update("UPDATE board_column SET deleted_at = ? WHERE id = ?", Instant.now().toString(), columnId);
+        List<Map<String, Object>> remaining = activeColumns(String.valueOf(column.get("boardId")));
+        for (int i = 0; i < remaining.size(); i++) {
+            jdbc.update("UPDATE board_column SET position = ? WHERE id = ?", i, remaining.get(i).get("id"));
+        }
+        audit(workspaceId, userId, "column.deleted", "column", columnId,
+            Map.of("boardId", column.get("boardId")));
+        return linked(Map.of("deleted", true));
+    }
+
+    @Transactional
+    public Map<String, Object> reorderColumns(String userId, ApiDtos.ColumnReorder input) {
+        if (input == null || blank(input.workspaceId()) || blank(input.boardId())
+            || input.orderedIds() == null) {
+            throw ApiException.badRequest("Choose a board and a complete column order.");
+        }
+        Map<String, Object> board = boardRow(input.boardId());
+        if (!input.workspaceId().equals(board.get("workspaceId"))) throw ApiException.notFound("Board not found.");
+        requireMinimumRole(userId, input.workspaceId(), "MEMBER");
+        requireBoardVisible(userId, board);
+        List<Map<String, Object>> columns = activeColumns(input.boardId());
+        if (input.orderedIds().size() != columns.size()) {
+            throw ApiException.badRequest("Include every column exactly once.");
+        }
+        List<String> existing = columns.stream().map(item -> String.valueOf(item.get("id"))).toList();
+        for (String id : input.orderedIds()) {
+            if (!existing.contains(id)) throw ApiException.badRequest("Unknown column in order.");
+        }
+        for (int i = 0; i < input.orderedIds().size(); i++) {
+            jdbc.update("UPDATE board_column SET position = ? WHERE id = ?", i, input.orderedIds().get(i));
+        }
+        audit(input.workspaceId(), userId, "column.reordered", "board", input.boardId(),
+            Map.of("columns", input.orderedIds().size()));
+        return linked(Map.of("reordered", true));
+    }
+
+    private List<Map<String, Object>> activeColumns(String boardId) {
+        return jdbc.queryForList("""
+            SELECT id, name, position, is_done AS isDone, wip_limit AS wipLimit,
+                   wip_enforced AS wipEnforced
+            FROM board_column WHERE board_id = ? AND deleted_at IS NULL
+            ORDER BY position ASC, name ASC
+            """, boardId);
+    }
+
+    private Map<String, Object> columnRow(String columnId) {
+        Map<String, Object> column = jdbc.queryForList("""
+            SELECT id, board_id AS boardId, name, position, is_done AS isDone,
+                   wip_limit AS wipLimit, wip_enforced AS wipEnforced
+            FROM board_column WHERE id = ? AND deleted_at IS NULL
+            """, columnId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Column not found."));
+        column.put("isDone", number(column.get("isDone")) == 1);
+        column.put("wipEnforced", number(column.get("wipEnforced")) == 1);
+        return column;
+    }
+
+    private Map<String, Object> columnRowWithBoard(String columnId) {
+        Map<String, Object> column = jdbc.queryForList("""
+            SELECT c.id, c.board_id AS boardId, c.name, c.position, c.is_done AS isDone,
+                   c.wip_limit AS wipLimit, c.wip_enforced AS wipEnforced,
+                   b.workspace_id AS workspaceId
+            FROM board_column c JOIN board b ON b.id = c.board_id
+            WHERE c.id = ? AND c.deleted_at IS NULL AND b.deleted_at IS NULL
+            """, columnId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Column not found."));
+        column.put("isDone", number(column.get("isDone")) == 1);
+        column.put("wipEnforced", number(column.get("wipEnforced")) == 1);
+        return column;
+    }
+
+    private String normalizeColumnName(String value) {
+        String name = value == null ? "" : value.trim();
+        if (name.isEmpty() || name.length() > 60) {
+            throw ApiException.badRequest("Column name must be between 1 and 60 characters.");
+        }
+        return name;
+    }
+
+    private Integer numberOrNull(Object value) {
+        return value instanceof Number number ? number.intValue() : null;
+    }
+
+    private void requireWipCapacity(String columnId) {
+        Map<String, Object> column = jdbc.queryForList("""
+            SELECT name, wip_limit AS wipLimit, wip_enforced AS wipEnforced
+            FROM board_column WHERE id = ? AND deleted_at IS NULL
+            """, columnId).stream().findFirst().orElse(null);
+        if (column == null || number(column.get("wipEnforced")) != 1) return;
+        Integer limit = numberOrNull(column.get("wipLimit"));
+        if (limit == null || limit <= 0) return;
+        Integer count = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM task
+            WHERE column_id = ? AND deleted_at IS NULL AND archived_at IS NULL
+            """, Integer.class, columnId);
+        if (count != null && count >= limit) {
+            throw ApiException.wipLimit("The column " + column.get("name")
+                + " is at its WIP limit of " + limit + " open tasks.");
+        }
     }
 
     public Map<String, Object> board(String userId, String boardId) {
@@ -644,10 +860,15 @@ public class AppService {
         requireBoardVisible(userId, board);
         String role = roleFor(userId, (String) board.get("workspaceId"));
         List<Map<String, Object>> columns = jdbc.queryForList("""
-            SELECT id, name, position, is_done AS isDone
-            FROM board_column WHERE board_id = ? ORDER BY position, name
+            SELECT id, name, position, is_done AS isDone, wip_limit AS wipLimit,
+                   wip_enforced AS wipEnforced
+            FROM board_column
+            WHERE board_id = ? AND deleted_at IS NULL
+            ORDER BY position, name
             """, boardId);
         for (Map<String, Object> column : columns) {
+            column.put("isDone", number(column.get("isDone")) == 1);
+            column.put("wipEnforced", number(column.get("wipEnforced")) == 1);
             column.put("tasks", tasks(userId, boardId, (String) column.get("id")));
         }
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -739,13 +960,16 @@ public class AppService {
             source.get("visibility") == null ? "workspace" : source.get("visibility"), userId, now);
         Map<String, String> columnMap = new LinkedHashMap<>();
         for (Map<String, Object> column : jdbc.queryForList("""
-            SELECT id, name, position, is_done FROM board_column WHERE board_id = ? ORDER BY position, name
+            SELECT id, name, position, is_done, wip_limit, wip_enforced
+            FROM board_column WHERE board_id = ? AND deleted_at IS NULL ORDER BY position, name
             """, boardId)) {
             String newColumnId = id();
             columnMap.put((String) column.get("id"), newColumnId);
             jdbc.update("""
-                INSERT INTO board_column (id, board_id, name, position, is_done) VALUES (?, ?, ?, ?, ?)
-                """, newColumnId, newBoardId, column.get("name"), column.get("position"), column.get("is_done"));
+                INSERT INTO board_column (id, board_id, name, position, is_done, wip_limit, wip_enforced)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, newColumnId, newBoardId, column.get("name"), column.get("position"),
+                column.get("is_done"), column.get("wip_limit"), column.get("wip_enforced"));
         }
         for (Map<String, Object> task : jdbc.queryForList("""
             SELECT id, column_id AS columnId, title, description, priority, start_date AS startDate,
@@ -842,11 +1066,14 @@ public class AppService {
             """, token).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("This shared board is no longer available."));
         List<Map<String, Object>> columns = jdbc.queryForList("""
-            SELECT id, name, position, is_done AS isDone
-            FROM board_column WHERE board_id = ? ORDER BY position, name
+            SELECT id, name, position, is_done AS isDone, wip_limit AS wipLimit,
+                   wip_enforced AS wipEnforced
+            FROM board_column WHERE board_id = ? AND deleted_at IS NULL
+            ORDER BY position, name
             """, board.get("id"));
         for (Map<String, Object> column : columns) {
-            column.put("wipLimit", null);
+            column.put("isDone", number(column.get("isDone")) == 1);
+            column.put("wipEnforced", number(column.get("wipEnforced")) == 1);
         }
         List<Map<String, Object>> tasks = jdbc.queryForList("""
             SELECT t.id, t.column_id AS columnId, t.title, t.description, t.priority,
@@ -971,7 +1198,16 @@ public class AppService {
             task.put("completed", number(task.get("completed")));
             task.put("labels", labelsForTask(String.valueOf(task.get("id"))));
         }
-        return linked(Map.of("tasks", tasks));
+        List<Map<String, Object>> archivedBoards = jdbc.queryForList("""
+            SELECT b.id, b.name, b.archived_at AS archivedAt, b.version,
+                   (SELECT COUNT(*) FROM task t WHERE t.board_id = b.id
+                      AND t.deleted_at IS NULL) AS taskCount
+            FROM board b
+            WHERE b.workspace_id = ? AND b.deleted_at IS NULL AND b.archived_at IS NOT NULL
+              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
+            ORDER BY b.archived_at DESC
+            """, workspaceId, userId, canSeePrivate);
+        return linked(Map.of("tasks", tasks, "archivedBoards", archivedBoards));
     }
 
     public Map<String, Object> upcoming(String userId, String workspaceId, int days) {
@@ -1489,13 +1725,14 @@ public class AppService {
         Map<String, Object> column = jdbc.queryForList("""
             SELECT c.id, c.board_id AS boardId, b.workspace_id AS workspaceId
             FROM board_column c JOIN board b ON b.id = c.board_id
-            WHERE c.id = ?
+            WHERE c.id = ? AND c.deleted_at IS NULL
             """, input.columnId()).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Column not found."));
         if (!workspaceId.equals(column.get("workspaceId")) || !input.boardId().equals(column.get("boardId"))) {
             throw ApiException.badRequest("Column does not belong to this board.");
         }
         requireBoardVisible(userId, boardRow(input.boardId()));
+        requireWipCapacity(input.columnId());
         int position = jdbc.queryForObject("""
             SELECT COALESCE(MAX(position), -1) + 1 FROM task
             WHERE board_id = ? AND column_id = ? AND deleted_at IS NULL
@@ -1919,11 +2156,15 @@ public class AppService {
             throw ApiException.conflict("This task changed elsewhere.", ((Number) current.get("version")).intValue());
         }
         Map<String, Object> target = jdbc.queryForList("""
-            SELECT id, board_id AS boardId, is_done AS isDone FROM board_column WHERE id = ?
+            SELECT id, board_id AS boardId, is_done AS isDone FROM board_column
+            WHERE id = ? AND deleted_at IS NULL
             """, input.columnId()).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Column not found."));
         if (!current.get("boardId").equals(target.get("boardId"))) {
             throw ApiException.badRequest("Column does not belong to this board.");
+        }
+        if (!input.columnId().equals(current.get("columnId"))) {
+            requireWipCapacity(input.columnId());
         }
         int updated = jdbc.update("""
             UPDATE task SET column_id = ?, version = version + 1, updated_at = ?
@@ -2012,7 +2253,7 @@ public class AppService {
         List<Map<String, Object>> previous = new ArrayList<>();
         if ("complete".equals(action)) {
             Map<String, Object> doneColumn = jdbc.queryForList("""
-                SELECT id FROM board_column WHERE board_id = ? AND is_done = 1 ORDER BY position LIMIT 1
+                SELECT id FROM board_column WHERE board_id = ? AND is_done = 1 AND deleted_at IS NULL ORDER BY position LIMIT 1
                 """, boardId).stream().findFirst()
                 .orElseThrow(() -> ApiException.badRequest("This board has no done column."));
             String doneId = (String) doneColumn.get("id");
@@ -2044,7 +2285,7 @@ public class AppService {
         } else {
             if (blank(input.columnId())) throw ApiException.badRequest("Choose a destination column.");
             Map<String, Object> target = jdbc.queryForList("""
-                SELECT id, board_id AS boardId FROM board_column WHERE id = ?
+                SELECT id, board_id AS boardId FROM board_column WHERE id = ? AND deleted_at IS NULL
                 """, input.columnId()).stream().findFirst()
                 .orElseThrow(() -> ApiException.notFound("Column not found."));
             if (!boardId.equals(target.get("boardId"))) {
@@ -2097,7 +2338,7 @@ public class AppService {
         if (complete) {
             Map<String, Object> doneColumn = jdbc.queryForList("""
                 SELECT id FROM board_column
-                WHERE board_id = ? AND is_done = 1 ORDER BY position LIMIT 1
+                WHERE board_id = ? AND is_done = 1 AND deleted_at IS NULL ORDER BY position LIMIT 1
                 """, current.get("boardId")).stream().findFirst()
                 .orElseThrow(() -> ApiException.badRequest("This board has no done column."));
             columnId = (String) doneColumn.get("id");
@@ -2132,7 +2373,7 @@ public class AppService {
         requireTaskBoardVisible(userId, current);
         Map<String, Object> column = jdbc.queryForList("""
             SELECT id FROM board_column
-            WHERE board_id = ? AND is_done = ? ORDER BY position LIMIT 1
+            WHERE board_id = ? AND is_done = ? AND deleted_at IS NULL ORDER BY position LIMIT 1
             """, current.get("boardId"), completed ? 1 : 0).stream().findFirst()
             .orElseThrow(() -> ApiException.badRequest("This board has no suitable column."));
         jdbc.update("""
@@ -2206,10 +2447,17 @@ public class AppService {
                 ORDER BY b.position, b.created_at
                 """, workspaceId, userId);
         for (Map<String, Object> board : boards) {
-            board.put("columns", jdbc.queryForList("""
-                SELECT id, name, position, is_done AS isDone
-                FROM board_column WHERE board_id = ? ORDER BY position, name
-                """, board.get("id")));
+            List<Map<String, Object>> columns = jdbc.queryForList("""
+                SELECT id, name, position, is_done AS isDone, wip_limit AS wipLimit,
+                       wip_enforced AS wipEnforced
+                FROM board_column WHERE board_id = ? AND deleted_at IS NULL
+                ORDER BY position, name
+                """, board.get("id"));
+            for (Map<String, Object> column : columns) {
+                column.put("isDone", number(column.get("isDone")) == 1);
+                column.put("wipEnforced", number(column.get("wipEnforced")) == 1);
+            }
+            board.put("columns", columns);
         }
         return boards;
     }
@@ -2629,6 +2877,7 @@ public class AppService {
     }
 
     private int number(Object value) {
+        if (value instanceof Boolean flag) return flag ? 1 : 0;
         return value instanceof Number number ? number.intValue() : 0;
     }
 
@@ -2638,6 +2887,10 @@ public class AppService {
 
     private String id() {
         return UUID.randomUUID().toString();
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private boolean blank(String value) {

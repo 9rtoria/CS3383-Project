@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -2414,5 +2415,205 @@ class ApiSmokeTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void boardTemplatesColumnsWipAndArchivedBoardsWork() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String starterBoard = workspace.path("boards").get(0).path("id").asText();
+        List<String> templateIds = new ArrayList<>();
+        boot.path("templates").forEach(template -> templateIds.add(template.path("id").asText()));
+        if (!templateIds.containsAll(List.of("blank", "personal-week", "project-sprint", "content-calendar"))) {
+            throw new AssertionError("Expected the full board template catalog, got " + templateIds);
+        }
+
+        MvcResult created = mockMvc.perform(post("/api/boards")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Sprint board",
+                    "template", "project-sprint",
+                    "visibility", "workspace"
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String boardId = objectMapper.readTree(created.getResponse().getContentAsString())
+            .path("board").path("id").asText();
+
+        MvcResult boardResult = mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.columns.length()").value(5))
+            .andExpect(jsonPath("$.board.columns[0].name").value("Backlog"))
+            .andExpect(jsonPath("$.board.columns[2].wipLimit").value(3))
+            .andExpect(jsonPath("$.board.columns[4].isDone").value(true))
+            .andReturn();
+        JsonNode board = objectMapper.readTree(boardResult.getResponse().getContentAsString()).path("board");
+        String backlog = board.path("columns").get(0).path("id").asText();
+        String doneColumn = board.path("columns").get(4).path("id").asText();
+
+        MvcResult columnCreated = mockMvc.perform(post("/api/columns")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "name", "Blocked"
+                ))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.column.name").value("Blocked"))
+            .andReturn();
+        String blocked = objectMapper.readTree(columnCreated.getResponse().getContentAsString())
+            .path("column").path("id").asText();
+
+        mockMvc.perform(patch("/api/columns/" + blocked)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Blocked",
+                    "wipLimit", 1,
+                    "wipEnforced", true,
+                    "isDone", false
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.column.wipLimit").value(1))
+            .andExpect(jsonPath("$.column.wipEnforced").value(true));
+
+        MvcResult firstBlocked = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", blocked,
+                    "title", "First blocked task"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String firstBlockedId = objectMapper.readTree(firstBlocked.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+
+        mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", blocked,
+                    "title", "Second blocked task"
+                ))))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("WIP_LIMIT"));
+
+        MvcResult backlogTask = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", backlog,
+                    "title", "Move into blocked"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        JsonNode movable = objectMapper.readTree(backlogTask.getResponse().getContentAsString()).path("task");
+        mockMvc.perform(patch("/api/tasks/" + movable.path("id").asText() + "/move")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "version", movable.path("version").asInt(),
+                    "columnId", blocked
+                ))))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("WIP_LIMIT"));
+
+        mockMvc.perform(patch("/api/columns/" + blocked)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"workspaceId\":\"" + workspaceId + "\",\"wipLimit\":null,\"wipEnforced\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.column.wipLimit").value(nullValue()))
+            .andExpect(jsonPath("$.column.wipEnforced").value(true));
+
+        mockMvc.perform(patch("/api/columns/" + doneColumn)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "isDone", false
+                ))))
+            .andExpect(status().isConflict());
+
+        List<String> order = new ArrayList<>();
+        for (JsonNode column : board.path("columns")) order.add(column.path("id").asText());
+        order.add(blocked);
+        java.util.Collections.reverse(order);
+        mockMvc.perform(put("/api/columns/reorder")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "orderedIds", order
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reordered").value(true));
+
+        mockMvc.perform(delete("/api/columns/" + blocked)
+                .session(session)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isConflict());
+
+        mockMvc.perform(delete("/api/tasks/" + firstBlockedId).session(session))
+            .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/columns/" + blocked)
+                .session(session)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isOk());
+
+        MvcResult activeBoard = mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode active = objectMapper.readTree(activeBoard.getResponse().getContentAsString()).path("board");
+        for (JsonNode column : active.path("columns")) {
+            if ("Blocked".equals(column.path("name").asText())) {
+                throw new AssertionError("Deleted column still appeared on the board.");
+            }
+        }
+
+        int version = active.path("version").asInt();
+        mockMvc.perform(patch("/api/boards/" + boardId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "archived", true,
+                    "version", version
+                ))))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/archive")
+                .session(session)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.archivedBoards[0].id").value(boardId))
+            .andExpect(jsonPath("$.archivedBoards[0].name").value("Sprint board"));
+
+        mockMvc.perform(patch("/api/boards/" + boardId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "archived", false,
+                    "version", version + 1
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.archivedAt").value(nullValue()));
+
+        mockMvc.perform(get("/api/boards/" + starterBoard).session(session))
+            .andExpect(status().isOk());
     }
 }

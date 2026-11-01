@@ -4,7 +4,7 @@
 **Baseline visuals:** `C:\Users\yanpi\OneDrive\桌面\ProjectA2\docs\screenshots`  
 **Baseline demo:** `C:\Users\yanpi\OneDrive\桌面\ProjectA2\docs\DEMO.md`  
 **Target:** Spring Boot 3.5 / Java 17 / SQLite / HTML-CSS-vanilla JS  
-**Last updated:** 2026-11-01
+**Last updated:** 2026-11-02
 
 Status key:
 
@@ -20,7 +20,7 @@ Status key:
 | Reference path | Project3383 status | Notes |
 |---|---|---|
 | `/api/account` | DONE | Profile update; DELETE anonymizes the user, soft-deletes personal workspaces, revokes tokens/sessions, and audits |
-| `/api/archive` | DONE | Completed and explicitly archived tasks with timestamps, labels, board, and account for reopen/restore |
+| `/api/archive` | DONE | Completed and explicitly archived tasks plus archived boards with task counts and versions for restore |
 | `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
 | `/api/attachments/{id}` | DONE | Download/delete |
 | `/api/audit` | DONE | Admin audit feed with cursor pagination and retention purge |
@@ -48,9 +48,9 @@ Status key:
 | `/api/calendar` | DONE | Date-range tasks and plan blocks |
 | `/api/calendar/ics` | DONE | Authenticated ICS download |
 | `/api/client-errors` | MISSING | Schema only |
-| `/api/columns` | MISSING | |
-| `/api/columns/reorder` | MISSING | |
-| `/api/columns/{id}` | MISSING | |
+| `/api/columns` | DONE | Create with optional `afterId`; template boards seed done columns and WIP limits |
+| `/api/columns/reorder` | DONE | Complete order validation and persisted positions |
+| `/api/columns/{id}` | DONE | Name, WIP limit/enforcement, done flag, position, soft delete with empty-column guard |
 | `/api/export` | DONE | JSON workspace export and formula-safe CSV; private-board filtering; audit |
 | `/api/health` | DONE | |
 | `/api/import` | DONE | CSV/JSON tasks into a board with columns, labels, assignee, due dates, estimates, and skip counts |
@@ -111,7 +111,7 @@ Status key:
 | Workspace | DONE | Soft delete, policies, version; deleted workspaces are excluded from bootstrap and API access |
 | Membership | DONE | |
 | Board | DONE | |
-| Column | DONE | `board_column` |
+| Column | DONE | `board_column` with integer position, WIP limit/enforcement, done flag, and soft delete |
 | Task | DONE | |
 | Subtask | DONE | |
 | Label | DONE | |
@@ -151,7 +151,7 @@ Status key:
 |---|---|---|
 | Auth / guest / signup / signin / magic link | DONE | Dedicated `/auth` split layout with password, signup, magic-link, guest-claim, and MFA states |
 | App shell / workspace switcher | DONE | |
-| Board / columns / task CRUD | DONE | Board settings, duplicate, archive, soft delete, visibility |
+| Board / columns / task CRUD | DONE | Board settings, templates, column add/edit/delete/reorder, WIP limits with enforced `WIP_LIMIT` 409s, duplicate, archive/restore, soft delete, visibility |
 | Task archive | DONE | Bulk archive, dedicated Archive view for archived and completed work, reopen, restore, activity, and audit |
 | Task drawer fields | PARTIAL | Assignee and recurrence implemented; reminder display and full label management still partial |
 | Task comments / checklist | DONE | |
@@ -168,7 +168,7 @@ Status key:
 | Focus Mode | DONE | Full-screen timer, ring, pause/resume, complete, early leave, actual-minutes persistence |
 | Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
 | Calendar / ICS | DONE | Month calendar and ICS download |
-| Search / Archive / Upcoming | DONE | Redesigned horizon view with ranges and dated rows; archive split into archived/completed with reopen/restore; search field with status, priority, and board filters |
+| Search / Archive / Upcoming | DONE | Redesigned horizon view with ranges and dated rows; archive shows archived boards plus archived/completed tasks with restore/reopen; search field with status, priority, and board filters |
 | Insights | DONE | Timeline Gantt with 14/30/60-day ranges and a workload view with counts and estimated load |
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |

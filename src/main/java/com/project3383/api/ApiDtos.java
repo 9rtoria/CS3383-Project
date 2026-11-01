@@ -59,7 +59,33 @@ public final class ApiDtos {
         String workspaceId,
         String name,
         String description,
-        String visibility
+        String visibility,
+        String template
+    ) {
+    }
+
+    public record ColumnCreate(
+        String workspaceId,
+        String boardId,
+        String name,
+        String afterId
+    ) {
+    }
+
+    public record ColumnUpdate(
+        String workspaceId,
+        String name,
+        java.util.Optional<Integer> wipLimit,
+        Boolean wipEnforced,
+        Boolean isDone,
+        Integer position
+    ) {
+    }
+
+    public record ColumnReorder(
+        String workspaceId,
+        String boardId,
+        java.util.List<String> orderedIds
     ) {
     }
 

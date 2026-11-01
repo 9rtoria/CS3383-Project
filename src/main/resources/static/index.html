@@ -241,6 +241,7 @@
             <button type="button" id="boardMoreButton" class="icon-btn" aria-label="Board actions" aria-expanded="false">⋯</button>
             <div id="boardMoreMenu" class="board-more-menu hidden">
               <button type="button" id="boardSettingsButton" class="menu-item">Board settings</button>
+              <button type="button" id="boardAddColumnButton" class="menu-item">Add column</button>
               <button type="button" id="boardShareButton" class="menu-item">Share link</button>
               <button type="button" id="boardDuplicateButton" class="menu-item">Duplicate</button>
               <button type="button" id="boardArchiveButton" class="menu-item">Archive</button>
@@ -350,6 +351,11 @@
             <h1 class="page-title">Archive</h1>
             <p class="page-sub">Completed and archived work. Restore anything you still need; the rest can stay quiet.</p>
           </div>
+        </div>
+        <div id="archiveBoardsSection" class="archive-section hidden">
+          <h2>Archived boards</h2>
+          <p id="archiveBoardsMeta">Whole boards, folded away.</p>
+          <div id="archiveBoardsList" class="archive-list" data-i18n-skip></div>
         </div>
         <div class="archive-section">
           <h2>Archived tasks</h2>
@@ -866,6 +872,46 @@
     </div>
   </div>
 
+  <div id="columnModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="columnModalTitle">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Board structure</p>
+          <h2 id="columnModalTitle">Add a column</h2>
+        </div>
+        <button type="button" id="closeColumnModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <form id="columnForm">
+        <input id="columnId" type="hidden">
+        <div class="field">
+          <label for="columnName">Name</label>
+          <input id="columnName" class="input" maxlength="60" required placeholder="e.g. Waiting on">
+        </div>
+        <div id="columnEditFields" class="hidden">
+          <div class="form-row">
+            <div class="field">
+              <label for="columnWipLimit">WIP limit</label>
+              <input id="columnWipLimit" class="input" type="number" min="1" max="999" placeholder="No limit">
+            </div>
+            <label class="checkbox column-wip-toggle" for="columnWipEnforced">
+              <input id="columnWipEnforced" type="checkbox">
+              <span>Enforce limit</span>
+            </label>
+          </div>
+          <label class="checkbox" for="columnIsDone">
+            <input id="columnIsDone" type="checkbox">
+            <span>Tasks here count as done</span>
+          </label>
+          <p class="field-hint">Done columns complete tasks automatically. At least one done column must remain.</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancelColumnModal" class="btn ghost">Cancel</button>
+          <button type="submit" id="submitColumn" class="btn primary">Add column</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="boardCreateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="boardCreateTitle">
     <div class="modal" style="max-width:520px">
       <div class="modal-head">
@@ -883,6 +929,10 @@
         <div class="field">
           <label for="boardCreateDescription">Description</label>
           <textarea id="boardCreateDescription" class="textarea" maxlength="1000" rows="3" placeholder="What is this board for?"></textarea>
+        </div>
+        <div class="field">
+          <span class="label">Starting point</span>
+          <div id="boardCreateTemplates" class="template-picker" role="radiogroup" aria-label="Starting point"></div>
         </div>
         <div class="field">
           <label for="boardCreateVisibility">Who can see this board?</label>

@@ -108,8 +108,9 @@ public class DataService {
             throw ApiException.notFound("Board not found.");
         }
         List<Map<String, Object>> columns = jdbc.queryForList("""
-            SELECT id, name, position, is_done AS isDone FROM board_column
-            WHERE board_id = ? ORDER BY position ASC, name ASC
+            SELECT id, name, position, is_done AS isDone, wip_limit AS wipLimit,
+                   wip_enforced AS wipEnforced FROM board_column
+            WHERE board_id = ? AND deleted_at IS NULL ORDER BY position ASC, name ASC
             """, input.boardId());
         if (columns.isEmpty()) throw ApiException.badRequest("That board has no columns.");
 
@@ -195,8 +196,9 @@ public class DataService {
 
     private Map<String, Object> exportBoard(String boardId, Map<String, Object> board) {
         List<Map<String, Object>> columns = jdbc.queryForList("""
-            SELECT id, name, position, is_done AS isDone FROM board_column
-            WHERE board_id = ? ORDER BY position ASC, name ASC
+            SELECT id, name, position, is_done AS isDone, wip_limit AS wipLimit,
+                   wip_enforced AS wipEnforced FROM board_column
+            WHERE board_id = ? AND deleted_at IS NULL ORDER BY position ASC, name ASC
             """, boardId);
         List<Map<String, Object>> taskRows = jdbc.queryForList("""
             SELECT t.id, t.column_id AS columnId, t.title, t.description, t.priority,
@@ -268,7 +270,8 @@ public class DataService {
             item.put("name", column.get("name"));
             item.put("position", column.get("position"));
             item.put("isDone", number(column.get("isDone")) == 1);
-            item.put("wipLimit", null);
+            item.put("wipLimit", column.get("wipLimit"));
+            item.put("wipEnforced", number(column.get("wipEnforced")) == 1);
             exportedColumns.add(item);
         }
         exported.put("columns", exportedColumns);

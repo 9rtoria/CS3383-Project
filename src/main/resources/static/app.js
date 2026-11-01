@@ -850,6 +850,7 @@
       const tasks = data.tasks ?? [];
       const archived = tasks.filter((task) => task.archivedAt);
       const completed = tasks.filter((task) => !task.archivedAt && Number(task.completed) === 1);
+      renderArchivedBoards(data.archivedBoards ?? []);
       $("archiveArchivedMeta").textContent = archived.length
         ? `${archived.length} ${t(archived.length === 1 ? "task" : "tasks")} ${t("put away explicitly.")}`
         : t("0 tasks put away explicitly.");
@@ -860,6 +861,44 @@
       renderArchiveList($("archiveList"), completed, "completed");
     } catch (error) {
       showToast(error.message);
+    }
+  }
+
+  function renderArchivedBoards(boards) {
+    const section = $("archiveBoardsSection");
+    const container = $("archiveBoardsList");
+    section.classList.toggle("hidden", !boards.length);
+    container.replaceChildren();
+    if (!boards.length) return;
+    $("archiveBoardsMeta").textContent = `${boards.length} ${t(boards.length === 1 ? "board" : "boards")} ${t("folded away.")}`;
+    for (const board of boards) {
+      const row = element("div", "archive-row");
+      const copy = element("div", "archive-copy");
+      copy.append(element("strong", "", board.name));
+      const count = Number(board.taskCount || 0);
+      copy.append(element("span", "archive-meta",
+        `${count} ${t(count === 1 ? "task" : "tasks")} · ${t("archived {{when}}", { when: relativeTime(board.archivedAt) })}`));
+      const actions = element("div", "archive-actions");
+      const restore = element("button", "btn sm", t("Restore"));
+      restore.type = "button";
+      restore.addEventListener("click", async () => {
+        restore.disabled = true;
+        try {
+          await request(`/api/boards/${encodeURIComponent(board.id)}`, {
+            method: "PATCH",
+            body: { archived: false, version: board.version },
+          });
+          await refreshBootstrap();
+          await loadArchive();
+          showToast(t("Board restored."));
+        } catch (error) {
+          showToast(error.message);
+          restore.disabled = false;
+        }
+      });
+      actions.append(restore);
+      row.append(copy, actions);
+      container.append(row);
     }
   }
 
@@ -1217,10 +1256,31 @@
     setView("board");
   }
 
+  function renderBoardTemplates() {
+    const container = $("boardCreateTemplates");
+    if (!container) return;
+    container.replaceChildren();
+    const templates = state.boot?.templates ?? [];
+    templates.forEach((template, index) => {
+      const option = element("label", "template-option");
+      const input = element("input", "");
+      input.type = "radio";
+      input.name = "boardTemplate";
+      input.value = template.id;
+      input.checked = index === 0;
+      const copy = element("span", "template-copy");
+      copy.append(element("strong", "", template.name || template.id));
+      if (template.description) copy.append(element("span", "", template.description));
+      option.append(input, copy, element("span", "badge slate", t("{{count}} columns", { count: template.columns?.length ?? 0 })));
+      container.append(option);
+    });
+  }
+
   function openNewBoardModal() {
     $("boardCreateName").value = "";
     $("boardCreateDescription").value = "";
     $("boardCreateVisibility").value = "workspace";
+    renderBoardTemplates();
     $("boardCreateModal").classList.remove("hidden");
     window.setTimeout(() => $("boardCreateName").focus(), 20);
   }
@@ -1232,12 +1292,14 @@
     const button = $("submitBoardCreate");
     button.disabled = true;
     try {
+      const template = document.querySelector('input[name="boardTemplate"]:checked')?.value || "blank";
       const result = await request("/api/boards", {
         method: "POST",
         body: {
           workspaceId: workspace().id,
           name,
           description: $("boardCreateDescription").value.trim(),
+          template,
           visibility: $("boardCreateVisibility").value,
         },
       });
@@ -1251,6 +1313,71 @@
       showToast(error.message);
     } finally {
       button.disabled = false;
+    }
+  }
+
+  function openColumnModal(column = null) {
+    const board = currentBoard();
+    if (!board) return;
+    $("boardMoreMenu")?.classList.add("hidden");
+    $("columnId").value = column?.id ?? "";
+    $("columnModalTitle").textContent = column ? t("Column settings") : t("Add a column");
+    $("columnName").value = column?.name ?? "";
+    $("columnWipLimit").value = column?.wipLimit ?? "";
+    $("columnWipEnforced").checked = Boolean(column?.wipEnforced);
+    $("columnIsDone").checked = Boolean(column?.isDone);
+    $("columnEditFields").classList.toggle("hidden", !column);
+    $("submitColumn").textContent = column ? t("Save") : t("Add column");
+    $("columnModal").classList.remove("hidden");
+    window.setTimeout(() => $("columnName").focus(), 20);
+  }
+
+  async function saveColumn(event) {
+    event.preventDefault();
+    const board = currentBoard();
+    if (!board) return;
+    const columnId = $("columnId").value;
+    const name = $("columnName").value.trim();
+    if (!name) return;
+    const wipText = $("columnWipLimit").value.trim();
+    const button = $("submitColumn");
+    button.disabled = true;
+    try {
+      const body = columnId
+        ? {
+            workspaceId: workspace().id,
+            name,
+            wipLimit: wipText ? Number(wipText) : null,
+            wipEnforced: $("columnWipEnforced").checked,
+            isDone: $("columnIsDone").checked,
+          }
+        : { workspaceId: workspace().id, boardId: board.id, name };
+      await request(columnId ? `/api/columns/${encodeURIComponent(columnId)}` : "/api/columns", {
+        method: columnId ? "PATCH" : "POST",
+        body,
+      });
+      $("columnModal").classList.add("hidden");
+      await loadBoard(board.id);
+      showToast(t(columnId ? "Column updated." : "Column added."));
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function deleteColumn(column) {
+    const board = currentBoard();
+    if (!board) return;
+    if (!window.confirm(t("Delete the \"{{name}}\" column? It must be empty.", { name: column.name }))) return;
+    try {
+      await request(`/api/columns/${encodeURIComponent(column.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, {
+        method: "DELETE",
+      });
+      await loadBoard(board.id);
+      showToast(t("Column deleted."));
+    } catch (error) {
+      showToast(error.message);
     }
   }
 
@@ -1660,25 +1787,91 @@
       return;
     }
     container.classList.remove("list-mode");
+    const canEdit = board.permissions?.canEdit ?? true;
     for (const column of board.columns ?? []) {
-      const columnNode = element("section", "column");
+      const allColumnTasks = column.tasks ?? [];
+      const openInColumn = allColumnTasks.filter((task) => Number(task.completed) !== 1).length;
+      const columnTasks = allColumnTasks.filter(taskMatches);
+      const columnCount = column.isDone
+        ? columnTasks.length
+        : columnTasks.filter((task) => Number(task.completed) !== 1).length;
+      const wipOver = Boolean(column.wipEnforced && column.wipLimit && openInColumn > column.wipLimit);
+      const wipNear = Boolean(column.wipEnforced && column.wipLimit && openInColumn === column.wipLimit);
+      const columnNode = element("section", `column${wipOver || wipNear ? " wip-near" : ""}`);
       columnNode.dataset.columnId = column.id;
+      columnNode.setAttribute("aria-label", `${column.name}, ${allColumnTasks.length} ${allColumnTasks.length === 1 ? t("task") : t("tasks")}`);
 
-      const columnTasks = (column.tasks ?? []).filter(taskMatches);
       const head = element("div", "column-head");
-      const title = element("h2", "", column.name);
-      const count = element("span", "count", String(columnTasks.length));
-      head.append(title, count);
+      const dot = element("span", `column-dot${column.isDone ? " done" : ""}`);
+      dot.setAttribute("aria-hidden", "true");
+      const title = element("h2", "column-title");
+      title.append(document.createTextNode(column.name));
+      title.append(element("span", "count", String(columnCount)));
+      if (column.wipEnforced && column.wipLimit) {
+        title.append(element("span", `wip-label${wipOver ? " rose" : ""}`, `WIP ${openInColumn}/${column.wipLimit}`));
+      }
+      const actions = element("div", "column-head-actions");
+      if (canEdit) {
+        const addHere = element("button", "icon-btn sm", "");
+        addHere.type = "button";
+        addHere.title = t("Add task to {{name}}", { name: column.name });
+        addHere.setAttribute("aria-label", t("Add task to {{name}}", { name: column.name }));
+        addHere.append(icon("plus"));
+        addHere.addEventListener("click", () => openTaskModal(null, column.id));
+        actions.append(addHere);
+
+        const menuWrap = element("div", "column-menu-wrap");
+        const trigger = element("button", "icon-btn sm", "⋯");
+        trigger.type = "button";
+        trigger.title = t("{{name}} actions", { name: column.name });
+        trigger.setAttribute("aria-label", t("{{name}} actions", { name: column.name }));
+        const menu = element("div", "board-more-menu column-menu hidden");
+        const settings = element("button", "menu-item", t("Column settings"));
+        settings.type = "button";
+        const wip = element("button", "menu-item", t("WIP limit"));
+        wip.type = "button";
+        const separator = element("div", "menu-sep");
+        const remove = element("button", "menu-item danger", t("Delete column"));
+        remove.type = "button";
+        const openColumnMenu = () => {
+          const wasHidden = menu.classList.contains("hidden");
+          document.querySelectorAll(".column-menu").forEach((item) => item.classList.add("hidden"));
+          if (wasHidden) menu.classList.remove("hidden");
+        };
+        trigger.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openColumnMenu();
+        });
+        menu.addEventListener("click", (event) => event.stopPropagation());
+        settings.addEventListener("click", () => {
+          menu.classList.add("hidden");
+          openColumnModal(column);
+        });
+        wip.addEventListener("click", () => {
+          menu.classList.add("hidden");
+          openColumnModal(column);
+        });
+        remove.addEventListener("click", () => {
+          menu.classList.add("hidden");
+          void deleteColumn(column);
+        });
+        menu.append(settings, wip, separator, remove);
+        menuWrap.append(trigger, menu);
+        actions.append(menuWrap);
+      }
+      head.append(dot, title, actions);
       columnNode.append(head);
 
       const cards = element("div", "cards");
       for (const task of columnTasks) cards.append(taskCard(task));
       columnNode.append(cards);
 
-      const add = element("button", "add-card", "+ Add task");
-      add.type = "button";
-      add.addEventListener("click", () => openTaskModal(null, column.id));
-      columnNode.append(add);
+      if (canEdit) {
+        const add = element("button", "add-card", `+ ${t("Add task")}`);
+        add.type = "button";
+        add.addEventListener("click", () => openTaskModal(null, column.id));
+        columnNode.append(add);
+      }
 
       columnNode.addEventListener("dragover", (event) => event.preventDefault());
       columnNode.addEventListener("drop", async (event) => {
@@ -1713,6 +1906,13 @@
       });
 
       container.append(columnNode);
+    }
+    if (canEdit) {
+      const addColumn = element("button", "column column-add-column");
+      addColumn.type = "button";
+      addColumn.append(icon("plus"), document.createTextNode(` ${t("Add column")}`));
+      addColumn.addEventListener("click", () => openColumnModal());
+      container.append(addColumn);
     }
     renderBulkToolbar();
   }
@@ -6380,10 +6580,13 @@
     });
     document.addEventListener("click", (event) => {
       const menu = $("boardMoreMenu");
-      if (!menu || menu.classList.contains("hidden")) return;
-      if (!menu.contains(event.target) && event.target !== $("boardMoreButton")) {
+      if (menu && !menu.classList.contains("hidden")
+        && !menu.contains(event.target) && event.target !== $("boardMoreButton")) {
         menu.classList.add("hidden");
         $("boardMoreButton").setAttribute("aria-expanded", "false");
+      }
+      if (!event.target.closest?.(".column-menu-wrap")) {
+        document.querySelectorAll(".column-menu").forEach((item) => item.classList.add("hidden"));
       }
     });
     const newBoardTask = () => {
@@ -6404,6 +6607,13 @@
     $("cancelBoardSettings").addEventListener("click", () => $("boardSettingsModal").classList.add("hidden"));
     $("boardSettingsModal").addEventListener("click", (event) => {
       if (event.target === $("boardSettingsModal")) $("boardSettingsModal").classList.add("hidden");
+    });
+    $("boardAddColumnButton").addEventListener("click", () => openColumnModal());
+    $("columnForm").addEventListener("submit", saveColumn);
+    $("closeColumnModal").addEventListener("click", () => $("columnModal").classList.add("hidden"));
+    $("cancelColumnModal").addEventListener("click", () => $("columnModal").classList.add("hidden"));
+    $("columnModal").addEventListener("click", (event) => {
+      if (event.target === $("columnModal")) $("columnModal").classList.add("hidden");
     });
     $("boardDuplicateButton").addEventListener("click", duplicateBoard);
     $("boardShareButton").addEventListener("click", toggleBoardShare);

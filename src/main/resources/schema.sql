@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS board_column (
     name TEXT NOT NULL,
     position INTEGER NOT NULL DEFAULT 0,
     is_done INTEGER NOT NULL DEFAULT 0,
+    wip_limit INTEGER,
+    wip_enforced INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT,
     FOREIGN KEY (board_id) REFERENCES board(id) ON DELETE CASCADE
 );
 

@@ -2,16 +2,16 @@
 
 Project: **Project3383 — Drift**
 Reference: `ProjectA2` (read-only)
-Date: 2026-11-01
+Date: 2026-11-02
 
 ## Build and automated tests
 
 | Check | Result |
 |---|---|
-| `./mvnw test` | 26 tests, 0 failures, 0 errors |
+| `./mvnw test` | 27 tests, 0 failures, 0 errors |
 | `./mvnw -DskipTests package` | Passed; executable jar produced |
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
-| Flyway migrations | V1–V8 validated and applied |
+| Flyway migrations | V1–V9 validated and applied |
 | Git | Clean working tree at the acceptance commit |
 
 The API smoke suite covers guest sessions, account claim/sign-in, roles and invites, board and task CRUD, drag/move/conflict handling, Today selection and rebalancing, recurrence, comments/checklist/dependencies/attachments, reminders, calendar/upcoming/search/archive/insights, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), and security headers/origin rejection.
@@ -23,6 +23,7 @@ Playwright browser runs verified:
 - Guest workspace creation, quick capture, board card creation, task drawer edit/complete/reopen.
 - Today selection, capacity card, auto-plan controls, Day Flow, Focus entry point.
 - Board grid/list toggle, search/priority/assignee filters, task counts, card metadata.
+- Board templates (`blank`, `personal-week`, `project-sprint`, `content-calendar`), column create/edit/delete, WIP badges, enforced WIP create/move errors, and archived-board restore from Archive.
 - Calendar month navigation, dated task rows, draw-from-grid selection.
 - Upcoming 7/14/30-day ranges, dated groups, priority/label/time rows, open drawer without losing the view.
 - Archive split into archived and completed, reopen, restore.
