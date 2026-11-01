@@ -791,8 +791,40 @@
     }
   }
 
-  async function duplicateBoard() {
+  async function toggleBoardShare() {
     const board = currentBoard();
+    if (!board) return;
+    const button = $("boardShareButton");
+    button.disabled = true;
+    try {
+      const result = await request(`/api/boards/${encodeURIComponent(board.id)}/share`, {
+        method: "POST",
+        body: { enabled: !board.shareEnabled },
+      });
+      if (result.url) {
+        let copied = false;
+        try {
+          await navigator.clipboard?.writeText(result.url);
+          copied = Boolean(navigator.clipboard);
+        } catch {
+          copied = false;
+        }
+        showToast(copied
+          ? t("Read-only link copied to clipboard.")
+          : t("Read-only link: {{url}}", { url: result.url }));
+      } else {
+        showToast(t("Public link disabled."));
+      }
+      await refreshBootstrap();
+      await loadBoard(board.id);
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function duplicateBoard() {    const board = currentBoard();
     if (!board) return;
     try {
       const result = await request(`/api/boards/${encodeURIComponent(board.id)}/duplicate`, { method: "POST" });
@@ -979,6 +1011,8 @@
       ? t("{{open}} open · {{done}} done", { open: openCount, done: doneCount })
       : t("{{open}} open", { open: openCount });
     $("boardSettingsButton").disabled = !(board.permissions?.canEdit ?? true);
+    $("boardShareButton").disabled = !(board.permissions?.canShare ?? true);
+    $("boardShareButton").textContent = board.shareEnabled ? t("Disable share") : t("Share link");
     $("boardDuplicateButton").disabled = !(board.permissions?.canEdit ?? true);
     $("boardArchiveButton").disabled = !(board.permissions?.canEdit ?? true);
     $("boardDeleteButton").classList.toggle("hidden", !(board.permissions?.canManage ?? true));
@@ -3492,6 +3526,7 @@
       if (event.target === $("boardSettingsModal")) $("boardSettingsModal").classList.add("hidden");
     });
     $("boardDuplicateButton").addEventListener("click", duplicateBoard);
+    $("boardShareButton").addEventListener("click", toggleBoardShare);
     $("boardArchiveButton").addEventListener("click", archiveBoard);
     $("boardDeleteButton").addEventListener("click", deleteCurrentBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);

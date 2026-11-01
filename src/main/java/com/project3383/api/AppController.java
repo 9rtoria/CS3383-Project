@@ -2,6 +2,7 @@ package com.project3383.api;
 
 import com.project3383.app.AppService;
 import com.project3383.auth.CurrentUser;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,7 +16,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -56,6 +59,18 @@ public class AppController {
     @DeleteMapping("/boards/{id}")
     public Map<String, Object> deleteBoard(HttpSession session, @PathVariable String id) {
         return appService.deleteBoard(CurrentUser.id(session), id);
+    }
+
+    @PostMapping("/boards/{id}/share")
+    public Map<String, Object> shareBoard(HttpSession session, @PathVariable String id,
+                                          @RequestBody ApiDtos.ShareToggle input,
+                                          HttpServletRequest request) {
+        Map<String, Object> result = appService.toggleBoardShare(CurrentUser.id(session), id, input);
+        Map<String, Object> payload = new LinkedHashMap<>(result);
+        Object token = result.get("token");
+        payload.put("url", token == null ? null : ServletUriComponentsBuilder.fromCurrentContextPath()
+            .path("/share/").path(String.valueOf(token)).toUriString());
+        return payload;
     }
 
     @PostMapping("/workspaces")

@@ -472,6 +472,93 @@ public class AppService {
         return linked(Map.of("deleted", true));
     }
 
+    public Map<String, Object> toggleBoardShare(String userId, String boardId, ApiDtos.ShareToggle input) {
+        Map<String, Object> board = boardRow(boardId);
+        String workspaceId = (String) board.get("workspaceId");
+        requireMinimumRole(userId, workspaceId, "MEMBER");
+        requireBoardVisible(userId, board);
+        if (input == null || input.enabled() == null) {
+            throw ApiException.badRequest("Choose whether to enable sharing.");
+        }
+        String type = jdbc.queryForObject("SELECT type FROM workspace WHERE id = ?", String.class, workspaceId);
+        if (type == null || !Set.of("team", "org").contains(type)) {
+            throw ApiException.forbidden("Public sharing is disabled for this workspace.");
+        }
+        boolean enabled = input.enabled();
+        String token = enabled ? (String) board.get("shareToken") : null;
+        if (enabled && blank(token)) token = randomToken();
+        jdbc.update("""
+            UPDATE board SET share_enabled = ?, share_token = ?, version = version + 1
+            WHERE id = ? AND deleted_at IS NULL
+            """, enabled ? 1 : 0, token, boardId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", enabled);
+        result.put("token", token);
+        return result;
+    }
+
+    public Map<String, Object> publicBoard(String token) {
+        if (blank(token)) throw ApiException.notFound("This shared board is no longer available.");
+        Map<String, Object> board = jdbc.queryForList("""
+            SELECT b.id, b.name, b.description, b.created_at AS createdAt, w.name AS workspaceName
+            FROM board b JOIN workspace w ON w.id = b.workspace_id
+            WHERE b.share_token = ? AND b.share_enabled = 1
+              AND b.deleted_at IS NULL AND b.archived_at IS NULL
+              AND w.type IN ('team', 'org')
+            """, token).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("This shared board is no longer available."));
+        List<Map<String, Object>> columns = jdbc.queryForList("""
+            SELECT id, name, position, is_done AS isDone
+            FROM board_column WHERE board_id = ? ORDER BY position, name
+            """, board.get("id"));
+        for (Map<String, Object> column : columns) {
+            column.put("wipLimit", null);
+        }
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
+            SELECT t.id, t.column_id AS columnId, t.title, t.description, t.priority,
+                   t.due_date AS dueDate, t.due_all_day AS dueAllDay,
+                   c.is_done AS completed, t.assignee_id AS assigneeId,
+                   u.display_name AS assigneeName
+            FROM task t
+            JOIN board_column c ON c.id = t.column_id
+            LEFT JOIN app_user u ON u.id = t.assignee_id
+            WHERE t.board_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+            ORDER BY t.position, t.created_at
+            """, board.get("id"));
+        for (Map<String, Object> task : tasks) {
+            task.put("completed", number(task.get("completed")) == 1);
+            task.put("labels", labelsForTask((String) task.get("id")));
+            List<Map<String, Object>> subtasks = jdbc.queryForList("""
+                SELECT id, title, completed FROM subtask WHERE task_id = ? ORDER BY position, created_at
+                """, task.get("id"));
+            for (Map<String, Object> subtask : subtasks) {
+                subtask.put("completed", number(subtask.get("completed")) == 1);
+            }
+            task.put("subtasks", subtasks);
+            Object assigneeId = task.remove("assigneeId");
+            Object assigneeName = task.remove("assigneeName");
+            if (assigneeId == null) {
+                task.put("assignee", null);
+            } else {
+                Map<String, Object> assignee = new LinkedHashMap<>();
+                assignee.put("name", assigneeName == null ? "" : assigneeName);
+                assignee.put("avatarUrl", null);
+                task.put("assignee", assignee);
+            }
+        }
+        String updatedAt = jdbc.queryForObject("""
+            SELECT COALESCE(MAX(updated_at), ?) FROM task WHERE board_id = ? AND deleted_at IS NULL
+            """, String.class, board.get("createdAt"), board.get("id"));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("name", board.get("name"));
+        payload.put("description", board.get("description"));
+        payload.put("workspaceName", board.get("workspaceName"));
+        payload.put("updatedAt", updatedAt);
+        payload.put("columns", columns);
+        payload.put("tasks", tasks);
+        return linked(Map.of("board", payload));
+    }
+
     public Map<String, Object> calendar(String userId, String workspaceId, String start, String end) {
         requireMembership(userId, workspaceId);
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
@@ -1419,7 +1506,7 @@ public class AppService {
     private Map<String, Object> boardRow(String boardId) {
         return jdbc.queryForList("""
             SELECT b.id, b.workspace_id AS workspaceId, b.name, b.description, b.color,
-                   b.visibility, b.share_enabled AS shareEnabled, b.version,
+                   b.visibility, b.share_enabled AS shareEnabled, b.share_token AS shareToken, b.version,
                    b.created_by AS createdById, b.archived_at AS archivedAt
             FROM board b JOIN workspace w ON w.id = b.workspace_id
             WHERE b.id = ? AND b.deleted_at IS NULL AND b.archived_at IS NULL
@@ -1430,7 +1517,7 @@ public class AppService {
     private Map<String, Object> boardRowRaw(String boardId) {
         return jdbc.queryForList("""
             SELECT b.id, b.workspace_id AS workspaceId, b.name, b.description, b.color,
-                   b.visibility, b.share_enabled AS shareEnabled, b.version,
+                   b.visibility, b.share_enabled AS shareEnabled, b.share_token AS shareToken, b.version,
                    b.created_by AS createdById, b.archived_at AS archivedAt, b.deleted_at AS deletedAt
             FROM board b JOIN workspace w ON w.id = b.workspace_id
             WHERE b.id = ? AND b.deleted_at IS NULL
@@ -1769,6 +1856,10 @@ public class AppService {
 
     private int number(Object value) {
         return value instanceof Number number ? number.intValue() : 0;
+    }
+
+    private String randomToken() {
+        return (UUID.randomUUID().toString() + UUID.randomUUID().toString()).replace("-", "");
     }
 
     private String id() {

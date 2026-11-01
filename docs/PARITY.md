@@ -42,7 +42,8 @@ Status key:
 | `/api/boards` | DONE | GET/POST with description, color, and visibility |
 | `/api/boards/{id}` | DONE | GET/PATCH/DELETE with version checks and soft delete |
 | `/api/boards/{id}/duplicate` | DONE | Copies columns, tasks, labels, assignee, and recurrence |
-| `/api/boards/{id}/share` | MISSING | |
+| `/api/boards/{id}/share` | DONE | Toggle a read-only public link for team workspaces |
+| `/api/share/{token}` | DONE | Public read-only board payload and page |
 | `/api/bootstrap` | DONE | Core payload; no settings/theme bundle yet |
 | `/api/calendar` | DONE | Date-range tasks and plan blocks |
 | `/api/calendar/ics` | DONE | Authenticated ICS download |
@@ -167,7 +168,7 @@ Status key:
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
 | Offline / PWA | PARTIAL | Service worker, manifest, cached bootstrap/board/today/settings, offline queue, retry/discard, sync banner; no idempotent replay/conflict resolution |
 | i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
-| Public board share | MISSING | |
+| Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
 | Automations / Webhooks | MISSING | |
 | SSO / MFA / API tokens | MISSING | |
 | Audit / Retention | MISSING | |
@@ -204,6 +205,7 @@ Status key:
 - [x] Workspace/membership/board/task core
 - [x] Board settings, duplicate, archive, soft delete, and private visibility
 - [x] Task assignee and recurrence with next-occurrence generation
+- [x] Public read-only board share links with token revocation
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -230,6 +232,6 @@ Status key:
 3. Full drawer parity for reminders and label management.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Remaining Phase 2 board/task gaps: public share, activity feed, undo/bulk actions, command palette.
+6. Remaining Phase 2 board/task gaps: activity feed, undo/bulk actions, command palette.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

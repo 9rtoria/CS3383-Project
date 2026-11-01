@@ -16,6 +16,7 @@ Implemented:
 - Workspace create/switch, including a new team workspace
 - Workspace members, invite links, role changes, and member removal
 - Board create/read/update/delete, duplicate, archive, and private visibility
+- Public read-only board share links
 - Task create / update / move / soft-delete APIs
 - Task assignee, recurrence rules, and automatic next-occurrence creation
 - Task detail API with comments, checklist, labels, dependencies, attachments, completion, and reopen
@@ -112,6 +113,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | PATCH | `/api/boards/{id}` | Rename, describe, set visibility, archive/restore |
 | DELETE | `/api/boards/{id}` | Soft-delete a board |
 | POST | `/api/boards/{id}/duplicate` | Duplicate a board with tasks |
+| POST | `/api/boards/{id}/share` | Enable/disable a public read-only link |
+| GET | `/api/share/{token}` | Public read-only board payload |
 | GET | `/api/today` | Open-task list with capacity and day blocks |
 | POST | `/api/today` | Accept or dismiss a task for today |
 | POST | `/api/auto-plan` | Preview, apply, or clear the deterministic plan |

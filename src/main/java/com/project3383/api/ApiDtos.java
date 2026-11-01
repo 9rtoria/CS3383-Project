@@ -72,6 +72,11 @@ public final class ApiDtos {
     ) {
     }
 
+    public record ShareToggle(
+        Boolean enabled
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type

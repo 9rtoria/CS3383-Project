@@ -12,6 +12,8 @@ const PRECACHE = [
   "/sound.js",
   "/offline.js",
   "/app.js",
+  "/share.html",
+  "/share.js",
   "/manifest.webmanifest",
   "/icon.svg",
   "/icon-maskable.svg",
@@ -41,6 +43,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
+    const sharePage = url.pathname.startsWith("/share/");
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -50,7 +53,10 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(async () => (await caches.match(request)) || (await caches.match("/")) || (await caches.match("/index.html"))),
+        .catch(async () =>
+          (await caches.match(request))
+          || (await caches.match(sharePage ? "/share.html" : "/"))
+          || (await caches.match("/index.html"))),
     );
     return;
   }

@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -584,5 +585,102 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/today").session(memberSession).param("workspaceId", workspaceId))
             .andExpect(status().isOk())
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Private smoke task"))));
+    }
+
+    @Test
+    void publicShareLinkIsReadOnlyAndRevocable() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode personalWorkspace = boot.path("workspaces").get(0);
+        String personalBoardId = personalWorkspace.path("boards").get(0).path("id").asText();
+
+        mockMvc.perform(post("/api/boards/" + personalBoardId + "/share")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("enabled", true))))
+            .andExpect(status().isForbidden());
+
+        String teamName = "Share team " + System.nanoTime();
+        MvcResult team = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", teamName, "type", "team"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String teamWorkspaceId = objectMapper.readTree(team.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+        JsonNode refreshed = objectMapper.readTree(mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode teamWorkspace = null;
+        for (JsonNode workspace : refreshed.path("workspaces")) {
+            if (teamWorkspaceId.equals(workspace.path("id").asText())) teamWorkspace = workspace;
+        }
+        if (teamWorkspace == null) throw new IllegalStateException("Team workspace missing from bootstrap.");
+        JsonNode teamBoard = teamWorkspace.path("boards").get(0);
+        String boardId = teamBoard.path("id").asText();
+        String todo = teamBoard.path("columns").get(0).path("id").asText();
+
+        Map<String, Object> taskBody = new HashMap<>();
+        taskBody.put("workspaceId", teamWorkspaceId);
+        taskBody.put("boardId", boardId);
+        taskBody.put("columnId", todo);
+        taskBody.put("title", "Shared smoke task");
+        taskBody.put("description", "Visible on the public page.");
+        taskBody.put("priority", "high");
+        taskBody.put("dueDate", "2026-11-05");
+        taskBody.put("dueAllDay", true);
+        taskBody.put("labels", List.of("shared"));
+        taskBody.put("assigneeId", boot.path("user").path("id").asText());
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(taskBody)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String taskId = objectMapper.readTree(created.getResponse().getContentAsString()).path("task").path("id").asText();
+        mockMvc.perform(post("/api/tasks/" + taskId + "/subtasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("title", "Shared step"))))
+            .andExpect(status().isCreated());
+
+        MvcResult shared = mockMvc.perform(post("/api/boards/" + boardId + "/share")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("enabled", true))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enabled").value(true))
+            .andExpect(jsonPath("$.token").isString())
+            .andExpect(jsonPath("$.url").value(org.hamcrest.Matchers.containsString("/share/")))
+            .andReturn();
+        String token = objectMapper.readTree(shared.getResponse().getContentAsString()).path("token").asText();
+
+        mockMvc.perform(get("/api/share/" + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.name").value("My tasks"))
+            .andExpect(jsonPath("$.board.workspaceName").value(teamName))
+            .andExpect(jsonPath("$.board.columns[0].name").value("To do"))
+            .andExpect(jsonPath("$.board.tasks[0].title").value("Shared smoke task"))
+            .andExpect(jsonPath("$.board.tasks[0].priority").value("high"))
+            .andExpect(jsonPath("$.board.tasks[0].completed").value(false))
+            .andExpect(jsonPath("$.board.tasks[0].labels[0].name").value("shared"))
+            .andExpect(jsonPath("$.board.tasks[0].subtasks[0].title").value("Shared step"))
+            .andExpect(jsonPath("$.board.tasks[0].assignee.name").value("Guest"));
+
+        mockMvc.perform(get("/share/" + token))
+            .andExpect(status().isOk())
+            .andExpect(forwardedUrl("/share.html"));
+
+        mockMvc.perform(post("/api/boards/" + boardId + "/share")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("enabled", false))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enabled").value(false))
+            .andExpect(jsonPath("$.url").value(nullValue()));
+
+        mockMvc.perform(get("/api/share/" + token)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/share/not-a-real-token")).andExpect(status().isNotFound());
     }
 }
