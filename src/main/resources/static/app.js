@@ -1326,7 +1326,10 @@
       document.querySelectorAll("[data-range]").forEach((button) => {
         button.classList.toggle("active", Number(button.dataset.range) === range);
       });
-      $("insightsMeta").textContent = `${dated.length} ${t("dated tasks")} · ${Math.max(0, tasks.length - dated.length)} ${t("unscheduled")} · ${t("dates in Asia/Hong_Kong")}`;
+      const unscheduledCount = tasks.filter((task) => !task.isDone && Number(task.completed) !== 1 && !task.startDate && !task.dueDate).length;
+      $("insightsMeta").textContent = `${dated.length} ${t("dated tasks")} · ${unscheduledCount} ${t("unscheduled")} · ${t("dates in Asia/Hong_Kong")}`;
+      $("insightsMeta").classList.toggle("hidden", mode === "workload");
+      $("insightsRange").classList.toggle("hidden", mode === "workload");
       grid.replaceChildren();
       if (mode === "workload") {
         renderInsightsWorkload(grid, tasks, data);
@@ -1427,33 +1430,109 @@
   }
 
   function renderInsightsWorkload(grid, tasks, data) {
+    const totals = data.totals ?? {};
+    const hours = (minutes) => `${Math.round((Number(minutes || 0) / 60) * 10) / 10}h`;
+    const metric = (label, value, note, tone = "") => {
+      const card = element("div", `metric-card${tone ? ` ${tone}` : ""}`);
+      card.append(element("span", "", label), element("strong", "", String(value ?? 0)), element("small", "", note));
+      return card;
+    };
     const metricGrid = element("div", "metric-grid");
-    for (const [label, value] of [[t("Open"), data.open], [t("Done"), data.done], [t("Overdue"), data.overdue], [t("Priority groups"), (data.byPriority ?? []).length], [t("Dated"), tasks.filter((task) => task.dueDate).length]]) {
-      const card = element("div", "metric-card");
-      card.append(element("span", "", label), element("strong", "", String(value ?? 0)));
-      metricGrid.append(card);
-    }
+    metricGrid.append(
+      metric(t("Open tasks"), totals.open, `${totals.taskCount ?? 0} ${t("total in view")}`),
+      metric(t("Due this week"), totals.dueThisWeek, t("Next 7 days"), Number(totals.dueThisWeek || 0) > 0 ? "amber" : ""),
+      metric(t("Overdue"), totals.overdue, t("Needs a decision, not guilt"), Number(totals.overdue || 0) > 0 ? "rose" : ""),
+      metric(t("Completed · 7 days"), totals.completedLast7, t("Momentum you can see"), "moss"),
+      metric(t("Estimated effort"), hours(totals.estimateMinutes),
+        Number(totals.unestimated || 0) ? t("{{count}} tasks unestimated", { count: totals.unestimated }) : t("All open work estimated"))
+    );
     grid.append(metricGrid);
-    const groups = new Map();
-    for (const task of tasks) {
-      const key = task.assigneeName || task.assignee?.name || t("Unassigned");
-      groups.set(key, (groups.get(key) ?? 0) + Number(task.estimateMinutes || 0));
-    }
-    const max = Math.max(1, ...groups.values());
-    const card = element("div", "panel workload-panel");
-    card.append(element("h2", "", t("Workload")), element("p", "hint", t("Estimated work by assignee. Unscheduled tasks included.")));
-    for (const [name, minutes] of [...groups.entries()].sort((a, b) => b[1] - a[1])) {
+
+    const insightGrid = element("div", "insight-grid workload-grid");
+    const maxEstimate = Math.max(1, ...(data.members ?? []).map((member) => Number(member.estimateMinutes || 0)));
+    const people = element("section", "panel metric-panel");
+    const peopleHead = element("div", "section-head");
+    const peopleCopy = element("div");
+    peopleCopy.append(element("h2", "", t("Load by person")), element("p", "hint", t("Estimate of open work, not a performance score.")));
+    peopleHead.append(peopleCopy);
+    people.append(peopleHead);
+    const peopleList = element("div", "workload-list");
+    for (const member of data.members ?? []) {
       const row = element("div", "workload-row");
       const copy = element("div", "workload-copy");
-      copy.append(element("strong", "", name), element("span", "", `${Math.floor(minutes / 60)}h ${minutes % 60}m ${t("estimated")}`));
+      copy.append(element("strong", "", member.name || t("Unassigned")));
+      copy.append(element("span", "", `${member.open} ${t("open")} · ${member.dueThisWeek} ${t("due this week")}${member.overdue ? ` · ${member.overdue} ${t("overdue")}` : ""}`));
       const bar = element("div", "workload-bar");
       const fill = element("span");
-      fill.style.width = `${Math.round((minutes / max) * 100)}%`;
+      fill.style.width = `${Math.round((Number(member.estimateMinutes || 0) / maxEstimate) * 100)}%`;
       bar.append(fill);
-      row.append(copy, bar, element("span", "workload-time", `${Math.floor(minutes / 60)}h`));
-      card.append(row);
+      row.append(copy, bar, element("span", "workload-time", Number(member.estimateMinutes || 0) ? hours(member.estimateMinutes) : "—"));
+      peopleList.append(row);
     }
-    grid.append(card);
+    people.append(peopleList);
+    insightGrid.append(people);
+
+    const boards = element("section", "panel metric-panel");
+    const boardsHead = element("div", "section-head");
+    const boardsCopy = element("div");
+    boardsCopy.append(element("h2", "", t("Board health")), element("p", "hint", t("Where work is accumulating.")));
+    boardsHead.append(boardsCopy);
+    boards.append(boardsHead);
+    if ((data.boards ?? []).length) {
+      const maxBoard = Math.max(1, ...data.boards.map((board) => Number(board.estimateMinutes || 0)));
+      const boardList = element("div", "board-health-list");
+      for (const board of data.boards) {
+        const row = element("div", "board-health-row");
+        const copy = element("div", "workload-copy");
+        copy.append(element("strong", "", board.name));
+        copy.append(element("span", "", `${board.open} ${t("open")} · ${board.done} ${t("done")}${board.overdue ? ` · ${board.overdue} ${t("overdue")}` : ""}`));
+        const bar = element("div", "workload-bar");
+        const fill = element("span");
+        fill.style.width = `${Math.round((Number(board.estimateMinutes || 0) / maxBoard) * 100)}%`;
+        bar.append(fill);
+        row.append(copy, bar, element("span", "workload-time", Number(board.estimateMinutes || 0) ? hours(board.estimateMinutes) : "—"));
+        boardList.append(row);
+      }
+      boards.append(boardList);
+    } else {
+      boards.append(element("p", "field-hint", t("No active boards yet.")));
+    }
+    insightGrid.append(boards);
+    grid.append(insightGrid);
+
+    const focus = [...tasks]
+      .filter((task) => !task.isDone && Number(task.completed) !== 1)
+      .sort((a, b) => {
+        const rank = (priority) => priority === "urgent" ? 0 : priority === "high" ? 1 : priority === "medium" ? 2 : 3;
+        return rank(a.priority) - rank(b.priority)
+          || String(a.dueDate ?? "9999").localeCompare(String(b.dueDate ?? "9999"));
+      })
+      .slice(0, 8);
+    const focusCard = element("section", "panel metric-panel focus-suggestions");
+    const focusHead = element("div", "section-head");
+    const focusCopy = element("div");
+    focusCopy.append(element("h2", "", t("A sensible focus")), element("p", "hint", t("Highest priority and nearest dates. Suggestions, never automatic moves.")));
+    focusHead.append(focusCopy);
+    focusCard.append(focusHead);
+    if (focus.length) {
+      const list = element("div", "unscheduled-list");
+      for (const task of focus) {
+        const row = element("button", "slim-task");
+        row.type = "button";
+        if (task.priority && task.priority !== "none") row.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
+        row.append(element("span", "slim-title", task.title));
+        const due = task.dueDate
+          ? new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(new Date(`${String(task.dueDate).slice(0, 10)}T12:00:00`))
+          : t("No date");
+        row.append(element("span", "task-foot-meta", `${due} · ${task.boardName || t("Board")}`));
+        row.addEventListener("click", () => void openTaskById(task.id));
+        list.append(row);
+      }
+      focusCard.append(list);
+    } else {
+      focusCard.append(element("p", "field-hint", t("Nothing open. Enjoy the quiet.")));
+    }
+    grid.append(focusCard);
   }
 
   function createWorkspace() {
@@ -5413,6 +5492,10 @@
         input);
       settingsRow(card, t("Type"), t("Type is fixed in v1 to preserve policy semantics."),
         makeBadge(t(data.type === "personal" ? "Personal" : data.type === "team" ? "Team" : "Organization"), "slate"));
+      const role = workspace()?.role ?? data.role ?? "OWNER";
+      settingsRow(card, t("Your role"), t("Role is enforced server-side, not hidden only in the UI."),
+        makeBadge(t(role === "OWNER" ? "Owner" : role === "ADMIN" ? "Admin" : role === "MEMBER" ? "Member" : "Guest"),
+          role === "OWNER" ? "amber" : role === "ADMIN" ? "accent" : "slate"));
       save = element("button", "btn primary sm", t("Save"));
       save.type = "button";
       save.disabled = true;
@@ -5437,7 +5520,7 @@
           await refresh();
         }
       });
-      settingsRow(card, t("Save"), t("Renaming is visible to everyone in the workspace."), save);
+      settingsRow(card, t("Save workspace name"), t("Policy controls below are saved separately."), save);
     };
     const refresh = async () => {
       try {
@@ -5511,7 +5594,7 @@
     const { section, card } = createSettingsSection(
       "people",
       "People",
-      "Invite teammates, set their role, and keep access honest."
+      t("Members in {{workspace}}. Roles are workspace-scoped.", { workspace: workspace()?.name ?? t("this workspace") })
     );
     const canManage = ["OWNER", "ADMIN"].includes(workspace()?.role);
     const list = element("div", "detail-list");
@@ -5561,9 +5644,12 @@
         list.replaceChildren();
         for (const member of members) {
           const row = element("div", "settings-row");
+          const avatar = element("span", "avatar-sm", String(member.name || member.email || "M").trim().slice(0, 2).toUpperCase());
+          avatar.setAttribute("aria-hidden", "true");
           const copy = element("div", "settings-copy");
-          copy.append(element("strong", "", member.name || member.email || t("Member")));
-          copy.append(element("span", "", member.email || t("Guest member")));
+          const isSelf = (member.userId || member.id) === state.boot?.user?.id;
+          copy.append(element("strong", "", `${member.name || member.email || t("Member")}${isSelf ? ` (${t("you")})` : ""}`));
+          copy.append(element("span", "", `${member.email || t("Guest member")}${member.joinedAt ? ` · ${t("joined")} ${relativeTime(member.joinedAt)}` : ""}`));
           const controls = element("div", "settings-control inline");
           if (canManage && member.role !== "OWNER") {
             const role = makeSelect(
@@ -5576,7 +5662,7 @@
               t("Role"),
               async (value) => {
                 try {
-                  await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.id)}`, {
+                  await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, {
                     method: "PATCH",
                     body: { role: value },
                   });
@@ -5595,7 +5681,7 @@
             remove.addEventListener("click", async () => {
               if (!window.confirm(t("Remove {{name}} from this workspace?", { name: member.name || member.email || t("member") }))) return;
               try {
-                await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.id)}`, {
+                await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, {
                   method: "DELETE",
                 });
                 showToast(t("Member removed."));
@@ -5608,6 +5694,7 @@
           } else {
             controls.append(makeBadge(t(member.role === "OWNER" ? "Owner" : member.role === "ADMIN" ? "Admin" : member.role === "MEMBER" ? "Member" : "Guest"), member.role === "OWNER" ? "moss" : "slate"));
           }
+          row.prepend(avatar);
           row.append(copy, controls);
           list.append(row);
         }
@@ -5673,7 +5760,7 @@
     const { section, card } = createSettingsSection(
       "policies",
       "Policies",
-      "Who can see what, what is retained, and which capabilities are available."
+      "Workspace-level controls. Changes are audited and versioned."
     );
     let workspaceData = null;
     let busy = false;
@@ -5685,12 +5772,12 @@
         return;
       }
       const draft = { ...workspaceData };
-      const toggle = (key, title, description) => {
-        settingsRow(card, t(title), t(description), makeToggle(Boolean(draft[key]), t(title), (next) => {
+      const toggle = (key, title, description, toggleLabel = title) => {
+        settingsRow(card, t(title), t(description), makeToggle(Boolean(draft[key]), t(toggleLabel), (next) => {
           draft[key] = next;
         }));
       };
-      toggle("requireMfa", "Require MFA", "Members without MFA are locked out of workspace data.");
+      toggle("requireMfa", "Require two-factor authentication", "Members without MFA are locked out of workspace data.", "Require MFA");
       toggle("aiEnabled", "Enable assistant suggestions", "Local capacity and quick-add heuristics. No customer data leaves Drift.");
       toggle("automationsEnabled", "Enable automations", "Allow rules for this workspace.");
       toggle("attachmentsEnabled", "Enable attachments", "Files up to 10 MB, type-allowlisted, local storage.");
