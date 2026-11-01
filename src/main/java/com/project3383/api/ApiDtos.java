@@ -29,15 +29,20 @@ public final class ApiDtos {
         String title,
         String description,
         String priority,
-        java.util.Optional<String> startDate,
-        java.util.Optional<String> dueDate,
+        com.fasterxml.jackson.databind.JsonNode startDate,
+        com.fasterxml.jackson.databind.JsonNode dueDate,
         Boolean dueAllDay,
-        java.util.Optional<Integer> estimateMinutes,
-        java.util.Optional<Integer> actualMinutes,
+        com.fasterxml.jackson.databind.JsonNode estimateMinutes,
+        com.fasterxml.jackson.databind.JsonNode actualMinutes,
         java.util.List<String> labels,
-        java.util.Optional<String> assigneeId,
-        java.util.Optional<String> recurrenceRule,
-        java.util.Optional<String> recurrenceEndsAt
+        com.fasterxml.jackson.databind.JsonNode assigneeId,
+        com.fasterxml.jackson.databind.JsonNode recurrenceRule,
+        com.fasterxml.jackson.databind.JsonNode recurrenceEndsAt,
+        Boolean completed,
+        Boolean archived,
+        com.fasterxml.jackson.databind.JsonNode reminderOffsetMinutes,
+        java.util.List<String> dependencyIds,
+        com.fasterxml.jackson.databind.JsonNode focusDate
     ) {
     }
 
@@ -75,7 +80,7 @@ public final class ApiDtos {
     public record ColumnUpdate(
         String workspaceId,
         String name,
-        java.util.Optional<Integer> wipLimit,
+        com.fasterxml.jackson.databind.JsonNode wipLimit,
         Boolean wipEnforced,
         Boolean isDone,
         Integer position
@@ -86,6 +91,41 @@ public final class ApiDtos {
         String workspaceId,
         String boardId,
         java.util.List<String> orderedIds
+    ) {
+    }
+
+    public record LabelCreate(
+        String workspaceId,
+        String name,
+        String color
+    ) {
+    }
+
+    public record LabelDelete(
+        String workspaceId,
+        String labelId
+    ) {
+    }
+
+    public record ViewCreate(
+        String workspaceId,
+        String name,
+        String type,
+        String filtersJson,
+        Boolean isFavorite
+    ) {
+    }
+
+    public record ViewDelete(
+        String workspaceId,
+        String id
+    ) {
+    }
+
+    public record ClientErrorCreate(
+        String message,
+        String stack,
+        String url
     ) {
     }
 

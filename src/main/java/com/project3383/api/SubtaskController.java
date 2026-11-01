@@ -3,6 +3,7 @@ package com.project3383.api;
 import com.project3383.app.AppService;
 import com.project3383.auth.CurrentUser;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,5 +25,10 @@ public class SubtaskController {
     @PatchMapping("/{id}")
     public Map<String, Object> update(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.SubtaskUpdate input) {
         return appService.updateSubtask(CurrentUser.id(session), id, input);
+    }
+
+    @DeleteMapping("/{id}")
+    public Map<String, Object> delete(HttpSession session, @PathVariable String id) {
+        return appService.deleteSubtask(CurrentUser.id(session), id);
     }
 }

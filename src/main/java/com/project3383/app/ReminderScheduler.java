@@ -39,7 +39,7 @@ public class ReminderScheduler {
                 VALUES (?, ?, ?, ?, 'reminder', ?, ?, ?, ?)
                 """, UUID.randomUUID().toString(), reminder.get("userId"), reminder.get("workspaceId"),
                 reminder.get("taskId"), "Reminder: " + reminder.get("title"),
-                "Your task reminder is due.", "/", now);
+                "Your task reminder is due.", "/?task=" + reminder.get("taskId"), now);
         }
     }
 }

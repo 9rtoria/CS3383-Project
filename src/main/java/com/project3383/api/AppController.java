@@ -115,8 +115,9 @@ public class AppController {
     }
 
     @GetMapping("/insights")
-    public Map<String, Object> insights(HttpSession session, @RequestParam String workspaceId) {
-        return appService.insights(CurrentUser.id(session), workspaceId);
+    public Map<String, Object> insights(HttpSession session, @RequestParam String workspaceId,
+                                        @RequestParam(defaultValue = "30") int days) {
+        return appService.insights(CurrentUser.id(session), workspaceId, days);
     }
 
     @GetMapping("/archive")

@@ -3,6 +3,7 @@ package com.project3383.app;
 import com.project3383.api.ApiDtos;
 import com.project3383.api.ApiException;
 import com.project3383.auth.AuthInterceptor;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,7 +29,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -515,6 +515,238 @@ public class AppService {
         return bootstrap(userId);
     }
 
+    @Transactional
+    public String ensureOAuthUser(String guestUserId, String email, String name) {
+        String normalized = email == null || email.isBlank() ? null : email.trim().toLowerCase();
+        if (normalized != null) {
+            List<Map<String, Object>> existing = jdbc.queryForList("""
+                SELECT id, deleted_at AS deletedAt FROM app_user WHERE lower(email) = ?
+                """, normalized);
+            if (!existing.isEmpty()) {
+                if (existing.get(0).get("deletedAt") != null) {
+                    throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                        "That account is no longer available.");
+                }
+                return String.valueOf(existing.get(0).get("id"));
+            }
+        }
+        String displayName = name == null || name.isBlank()
+            ? (normalized == null ? "Drift user" : normalized.substring(0, normalized.indexOf('@')))
+            : name.trim();
+        if (displayName.length() > 120) displayName = displayName.substring(0, 120);
+        if (guestUserId != null) {
+            Map<String, Object> guest = jdbc.queryForList("""
+                SELECT id, is_guest AS isGuest FROM app_user WHERE id = ? AND deleted_at IS NULL
+                """, guestUserId).stream().findFirst().orElse(null);
+            if (guest != null && number(guest.get("isGuest")) == 1) {
+                jdbc.update("""
+                    UPDATE app_user SET email = ?, display_name = ?, is_guest = 0 WHERE id = ?
+                    """, normalized, displayName, guestUserId);
+                return guestUserId;
+            }
+        }
+        String userId = id();
+        jdbc.update("""
+            INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
+            VALUES (?, ?, ?, NULL, 0, 'Asia/Hong_Kong', ?)
+            """, userId, normalized, displayName, Instant.now().toString());
+        createStarterWorkspace(userId, displayName + "'s workspace");
+        return userId;
+    }
+
+    public Map<String, Object> userSummary(String userId) {
+        return userRow(userId);
+    }
+
+    public Map<String, Object> labels(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        List<Map<String, Object>> labels = jdbc.queryForList("""
+            SELECT l.id, l.name, l.color,
+                   (SELECT COUNT(*) FROM task_label tl WHERE tl.label_id = l.id) AS taskCount
+            FROM label l WHERE l.workspace_id = ? ORDER BY l.name
+            """, workspaceId);
+        for (Map<String, Object> label : labels) {
+            label.put("_count", Map.of("tasks", number(label.get("taskCount"))));
+        }
+        return linked(Map.of("labels", labels));
+    }
+
+    @Transactional
+    public Map<String, Object> createLabel(String userId, ApiDtos.LabelCreate input) {
+        if (input == null || blank(input.workspaceId()) || blank(input.name())) {
+            throw ApiException.badRequest("Choose a workspace and label name.");
+        }
+        requireMinimumRole(userId, input.workspaceId(), "MEMBER");
+        String name = input.name().trim();
+        if (name.length() > 40) throw ApiException.badRequest("Label names must be 40 characters or fewer.");
+        String color = blank(input.color()) ? "slate" : input.color().trim();
+        if (color.length() > 30) throw ApiException.badRequest("Label colors must be 30 characters or fewer.");
+        jdbc.update("""
+            INSERT INTO label (id, workspace_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(workspace_id, name) DO UPDATE SET color = excluded.color
+            """, id(), input.workspaceId(), name, color, Instant.now().toString());
+        Map<String, Object> label = jdbc.queryForList("""
+            SELECT id, name, color FROM label WHERE workspace_id = ? AND name = ?
+            """, input.workspaceId(), name).stream().findFirst().orElseThrow();
+        return linked(Map.of("label", label));
+    }
+
+    @Transactional
+    public Map<String, Object> deleteLabel(String userId, ApiDtos.LabelDelete input) {
+        if (input == null || blank(input.workspaceId()) || blank(input.labelId())) {
+            throw ApiException.badRequest("Choose a label to delete.");
+        }
+        requireMinimumRole(userId, input.workspaceId(), "MEMBER");
+        jdbc.update("DELETE FROM task_label WHERE label_id = ?", input.labelId());
+        jdbc.update("DELETE FROM label WHERE id = ? AND workspace_id = ?", input.labelId(), input.workspaceId());
+        return linked(Map.of("deleted", true));
+    }
+
+    public Map<String, Object> views(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        return linked(Map.of("views", jdbc.queryForList("""
+            SELECT id, name, type, filters_json AS filtersJson, is_favorite AS isFavorite,
+                   created_at AS createdAt, updated_at AS updatedAt
+            FROM view WHERE user_id = ? AND workspace_id = ? ORDER BY created_at
+            """, userId, workspaceId)));
+    }
+
+    @Transactional
+    public Map<String, Object> createView(String userId, ApiDtos.ViewCreate input) {
+        if (input == null || blank(input.workspaceId()) || blank(input.name())) {
+            throw ApiException.badRequest("Give the view a name.");
+        }
+        requireMembership(userId, input.workspaceId());
+        String type = input.type() == null ? "board" : input.type().toLowerCase();
+        if (!Set.of("board", "list", "calendar", "today").contains(type)) {
+            throw ApiException.badRequest("Choose a valid view type.");
+        }
+        String name = input.name().trim();
+        if (name.length() > 60) throw ApiException.badRequest("View names must be 60 characters or fewer.");
+        String filters = input.filtersJson() == null ? "{}" : input.filtersJson();
+        if (filters.length() > 4000) throw ApiException.badRequest("View filters are too large.");
+        String now = Instant.now().toString();
+        jdbc.update("""
+            INSERT INTO view (id, user_id, workspace_id, name, type, filters_json, is_favorite, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, workspace_id, name) DO UPDATE SET
+                type = excluded.type, filters_json = excluded.filters_json,
+                is_favorite = excluded.is_favorite, updated_at = excluded.updated_at
+            """, id(), userId, input.workspaceId(), name, type, filters,
+            Boolean.TRUE.equals(input.isFavorite()) ? 1 : 0, now, now);
+        Map<String, Object> view = jdbc.queryForList("""
+            SELECT id, name, type, filters_json AS filtersJson, is_favorite AS isFavorite,
+                   created_at AS createdAt, updated_at AS updatedAt
+            FROM view WHERE user_id = ? AND workspace_id = ? AND name = ?
+            """, userId, input.workspaceId(), name).stream().findFirst().orElseThrow();
+        return linked(Map.of("view", view));
+    }
+
+    @Transactional
+    public Map<String, Object> deleteView(String userId, ApiDtos.ViewDelete input) {
+        if (input == null || blank(input.id())) throw ApiException.badRequest("Choose a view to delete.");
+        if (input.workspaceId() != null) requireMembership(userId, input.workspaceId());
+        jdbc.update("DELETE FROM view WHERE id = ? AND user_id = ?", input.id(), userId);
+        return linked(Map.of("deleted", true));
+    }
+
+    public Map<String, Object> workspaces(String userId) {
+        List<Map<String, Object>> workspaces = jdbc.queryForList("""
+            SELECT w.id, w.name, w.type, w.created_by AS createdBy, w.created_at AS createdAt,
+                   w.public_sharing_enabled AS publicSharingEnabled, m.role
+            FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND w.deleted_at IS NULL
+            ORDER BY m.joined_at
+            """, userId);
+        return linked(Map.of("workspaces", workspaces));
+    }
+
+    public Map<String, Object> metrics(String userId, String workspaceId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("process", Map.of(
+            "uptimeSeconds", java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime() / 1000,
+            "java", System.getProperty("java.version"),
+            "memoryMb", (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / (1024 * 1024)
+        ));
+        Map<String, Object> tenant = new LinkedHashMap<>();
+        tenant.put("tasks", 0);
+        tenant.put("boards", 0);
+        tenant.put("members", 0);
+        tenant.put("emailsLast24h", 0);
+        long unread = 0;
+        if (userId != null) {
+            Integer unreadCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM notification WHERE user_id = ? AND read_at IS NULL", Integer.class, userId);
+            unread = unreadCount == null ? 0 : unreadCount;
+        }
+        if (userId != null && workspaceId != null && !workspaceId.isBlank()) {
+            requireMinimumRole(userId, workspaceId, "ADMIN");
+            tenant.put("tasks", jdbc.queryForObject(
+                "SELECT COUNT(*) FROM task WHERE workspace_id = ? AND deleted_at IS NULL", Integer.class, workspaceId));
+            tenant.put("boards", jdbc.queryForObject(
+                "SELECT COUNT(*) FROM board WHERE workspace_id = ? AND deleted_at IS NULL", Integer.class, workspaceId));
+            tenant.put("members", jdbc.queryForObject(
+                "SELECT COUNT(*) FROM membership WHERE workspace_id = ?", Integer.class, workspaceId));
+            tenant.put("emailsLast24h", jdbc.queryForObject("""
+                SELECT COUNT(*) FROM email_message WHERE user_id = ? AND created_at >= ?
+                """, Integer.class, userId, Instant.now().minus(24, ChronoUnit.HOURS).toString()));
+        }
+        result.put("tenant", tenant);
+        result.put("unreadNotifications", unread);
+        return linked(result);
+    }
+
+    public Map<String, Object> invitePreview(String token, String viewerId) {
+        Map<String, Object> invite = jdbc.queryForList("""
+            SELECT i.email, i.role, i.expires_at AS expiresAt, i.accepted_at AS acceptedAt,
+                   w.id AS workspaceId, w.name AS workspaceName, w.type AS workspaceType
+            FROM invite i JOIN workspace w ON w.id = i.workspace_id
+            WHERE i.token_hash = ? AND w.deleted_at IS NULL
+            """, sha256(token)).stream().findFirst()
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                "This invitation is invalid or has expired."));
+        if (invite.get("acceptedAt") != null
+            || Instant.parse(String.valueOf(invite.get("expiresAt"))).isBefore(Instant.now())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                "This invitation is invalid or has expired.");
+        }
+        Map<String, Object> workspace = new LinkedHashMap<>();
+        workspace.put("id", invite.get("workspaceId"));
+        workspace.put("name", invite.get("workspaceName"));
+        workspace.put("type", invite.get("workspaceType"));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("invite", Map.of(
+            "email", invite.get("email"),
+            "role", invite.get("role"),
+            "workspace", workspace,
+            "expiresAt", invite.get("expiresAt")
+        ));
+        boolean canAccept = false;
+        if (viewerId != null) {
+            Map<String, Object> viewer = userRow(viewerId);
+            String viewerEmail = (String) viewer.get("email");
+            canAccept = viewerEmail != null && viewerEmail.equalsIgnoreCase(String.valueOf(invite.get("email")))
+                && number(viewer.get("isGuest")) == 0;
+        }
+        payload.put("canAccept", canAccept);
+        return linked(payload);
+    }
+
+    public void clientError(String userId, String message, String stack, String url, String userAgent, String requestId) {
+        if (blank(message)) return;
+        jdbc.update("""
+            INSERT INTO client_error (id, user_id, message, stack, url, user_agent, request_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, id(), userId, truncate(message.replaceAll("[\\r\\n]+", " "), 2000),
+            truncate(stack, 20000), truncate(url, 1000), truncate(userAgent, 500),
+            truncate(requestId, 100), Instant.now().toString());
+    }
+
+    private String truncate(String value, int max) {
+        if (value == null) return null;
+        return value.length() <= max ? value : value.substring(0, max);
+    }
+
     public Map<String, Object> changeRole(String userId, String workspaceId, String targetUserId, String role) {
         requireMinimumRole(userId, workspaceId, "ADMIN");
         if (!"ADMIN".equals(role) && !"MEMBER".equals(role) && !"GUEST".equals(role)) {
@@ -689,7 +921,7 @@ public class AppService {
         String name = input.name() == null ? String.valueOf(column.get("name")) : normalizeColumnName(input.name());
         Integer wipLimit = numberOrNull(column.get("wipLimit"));
         if (input.wipLimit() != null) {
-            Integer requested = input.wipLimit().orElse(null);
+            Integer requested = input.wipLimit().isNull() ? null : input.wipLimit().asInt();
             if (requested != null && (requested < 1 || requested > 999)) {
                 throw ApiException.badRequest("WIP limit must be between 1 and 999.");
             }
@@ -888,6 +1120,11 @@ public class AppService {
             FROM membership m JOIN app_user u ON u.id = m.user_id
             WHERE m.workspace_id = ? ORDER BY m.joined_at
             """, board.get("workspaceId")));
+        payload.put("labels", labels(userId, String.valueOf(board.get("workspaceId"))).get("labels"));
+        payload.put("views", views(userId, String.valueOf(board.get("workspaceId"))).get("views"));
+        payload.put("automationCount", jdbc.queryForObject("""
+            SELECT COUNT(*) FROM automation_rule WHERE workspace_id = ? AND enabled = 1
+            """, Integer.class, board.get("workspaceId")));
         payload.put("permissions", linked(Map.of(
             "canEdit", roleRank(role) >= roleRank("MEMBER"),
             "canManage", roleRank(role) >= roleRank("ADMIN"),
@@ -1214,8 +1451,9 @@ public class AppService {
         requireMembership(userId, workspaceId);
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
         int range = Math.max(1, Math.min(60, days));
-        String start = LocalDate.now().toString();
-        String end = LocalDate.now().plusDays(range).toString();
+        LocalDate startDate = LocalDate.parse(todayForUser(userId));
+        String start = startDate.toString();
+        String end = startDate.plusDays(range).toString();
         List<Map<String, Object>> tasks = jdbc.queryForList("""
             SELECT t.id, t.title, t.priority, t.due_date AS dueDate, t.due_all_day AS dueAllDay,
                    t.estimate_minutes AS estimateMinutes, substr(t.due_date, 1, 10) AS date,
@@ -1238,7 +1476,7 @@ public class AppService {
             byDate.computeIfAbsent((String) task.get("date"), key -> new ArrayList<>()).add(task);
         }
         List<Map<String, Object>> groups = new ArrayList<>();
-        for (LocalDate date = LocalDate.now(); !date.isAfter(LocalDate.now().plusDays(range)); date = date.plusDays(1)) {
+        for (LocalDate date = startDate; !date.isAfter(startDate.plusDays(range)); date = date.plusDays(1)) {
             String key = date.toString();
             groups.add(linked(Map.of("date", key, "tasks", byDate.getOrDefault(key, List.of()))));
         }
@@ -1315,7 +1553,7 @@ public class AppService {
                 sql.append(" AND c.is_done = 1");
             } else if ("overdue".equals(normalizedStatus)) {
                 sql.append(" AND c.is_done = 0 AND t.due_date IS NOT NULL AND substr(t.due_date, 1, 10) < ?");
-                args.add(LocalDate.now().toString());
+                args.add(todayForUser(userId));
             }
         }
         if (priority != null && !priority.isBlank()) {
@@ -1368,9 +1606,110 @@ public class AppService {
         return linked(Map.of("results", results, "total", results.size(), "query", term));
     }
 
-    public Map<String, Object> insights(String userId, String workspaceId) {
+    public Map<String, Object> insights(String userId, String workspaceId, int requestedDays) {
         requireMembership(userId, workspaceId);
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
+        int days = Set.of(14, 30, 60).contains(requestedDays) ? requestedDays : 30;
+        String today = todayForUser(userId);
+        String end = LocalDate.parse(today).plusDays(days).toString();
+        String weekEnd = LocalDate.parse(today).plusDays(7).toString();
+        List<Map<String, Object>> boards = jdbc.queryForList("""
+            SELECT b.id, b.name, b.visibility
+            FROM board b
+            WHERE b.workspace_id = ? AND b.deleted_at IS NULL AND b.archived_at IS NULL
+              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
+            ORDER BY b.position, b.created_at
+            """, workspaceId, userId, canSeePrivate);
+        List<Map<String, Object>> members = jdbc.queryForList("""
+            SELECT u.id, u.display_name AS name, u.email, m.role
+            FROM membership m JOIN app_user u ON u.id = m.user_id
+            WHERE m.workspace_id = ? ORDER BY m.joined_at
+            """, workspaceId);
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
+            SELECT t.id, t.title, t.board_id AS boardId, b.name AS boardName,
+                   t.column_id AS columnId, c.name AS columnName, c.is_done AS isDone,
+                   t.priority, t.start_date AS startDate, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
+                   CASE WHEN c.is_done = 1 THEN t.updated_at ELSE NULL END AS completedAt,
+                   t.assignee_id AS assigneeId
+            FROM task t JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+              AND b.deleted_at IS NULL AND b.archived_at IS NULL
+              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
+            ORDER BY t.due_date, t.position LIMIT 2000
+            """, workspaceId, userId, canSeePrivate);
+        for (Map<String, Object> task : tasks) {
+            task.put("isDone", number(task.get("isDone")) == 1);
+            task.put("dueAllDay", number(task.get("dueAllDay")) == 1);
+            Map<String, Object> assignee = null;
+            Object assigneeId = task.get("assigneeId");
+            if (assigneeId != null) {
+                for (Map<String, Object> member : members) {
+                    if (assigneeId.equals(member.get("id"))) {
+                        assignee = new LinkedHashMap<>();
+                        assignee.put("id", member.get("id"));
+                        assignee.put("name", member.get("name"));
+                        assignee.put("email", member.get("email"));
+                        break;
+                    }
+                }
+            }
+            task.put("assignee", assignee);
+            task.put("completedAt", task.get("completedAt"));
+        }
+        List<Map<String, Object>> byBoard = new ArrayList<>();
+        for (Map<String, Object> board : boards) {
+            List<Map<String, Object>> boardTasks = tasks.stream()
+                .filter(task -> board.get("id").equals(task.get("boardId"))).toList();
+            int open = (int) boardTasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))).count();
+            int done = boardTasks.size() - open;
+            int overdue = (int) boardTasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))
+                && task.get("dueDate") != null
+                && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(today) < 0).count();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", board.get("id"));
+            item.put("name", board.get("name"));
+            item.put("visibility", board.get("visibility"));
+            item.put("open", open);
+            item.put("done", done);
+            item.put("overdue", overdue);
+            item.put("estimateMinutes", boardTasks.stream().mapToInt(task ->
+                task.get("estimateMinutes") instanceof Number number ? number.intValue() : 0).sum());
+            byBoard.add(item);
+        }
+        List<Map<String, Object>> byMember = new ArrayList<>();
+        for (Map<String, Object> member : members) {
+            byMember.add(memberInsights(member, tasks, today, weekEnd));
+        }
+        Map<String, Object> unassigned = new LinkedHashMap<>();
+        unassigned.put("id", null);
+        unassigned.put("name", "Unassigned");
+        unassigned.put("email", null);
+        unassigned.put("role", null);
+        byMember.add(memberInsights(unassigned, tasks, today, weekEnd));
+        int open = (int) tasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))).count();
+        int done = tasks.size() - open;
+        int overdue = (int) tasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))
+            && task.get("dueDate") != null
+            && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(today) < 0).count();
+        int dueThisWeek = (int) tasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))
+            && task.get("dueDate") != null
+            && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(today) >= 0
+            && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(weekEnd) <= 0).count();
+        int estimateMinutes = tasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone")))
+            .mapToInt(task -> task.get("estimateMinutes") instanceof Number number ? number.intValue() : 0).sum();
+        int unestimated = (int) tasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))
+            && task.get("estimateMinutes") == null).count();
+        Instant completedSince = Instant.now().minus(7, ChronoUnit.DAYS);
+        int completedLast7 = (int) tasks.stream().filter(task -> {
+            if (task.get("completedAt") == null) return false;
+            try {
+                return Instant.parse(String.valueOf(task.get("completedAt"))).isAfter(completedSince);
+            } catch (Exception exception) {
+                return false;
+            }
+        }).count();
         List<Map<String, Object>> byPriority = jdbc.queryForList("""
             SELECT t.priority, COUNT(*) AS count
             FROM task t JOIN board_column c ON c.id = t.column_id
@@ -1380,34 +1719,53 @@ public class AppService {
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
             GROUP BY t.priority
             """, workspaceId, userId, canSeePrivate);
-        Integer open = jdbc.queryForObject("""
-            SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
-            JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
-              AND b.workspace_id = t.workspace_id
-              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-            """, Integer.class, workspaceId, userId, canSeePrivate);
-        Integer done = jdbc.queryForObject("""
-            SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
-            JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 1
-              AND b.workspace_id = t.workspace_id
-              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-            """, Integer.class, workspaceId, userId, canSeePrivate);
-        Integer overdue = jdbc.queryForObject("""
-            SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
-            JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
-              AND b.workspace_id = t.workspace_id
-              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-              AND substr(t.due_date, 1, 10) < ?
-            """, Integer.class, workspaceId, userId, canSeePrivate, LocalDate.now().toString());
-        return linked(Map.of(
-            "open", open == null ? 0 : open,
-            "done", done == null ? 0 : done,
-            "overdue", overdue == null ? 0 : overdue,
-            "byPriority", byPriority
-        ));
+        Map<String, Object> totals = new LinkedHashMap<>();
+        totals.put("open", open);
+        totals.put("overdue", overdue);
+        totals.put("dueThisWeek", dueThisWeek);
+        totals.put("completedLast7", completedLast7);
+        totals.put("estimateMinutes", estimateMinutes);
+        totals.put("unestimated", unestimated);
+        totals.put("taskCount", tasks.size());
+        totals.put("truncated", tasks.size() >= 2000);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("today", today);
+        result.put("end", end);
+        result.put("days", days);
+        result.put("boards", byBoard);
+        result.put("members", byMember);
+        result.put("tasks", tasks);
+        result.put("totals", totals);
+        result.put("open", open);
+        result.put("done", done);
+        result.put("overdue", overdue);
+        result.put("byPriority", byPriority);
+        return linked(result);
+    }
+
+    private Map<String, Object> memberInsights(Map<String, Object> member, List<Map<String, Object>> tasks,
+                                               String today, String weekEnd) {
+        List<Map<String, Object>> memberTasks = tasks.stream()
+            .filter(task -> member.get("id") == null
+                ? task.get("assigneeId") == null
+                : member.get("id").equals(task.get("assigneeId")))
+            .toList();
+        int open = (int) memberTasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))).count();
+        int dueThisWeek = (int) memberTasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))
+            && task.get("dueDate") != null
+            && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(today) >= 0
+            && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(weekEnd) <= 0).count();
+        int overdue = (int) memberTasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone"))
+            && task.get("dueDate") != null
+            && String.valueOf(task.get("dueDate")).substring(0, 10).compareTo(today) < 0).count();
+        int estimate = memberTasks.stream().filter(task -> !Boolean.TRUE.equals(task.get("isDone")))
+            .mapToInt(task -> task.get("estimateMinutes") instanceof Number number ? number.intValue() : 0).sum();
+        Map<String, Object> item = new LinkedHashMap<>(member);
+        item.put("open", open);
+        item.put("dueThisWeek", dueThisWeek);
+        item.put("overdue", overdue);
+        item.put("estimateMinutes", estimate);
+        return item;
     }
 
     public Map<String, Object> today(String userId) {
@@ -1902,6 +2260,17 @@ public class AppService {
         return linked(Map.of("subtask", subtaskRow(subtaskId)));
     }
 
+    public Map<String, Object> deleteSubtask(String userId, String subtaskId) {
+        Map<String, Object> subtask = subtaskRow(subtaskId);
+        Map<String, Object> task = taskRow((String) subtask.get("taskId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
+        requireTaskBoardVisible(userId, task);
+        jdbc.update("DELETE FROM subtask WHERE id = ?", subtaskId);
+        recordActivity((String) task.get("workspaceId"), (String) task.get("id"), userId,
+            "subtask.deleted", "subtask", subtaskId);
+        return linked(Map.of("deleted", true));
+    }
+
     public Map<String, Object> listTasks(String userId, String workspaceId) {
         requireMembership(userId, workspaceId);
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
@@ -2027,9 +2396,11 @@ public class AppService {
             .orElseThrow(() -> ApiException.notFound("Checklist item not found."));
     }
 
+    @Transactional
     public Map<String, Object> updateTask(String userId, String taskId, ApiDtos.TaskUpdate input) {
         Map<String, Object> current = taskRow(taskId);
-        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
+        String workspaceId = (String) current.get("workspaceId");
+        requireMinimumRole(userId, workspaceId, "MEMBER");
         requireTaskBoardVisible(userId, current);
         int version = input.version() == null ? -1 : input.version();
         if (version != ((Number) current.get("version")).intValue()) {
@@ -2039,45 +2410,149 @@ public class AppService {
         if (blank(title)) throw ApiException.badRequest("Task title is required.");
         String description = input.description() == null ? (String) current.get("description") : input.description();
         String priority = input.priority() == null ? (String) current.get("priority") : priority(input.priority());
-        String startDate = resolvePatch(input.startDate(), (String) current.get("startDate"));
-        String dueDate = resolvePatch(input.dueDate(), (String) current.get("dueDate"));
+        String startDate = jsonTextPatch(input.startDate(), (String) current.get("startDate"));
+        String dueDate = jsonTextPatch(input.dueDate(), (String) current.get("dueDate"));
         boolean dueAllDay = input.dueAllDay() == null
             ? number(current.get("dueAllDay")) == 1
             : input.dueAllDay();
         Integer estimate = input.estimateMinutes() == null
             ? (Integer) current.get("estimateMinutes")
-            : input.estimateMinutes().map(this::normalizeEstimate).orElse(null);
+            : input.estimateMinutes().isNull() ? null : normalizeEstimate(input.estimateMinutes().asInt());
         Integer actual = input.actualMinutes() == null
             ? (Integer) current.get("actualMinutes")
-            : input.actualMinutes().map(this::normalizeActual).orElse(null);
+            : input.actualMinutes().isNull() ? null : normalizeActual(input.actualMinutes().asInt());
         String assigneeId = input.assigneeId() == null
             ? (String) current.get("assigneeId")
-            : normalizeAssignee((String) current.get("workspaceId"), input.assigneeId().orElse(null));
+            : normalizeAssignee(workspaceId, jsonText(input.assigneeId()));
         String recurrenceRule = input.recurrenceRule() == null
             ? (String) current.get("recurrenceRule")
-            : normalizeRecurrence(input.recurrenceRule().orElse(null));
+            : normalizeRecurrence(jsonText(input.recurrenceRule()));
         String recurrenceEndsAt = input.recurrenceEndsAt() == null
             ? (String) current.get("recurrenceEndsAt")
-            : normalizeRecurrenceEnds(input.recurrenceEndsAt().orElse(null));
+            : normalizeRecurrenceEnds(jsonText(input.recurrenceEndsAt()));
+        String focusDate = jsonTextPatch(input.focusDate(), (String) current.get("focusDate"));
+
+        boolean wasCompleted = number(current.get("completed")) == 1;
+        boolean completed = input.completed() == null ? wasCompleted : input.completed();
+        String columnId = (String) current.get("columnId");
+        int position = number(current.get("position"));
+        boolean completedNow = completed && !wasCompleted;
+        if (completedNow) {
+            if (openDependencyCount(taskId) > 0) {
+                throw ApiException.dependencyBlocked("Finish the work this task is waiting on first.");
+            }
+            Map<String, Object> doneColumn = jdbc.queryForList("""
+                SELECT id FROM board_column
+                WHERE board_id = ? AND is_done = 1 AND deleted_at IS NULL ORDER BY position LIMIT 1
+                """, current.get("boardId")).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("This board has no done column."));
+            columnId = (String) doneColumn.get("id");
+            Integer next = jdbc.queryForObject("""
+                SELECT COALESCE(MAX(position), -1) + 1 FROM task
+                WHERE column_id = ? AND deleted_at IS NULL
+                """, Integer.class, columnId);
+            position = next == null ? 0 : next;
+        } else if (!completed && wasCompleted) {
+            Map<String, Object> openColumn = jdbc.queryForList("""
+                SELECT id FROM board_column
+                WHERE board_id = ? AND is_done = 0 AND deleted_at IS NULL ORDER BY position LIMIT 1
+                """, current.get("boardId")).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("This board has no open column."));
+            columnId = (String) openColumn.get("id");
+            Integer next = jdbc.queryForObject("""
+                SELECT COALESCE(MAX(position), -1) + 1 FROM task
+                WHERE column_id = ? AND deleted_at IS NULL
+                """, Integer.class, columnId);
+            position = next == null ? 0 : next;
+        }
+        String archivedAt = (String) current.get("archivedAt");
+        if (input.archived() != null) archivedAt = input.archived() ? Instant.now().toString() : null;
+
         int updated = jdbc.update("""
             UPDATE task SET title = ?, description = ?, priority = ?, start_date = ?,
                             due_date = ?, due_all_day = ?, estimate_minutes = ?,
                             actual_minutes = ?, assignee_id = ?, recurrence_rule = ?,
-                            recurrence_ends_at = ?, version = version + 1, updated_at = ?
+                            recurrence_ends_at = ?, column_id = ?, position = ?,
+                            archived_at = ?, focus_date = ?, version = version + 1, updated_at = ?
             WHERE id = ? AND version = ? AND deleted_at IS NULL
             """, title, description, priority, startDate, dueDate, dueAllDay ? 1 : 0,
             estimate, actual, assigneeId, recurrenceRule, recurrenceEndsAt,
-            Instant.now().toString(), taskId, version);
+            columnId, position, archivedAt, focusDate, Instant.now().toString(), taskId, version);
         if (updated == 0) throw ApiException.conflict("This task changed elsewhere.", version + 1);
-        if (input.labels() != null) replaceTaskLabels(taskId, (String) current.get("workspaceId"), input.labels());
-        recordActivity((String) current.get("workspaceId"), taskId, userId, "task.updated", "task", taskId);
-        audit((String) current.get("workspaceId"), userId, "task.updated", "task", taskId, Map.of());
-        return linked(Map.of("task", task(userId, taskId)));
+        if (input.labels() != null) replaceTaskLabels(taskId, workspaceId, input.labels());
+        if (input.dependencyIds() != null) replaceTaskDependencies(userId, taskId, workspaceId, input.dependencyIds());
+        if (input.reminderOffsetMinutes() != null) {
+            Integer offset = jsonInteger(input.reminderOffsetMinutes());
+            jdbc.update("DELETE FROM reminder WHERE task_id = ? AND user_id = ? AND sent_at IS NULL", taskId, userId);
+            if (offset != null && dueDate != null) {
+                ZoneId zone = ZoneId.of(zoneForUser(userId));
+                LocalDateTime due = parseLocalDateTime(dueDate, zone);
+                if (due != null) {
+                    Instant remindAt = due.atZone(zone).toInstant().minusSeconds(offset * 60L);
+                    if (remindAt.isAfter(Instant.now())) {
+                        jdbc.update("""
+                            INSERT INTO reminder (id, task_id, user_id, remind_at, channel, created_at)
+                            VALUES (?, ?, ?, ?, 'in_app', ?)
+                            """, id(), taskId, userId, remindAt.toString(), Instant.now().toString());
+                    }
+                }
+            }
+        }
+        String nextTaskId = null;
+        if (completedNow) {
+            nextTaskId = createNextOccurrence(userId, current, (String) current.get("columnId"));
+            recordActivity(workspaceId, taskId, userId, "task.completed", "task", taskId);
+            audit(workspaceId, userId, "task.completed", "task", taskId, Map.of());
+            webhookService.dispatch(workspaceId, "task.completed",
+                Map.of("taskId", taskId, "title", title, "columnId", columnId));
+            automationService.runForEvent(workspaceId, "task.completed", taskId, userId);
+        } else if (!completed && wasCompleted) {
+            recordActivity(workspaceId, taskId, userId, "task.reopened", "task", taskId);
+            audit(workspaceId, userId, "task.reopened", "task", taskId, Map.of());
+        }
+        if (input.dueDate() != null || input.startDate() != null || input.estimateMinutes() != null
+            || input.priority() != null || input.completed() != null || input.archived() != null
+            || input.dependencyIds() != null) {
+            jdbc.update("DELETE FROM plan_block WHERE task_id = ? AND source = 'auto' AND locked = 0", taskId);
+        }
+        recordActivity(workspaceId, taskId, userId, "task.updated", "task", taskId);
+        audit(workspaceId, userId, "task.updated", "task", taskId, Map.of());
+        Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+        if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
+        return result;
     }
 
-    private <T> T resolvePatch(Optional<T> value, T current) {
-        if (value == null) return current;
-        return value.orElse(null);
+    private void replaceTaskDependencies(String userId, String taskId, String workspaceId, List<String> dependencyIds) {
+        List<String> ids = dependencyIds.stream()
+            .filter(value -> value != null && !value.isBlank())
+            .map(String::trim).distinct().toList();
+        jdbc.update("DELETE FROM task_dependency WHERE task_id = ?", taskId);
+        for (String dependsOn : ids) {
+            if (taskId.equals(dependsOn)) throw ApiException.badRequest("A task cannot depend on itself.");
+            Map<String, Object> dependency = taskRow(dependsOn);
+            if (!workspaceId.equals(dependency.get("workspaceId"))) {
+                throw ApiException.badRequest("Dependencies must be in the same workspace.");
+            }
+            requireTaskBoardVisible(userId, dependency);
+            if (wouldCreateCycle(taskId, dependsOn)) {
+                throw ApiException.badRequest("That dependency would create a cycle.");
+            }
+            jdbc.update("""
+                INSERT OR IGNORE INTO task_dependency (task_id, depends_on_task_id, created_at) VALUES (?, ?, ?)
+                """, taskId, dependsOn, Instant.now().toString());
+        }
+    }
+
+    private String jsonText(JsonNode value) {
+        return value == null || value.isNull() ? null : value.asText();
+    }
+
+    private Integer jsonInteger(JsonNode value) {
+        return value == null || value.isNull() ? null : value.asInt();
+    }
+
+    private String jsonTextPatch(JsonNode value, String current) {
+        return value == null ? current : jsonText(value);
     }
 
     @Transactional
@@ -2530,7 +3005,7 @@ public class AppService {
                    t.title, t.description, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes, t.archived_at AS archivedAt, t.version, c.is_done AS completed,
-                   t.position AS position,
+                   t.position AS position, t.focus_date AS focusDate,
                    t.assignee_id AS assigneeId, t.recurrence_rule AS recurrenceRule,
                    t.recurrence_ends_at AS recurrenceEndsAt,
                    u.display_name AS assigneeName, u.email AS assigneeEmail

@@ -1,6 +1,7 @@
 package com.project3383.api;
 
 import com.project3383.app.AppService;
+import com.project3383.app.SessionService;
 import com.project3383.auth.AuthInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -28,22 +29,28 @@ import java.util.UUID;
 public class AuthController {
 
     private final AppService appService;
+    private final SessionService sessionService;
 
-    public AuthController(AppService appService) {
+    public AuthController(AppService appService, SessionService sessionService) {
         this.appService = appService;
+        this.sessionService = sessionService;
     }
 
     @PostMapping("/guest")
-    public Map<String, Object> guest(HttpSession session) {
+    public Map<String, Object> guest(HttpServletRequest request, HttpSession session) {
         Object existing = session.getAttribute(AuthInterceptor.SESSION_USER);
         if (existing != null) {
-            return appService.bootstrap(existing.toString());
+            if (sessionService.touch(session, existing.toString())) {
+                return appService.bootstrap(existing.toString());
+            }
+            session.removeAttribute(AuthInterceptor.SESSION_USER);
         }
         Map<String, Object> boot = appService.createGuest();
         @SuppressWarnings("unchecked")
         Map<String, Object> user = (Map<String, Object>) boot.get("user");
         session.setAttribute(AuthInterceptor.SESSION_USER, user.get("id"));
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, false);
+        sessionService.start(session, user.get("id").toString(), request, false);
         return boot;
     }
 
@@ -51,9 +58,12 @@ public class AuthController {
     public Map<String, Object> signup(HttpServletRequest request, HttpSession session, @RequestBody ApiDtos.Signup input) {
         Object current = session.getAttribute(AuthInterceptor.SESSION_USER);
         AppService.AuthResult result = appService.signup(current == null ? null : current.toString(), input);
+        String oldSessionId = session.getId();
         if (request.getSession(false) != null) request.changeSessionId();
+        sessionService.revoke(oldSessionId, result.userId());
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, false);
+        sessionService.start(session, result.userId(), request, false);
         return result.bootstrap();
     }
 
@@ -67,10 +77,14 @@ public class AuthController {
             return challenge;
         }
         HttpSession old = request.getSession(false);
-        if (old != null) old.invalidate();
+        if (old != null) {
+            sessionService.revokeIfPresent(old);
+            old.invalidate();
+        }
         HttpSession session = request.getSession(true);
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, result.mfaVerified());
+        sessionService.start(session, result.userId(), request, result.mfaVerified());
         return result.bootstrap();
     }
 
@@ -79,10 +93,14 @@ public class AuthController {
         AppService.AuthResult result = appService.verifyMfaChallenge(
             input == null ? null : input.challenge(), input == null ? null : input.code());
         HttpSession old = request.getSession(false);
-        if (old != null) old.invalidate();
+        if (old != null) {
+            sessionService.revokeIfPresent(old);
+            old.invalidate();
+        }
         HttpSession session = request.getSession(true);
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, true);
+        sessionService.start(session, result.userId(), request, true);
         return result.bootstrap();
     }
 
@@ -124,10 +142,14 @@ public class AuthController {
                 return redirect(baseUrl + "/auth?mfa=1&challenge=" + encode(login.mfaChallenge())
                     + "&next=" + encode(destination));
             }
-            if (session != null) session.invalidate();
+            if (session != null) {
+                sessionService.revokeIfPresent(session);
+                session.invalidate();
+            }
             HttpSession fresh = request.getSession(true);
             fresh.setAttribute(AuthInterceptor.SESSION_USER, login.userId());
             fresh.setAttribute(AuthInterceptor.MFA_VERIFIED, true);
+            sessionService.start(fresh, login.userId(), request, true);
             return redirect(baseUrl + destination);
         } catch (ApiException exception) {
             return redirect(baseUrl + "/auth?error=magic_invalid");
@@ -156,12 +178,15 @@ public class AuthController {
     @GetMapping("/me")
     public Map<String, Object> me(HttpSession session) {
         Object userId = session.getAttribute(AuthInterceptor.SESSION_USER);
-        if (userId == null) throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "No session.");
+        if (userId == null || !sessionService.touch(session, userId.toString())) {
+            throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "No session.");
+        }
         return appService.bootstrap(userId.toString());
     }
 
     @DeleteMapping("/signout")
     public Map<String, Object> signOut(HttpSession session) {
+        sessionService.revokeIfPresent(session);
         session.invalidate();
         return Map.of("signedOut", true);
     }

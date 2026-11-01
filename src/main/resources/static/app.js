@@ -12,6 +12,9 @@
     detail: null,
     workspaceTasks: [],
     notifications: [],
+    seenNotificationIds: new Set(),
+    notificationsReady: false,
+    notificationTimer: null,
     autoPlan: null,
     autoPlanSelection: "balanced",
     autoPlanApplying: false,
@@ -28,6 +31,7 @@
     captureSaving: false,
     offline: typeof navigator !== "undefined" ? !navigator.onLine : false,
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    calendarSelected: null,
     authMode: "signin",
     settings: null,
     settingsQueue: Promise.resolve(),
@@ -58,9 +62,16 @@
   const t = (key, vars) => window.DriftI18n?.t(key, vars) ?? key;
   const translateReason = (reason) => window.DriftI18n?.translateReason(reason, t) ?? reason;
 
+  function newIdempotencyKey(prefix = "ui") {
+    const random = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}-${random}`;
+  }
+
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (options.body !== undefined) headers["content-type"] = "application/json";
+    if (options.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
+    if (options.workspaceId && !headers["x-workspace-id"]) headers["x-workspace-id"] = options.workspaceId;
     let response;
     try {
       response = await fetch(path, {
@@ -100,6 +111,7 @@
       path,
       method: options.method || "POST",
       body: options.body,
+      idempotencyKey: options.idempotencyKey,
       workspaceId: meta.workspaceId || workspace()?.id || null,
     });
     state.offline = true;
@@ -108,11 +120,14 @@
   }
 
   async function requestOrQueue(path, options, meta) {
+    const withKey = options.idempotencyKey
+      ? options
+      : { ...options, idempotencyKey: newIdempotencyKey(meta?.kind || "ui") };
     try {
-      return await request(path, options);
+      return await request(path, withKey);
     } catch (error) {
       if (error.code === "NETWORK_ERROR" && window.DriftOffline) {
-        queueOfflineWrite(path, options, meta);
+        queueOfflineWrite(path, withKey, meta);
         return { queued: true };
       }
       throw error;
@@ -299,6 +314,27 @@
     "FREQ=MONTHLY;INTERVAL=1": "Every month",
   };
 
+  const CHECKLIST_TEMPLATES = [
+    { pattern: /\b(write|draft|copy|post|announce)\b/i, items: ["Outline the key points", "Write the first draft", "Edit for clarity", "Proofread the final copy"] },
+    { pattern: /\b(launch|release|ship|deploy)\b/i, items: ["Confirm the release checklist", "Prepare the rollout note", "Verify the production smoke test", "Schedule the follow-up"] },
+    { pattern: /\b(review|audit|check)\b/i, items: ["Define the review criteria", "Collect the source material", "Record findings", "Assign follow-ups"] },
+    { pattern: /\b(plan|strategy|retro|meeting)\b/i, items: ["Clarify the desired outcome", "List the decisions needed", "Prepare the agenda", "Capture next actions"] },
+    { pattern: /\b(design|mockup|wireframe|visual)\b/i, items: ["Collect references", "Sketch the primary flow", "Build the first pass", "Review responsive states"] },
+    { pattern: /\b(record|video|demo|podcast)\b/i, items: ["Write the run sheet", "Prepare the recording setup", "Record the segment", "Review the final cut"] },
+    { pattern: /\b(test|qa|verify|bug)\b/i, items: ["List the critical paths", "Run the happy path", "Test edge cases", "Log and verify fixes"] },
+    { pattern: /\b(book|reserve|buy|order|schedule)\b/i, items: ["Confirm the details", "Compare the options", "Make the booking", "Add a reminder"] },
+  ];
+
+  function suggestChecklistItems(title, description, existing = []) {
+    const text = `${title || ""} ${description || ""}`;
+    const already = new Set(existing.map((item) => String(item).trim().toLowerCase()));
+    const suggestions = CHECKLIST_TEMPLATES
+      .filter((template) => template.pattern.test(text))
+      .flatMap((template) => template.items)
+      .filter((item) => !already.has(item.toLowerCase()));
+    return [...new Set(suggestions)].slice(0, 4);
+  }
+
   function describeRecurrence(rule) {
     if (!rule) return "";
     if (RECURRENCE_LABELS[rule]) return t(RECURRENCE_LABELS[rule]);
@@ -348,8 +384,21 @@
     return (currentBoard()?.columns ?? []).flatMap((column) => column.tasks ?? []);
   }
 
+  function arrangeTaskDrawer() {
+    const form = $("taskForm");
+    const detail = $("taskDetail");
+    const notes = form?.querySelector(".task-notes-field");
+    if (form && detail && notes) form.insertBefore(notes, detail);
+    if (!detail) return;
+    const sections = [...detail.querySelectorAll(":scope > .detail-section")];
+    if (sections.length >= 6) {
+      detail.append(sections[0], sections[1], sections[3], sections[4], sections[2], sections[5]);
+    }
+  }
+
   async function init() {
     try {
+      arrangeTaskDrawer();
       // The guest endpoint is idempotent: it resumes an existing HttpSession or
       // creates the first workspace/board. Using it first avoids a noisy 401.
       const boot = await request("/api/auth/guest", { method: "POST" });
@@ -367,9 +416,23 @@
       const initialLoads = [loadToday(), loadNotifications(), loadSettings()];
       if (state.currentBoardId) initialLoads.push(loadBoard(state.currentBoardId));
       await Promise.all(initialLoads);
+      const query = new URLSearchParams(location.search);
+      const requestedBoard = query.get("board");
+      if (requestedBoard && boards().some((item) => item.id === requestedBoard)) {
+        state.currentBoardId = requestedBoard;
+        await loadBoard(requestedBoard);
+        renderSidebar();
+      }
       const startView = state.settings?.startView;
-      setView(["today", "board", "upcoming"].includes(startView) ? startView : "today");
-      const inviteToken = new URLSearchParams(location.search).get("invite");
+      const requestedView = query.get("view");
+      const allowedViews = ["today", "board", "upcoming", "calendar", "search", "archive", "insights"];
+      const initialView = location.pathname === "/settings"
+        ? "settings"
+        : allowedViews.includes(requestedView)
+          ? requestedView
+          : ["today", "board", "upcoming"].includes(startView) ? startView : "today";
+      setView(initialView);
+      const inviteToken = query.get("invite");
       if (inviteToken) {
         await acceptInviteFromUrl(inviteToken);
         state.currentBoardId = boards()[0]?.id ?? null;
@@ -377,7 +440,6 @@
         if (state.currentBoardId) await loadBoard(state.currentBoardId);
         await loadToday();
       }
-      const query = new URLSearchParams(location.search);
       const ssoMfa = query.get("ssoMfa");
       if (ssoMfa) {
         history.replaceState({}, "", "/");
@@ -388,8 +450,23 @@
         history.replaceState({}, "", "/");
         showToast(t("SSO sign-in failed: {{reason}}", { reason: ssoError.replaceAll("_", " ") }));
       }
+      const deepLinkedTask = query.get("task");
+      if (deepLinkedTask) {
+        try {
+          await openTaskById(deepLinkedTask);
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
       state.offline = !navigator.onLine;
       updateOfflineBanner();
+      if (state.notificationTimer) window.clearInterval(state.notificationTimer);
+      state.notificationTimer = window.setInterval(() => {
+        if (navigator.onLine) void loadNotifications();
+      }, 30_000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") void loadNotifications();
+      });
       if (navigator.onLine && offlineQueue().length) void syncOfflineQueue(false);
     } catch (error) {
       const cached = error.code === "NETWORK_ERROR" ? window.DriftOffline?.readCachedBootstrap() : null;
@@ -567,7 +644,34 @@
   async function loadNotifications() {
     try {
       const result = await request("/api/notifications");
-      state.notifications = result.notifications ?? [];
+      const notifications = result.notifications ?? [];
+      const fresh = notifications.filter((notification) => !state.seenNotificationIds.has(notification.id));
+      if (state.notificationsReady) {
+        const reminder = fresh.find((notification) => notification.type === "reminder");
+        if (reminder) {
+          const browserEnabled = state.settings?.notifications?.browser !== false;
+          if (document.visibilityState === "visible") {
+            window.DriftSound?.play("reminder");
+          } else if (browserEnabled && "Notification" in window && window.Notification.permission === "granted") {
+            try {
+              const browserReminder = new window.Notification(reminder.title || t("Reminder"), {
+                body: reminder.body || "",
+                tag: reminder.id,
+              });
+              browserReminder.onclick = () => {
+                window.focus();
+                if (reminder.link) window.location.assign(reminder.link);
+                browserReminder.close();
+              };
+            } catch {
+              // The in-app inbox remains the source of truth.
+            }
+          }
+        }
+      }
+      for (const notification of notifications) state.seenNotificationIds.add(notification.id);
+      state.notificationsReady = true;
+      state.notifications = notifications;
       const count = Number(result.unreadCount ?? 0);
       $("notificationCount").textContent = String(count);
       $("notificationCount").classList.toggle("zero", count === 0);
@@ -593,6 +697,29 @@
       if (notification.body) grow.append(element("p", "", notification.body));
       grow.append(element("p", "small muted", new Date(notification.createdAt).toLocaleString()));
       row.append(grow);
+      if (!notification.readAt || notification.link) row.classList.add("clickable");
+      row.addEventListener("click", async () => {
+        try {
+          if (!notification.readAt) {
+            const result = await request(`/api/notifications/${encodeURIComponent(notification.id)}/read`, { method: "PATCH" });
+            state.notifications = result.notifications ?? state.notifications;
+            const count = Number(result.unreadCount ?? 0);
+            $("notificationCount").textContent = String(count);
+            $("notificationCount").classList.toggle("zero", count === 0);
+            renderNotifications();
+          }
+          const link = String(notification.link || "");
+          const taskId = new URLSearchParams(link.split("?")[1] || "").get("task");
+          if (taskId) {
+            $("notificationsModal").classList.add("hidden");
+            await openTaskById(taskId);
+          } else if (link && link !== "/") {
+            window.location.assign(link);
+          }
+        } catch (error) {
+          showToast(error.message);
+        }
+      });
       list.append(row);
     }
   }
@@ -665,7 +792,7 @@
         body: { email, role: $("inviteRole").value },
       });
       $("inviteEmail").value = "";
-      const link = `${location.origin}/?invite=${encodeURIComponent(result.token)}`;
+      const link = `${location.origin}/invite/${encodeURIComponent(result.token)}`;
       $("inviteResult").textContent = `Invite link: ${link}`;
       try {
         await navigator.clipboard.writeText(link);
@@ -713,14 +840,78 @@
     }
   }
 
+  function calendarWeekStart() {
+    const raw = Number(state.settings?.weekStartsOn);
+    return Number.isInteger(raw) && raw >= 0 && raw <= 6 ? raw : 1;
+  }
+
+  function renderCalendarWeekdays() {
+    const row = document.querySelector(".calendar-weekdays");
+    if (!row) return;
+    const weekStartsOn = calendarWeekStart();
+    const formatter = new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "short" });
+    row.replaceChildren();
+    for (let index = 0; index < 7; index++) {
+      row.append(element("span", "", formatter.format(new Date(2024, 0, 7 + weekStartsOn + index, 12))));
+    }
+  }
+
+  function selectCalendarDay(key, data, grid) {
+    state.calendarSelected = key;
+    grid?.querySelectorAll(".calendar-day.selected").forEach((node) => node.classList.remove("selected"));
+    grid?.querySelector(`.calendar-day[data-date="${key}"]`)?.classList.add("selected");
+    renderCalendarDayPanel(key, data);
+  }
+
+  function renderCalendarDayPanel(key, data) {
+    const title = $("calendarDayTitle");
+    const hint = $("calendarDayHint");
+    const list = $("calendarDayList");
+    list.replaceChildren();
+    if (!key) {
+      title.textContent = t("Pick a day");
+      hint.textContent = t("Select a date to read it without the grid.");
+      return;
+    }
+    const date = new Date(`${key}T12:00:00`);
+    title.textContent = new Intl.DateTimeFormat(state.settings?.locale || undefined, {
+      weekday: "long", month: "long", day: "numeric",
+    }).format(date);
+    const blocks = data?.planBlocks ?? [];
+    const scheduled = new Set(blocks.map((block) => block.taskId));
+    const dueOnly = (data?.tasks ?? []).filter((task) => !scheduled.has(task.id));
+    const total = blocks.length + dueOnly.length;
+    hint.textContent = total
+      ? t("{{count}} items on this day.", { count: total })
+      : t("Nothing due. Keep it that way if you can.");
+    for (const block of blocks) {
+      const row = element("button", "calendar-day-row scheduled");
+      row.type = "button";
+      row.append(element("span", "calendar-day-time", minutesLabel(block.startMinute)));
+      row.append(element("span", "calendar-day-copy", block.title || block.task?.title || t("Task")));
+      row.addEventListener("click", () => void openTaskById(block.taskId));
+      list.append(row);
+    }
+    for (const task of dueOnly) {
+      const row = element("button", "calendar-day-row");
+      row.type = "button";
+      const time = dueTimeLabel(task.dueDate);
+      row.append(element("span", "calendar-day-time", time || "—"));
+      row.append(element("span", "calendar-day-copy", task.title));
+      row.addEventListener("click", () => void openTaskById(task.id));
+      list.append(row);
+    }
+  }
+
   function renderCalendar(days) {
     const byDate = new Map(days.map((day) => [day.date, day]));
     const grid = $("calendarGrid");
     grid.replaceChildren();
+    renderCalendarWeekdays();
     const first = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth(), 1);
     const gridStart = new Date(first);
-    const weekday = first.getDay();
-    gridStart.setDate(first.getDate() - (weekday === 0 ? 6 : weekday - 1));
+    const startOffset = (first.getDay() - calendarWeekStart() + 7) % 7;
+    gridStart.setDate(first.getDate() - startOffset);
     const today = dateKey(new Date());
     const totalDated = days.reduce((sum, day) => sum + (day.tasks ?? []).length, 0);
     $("calendarDatedCount").textContent = `${totalDated} ${t("dated")}`;
@@ -731,33 +922,60 @@
       const date = new Date(gridStart);
       date.setDate(gridStart.getDate() + i);
       const key = dateKey(date);
-      const day = element("div", `calendar-day${date.getMonth() !== state.calendarMonth.getMonth() ? " other" : ""}${key === today ? " today" : ""}`);
-      day.dataset.date = key;
-      const number = element("span", "calendar-day-number", String(date.getDate()));
-      day.append(number);
       const data = byDate.get(key);
-      for (const task of (data?.tasks ?? []).slice(0, 5)) {
+      const blocks = data?.planBlocks ?? [];
+      const scheduled = new Set(blocks.map((block) => block.taskId));
+      const dueOnly = (data?.tasks ?? []).filter((task) => !scheduled.has(task.id));
+      const total = blocks.length + dueOnly.length;
+      const day = element("div", `calendar-day${date.getMonth() !== state.calendarMonth.getMonth() ? " other" : ""}${key === today ? " today" : ""}${key === state.calendarSelected ? " selected" : ""}`);
+      day.dataset.date = key;
+      const number = element("button", "calendar-day-number", String(date.getDate()));
+      number.type = "button";
+      number.setAttribute("aria-pressed", String(key === state.calendarSelected));
+      number.setAttribute("aria-label", `${new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "long", month: "long", day: "numeric" }).format(date)}, ${total} ${t(total === 1 ? "item" : "items")}`);
+      number.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectCalendarDay(key, data, grid);
+      });
+      day.append(number);
+      const visibleBlocks = blocks.slice(0, 3);
+      const visibleDue = dueOnly.slice(0, Math.max(0, 3 - visibleBlocks.length));
+      for (const block of visibleBlocks) {
+        const item = element("button", "calendar-item block", `${minutesLabel(block.startMinute)} ${block.title || block.task?.title || ""}`);
+        item.type = "button";
+        item.title = block.title || block.task?.title || "";
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          void openTaskById(block.taskId);
+        });
+        day.append(item);
+      }
+      for (const task of visibleDue) {
         const item = element("button", "calendar-item", task.title);
         item.type = "button";
         item.title = task.title;
         item.addEventListener("click", (event) => {
           event.stopPropagation();
-          openTaskById(task.id);
+          void openTaskById(task.id);
         });
         day.append(item);
       }
-      for (const block of (data?.planBlocks ?? []).slice(0, 3)) {
-        day.append(element("div", "calendar-item block", `${minutesLabel(block.startMinute)} ${block.title}`));
+      if (total > 3) {
+        const more = element("button", "calendar-item calendar-more", `+${total - 3} ${t("more")}`);
+        more.type = "button";
+        more.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectCalendarDay(key, data, grid);
+        });
+        day.append(more);
       }
-      day.addEventListener("click", () => {
-        grid.querySelectorAll(".calendar-day.selected").forEach((node) => node.classList.remove("selected"));
-        day.classList.add("selected");
-        const tasks = data?.tasks ?? [];
-        $("calendarDatedHint").textContent = tasks.length
-          ? tasks.map((task) => task.title).join(" · ")
-          : t("Nothing dated on this day.");
-      });
+      day.addEventListener("click", () => selectCalendarDay(key, data, grid));
       grid.append(day);
+    }
+    if (state.calendarSelected) {
+      renderCalendarDayPanel(state.calendarSelected, byDate.get(state.calendarSelected));
+    } else {
+      renderCalendarDayPanel(null);
     }
   }
 
@@ -1635,6 +1853,7 @@
       $("viewEyebrow").textContent = t("Account & workspace");
       $("viewTitle").textContent = t("Settings");
       if (!state.settings) void loadSettings();
+      window.setTimeout(focusSettingsHash, 30);
     } else {
       $("viewEyebrow").textContent = t("Plan");
       $("viewTitle").textContent = t("Today");
@@ -2749,6 +2968,18 @@
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
+  function dueTimeInputValue(value) {
+    const text = value == null ? "" : String(value);
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) return text.slice(11, 16);
+    if (text.includes("T")) {
+      const date = new Date(text);
+      if (!Number.isNaN(date.getTime())) {
+        return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+    }
+    return "";
+  }
+
   function addDaysToKey(key, days) {
     const date = new Date(`${key}T12:00:00`);
     date.setDate(date.getDate() + days);
@@ -3128,6 +3359,29 @@
     }
   }
 
+  function renderTaskMetaBadges(task) {
+    const container = $("taskMetaBadges");
+    if (!container) return;
+    container.replaceChildren();
+    const toggle = $("taskCompleteToggle");
+    if (!task) {
+      toggle?.classList.add("hidden");
+      return;
+    }
+    const completed = Number(task.completed) === 1;
+    container.append(makeBadge(t(completed ? "Done" : "Open"), completed ? "accent" : "slate"));
+    if (task.dueDate) container.append(makeBadge(captureDueLabel(task), "blue"));
+    if (task.recurrenceRule) container.append(makeBadge(describeRecurrence(task.recurrenceRule), "violet"));
+    if (task.version) container.append(element("span", "field-hint", `v${task.version}`));
+    if (toggle) {
+      toggle.classList.remove("hidden");
+      toggle.classList.toggle("done", completed);
+      toggle.textContent = completed ? "✓" : "";
+      toggle.setAttribute("aria-label", t(completed ? "Reopen task" : "Complete task"));
+      toggle.title = t(completed ? "Reopen task" : "Complete task");
+    }
+  }
+
   function openTaskModal(task, columnId = null) {
     if (task && !task.boardName && currentBoard()?.id === task.boardId) {
       task.boardName = currentBoard().name;
@@ -3157,7 +3411,12 @@
     $("taskEstimate").value = task?.estimateMinutes ?? "";
     $("taskStart").value = task?.startDate ? String(task.startDate).slice(0, 10) : "";
     $("taskDue").value = task?.dueDate ? String(task.dueDate).slice(0, 10) : "";
+    $("taskDueTime").value = task?.dueAllDay ? "" : dueTimeInputValue(task?.dueDate);
     $("taskDueAllDay").checked = task ? Number(task.dueAllDay) === 1 : true;
+    $("taskDueTime").disabled = $("taskDueAllDay").checked;
+    $("taskReminderOffset").value = "";
+    $("taskReminderOffset").disabled = !$("taskDue").value;
+    state.initialReminderOffset = "";
     $("taskActual").value = task?.actualMinutes ?? "";
     const recurrenceSelect = $("taskRecurrence");
     recurrenceSelect.replaceChildren(new Option(t("Does not repeat"), ""));
@@ -3190,12 +3449,17 @@
     for (const column of columns) $("taskColumn").add(new Option(column.name, column.id));
     if (columnId) $("taskColumn").value = columnId;
     else if (task?.columnId) $("taskColumn").value = task.columnId;
-    $("columnField").classList.toggle("hidden", Boolean(task));
+    $("columnField").classList.remove("hidden");
+    $("taskColumnLabel").textContent = task ? t("Status") : t("Column");
+    $("subtaskSuggestions").replaceChildren();
     const completed = Boolean(task) && Number(task.completed) === 1;
     $("focusTaskButton").classList.toggle("hidden", !task || completed);
     $("completeTaskButton").classList.toggle("hidden", !task || completed);
     $("reopenTaskButton").classList.toggle("hidden", !task || !completed);
+    $("copyTaskLinkButton").classList.toggle("hidden", !task);
+    $("archiveTaskButton").classList.toggle("hidden", !task || Boolean(task.archivedAt));
     $("deleteTaskButton").classList.toggle("hidden", !task);
+    renderTaskMetaBadges(task);
     $("taskModal").classList.remove("hidden");
     window.setTimeout(() => $("taskTitle").focus(), 20);
     if (task) void loadTaskDetail(task.id);
@@ -3209,6 +3473,27 @@
       ]);
       state.detail = detail;
       state.workspaceTasks = taskList.tasks ?? [];
+      if (state.editing && detail.task?.id === state.editing.id) {
+        state.editing = { ...state.editing, ...detail.task };
+        $("taskColumn").value = detail.task.columnId;
+        const nowCompleted = Number(detail.task.completed) === 1;
+        $("completeTaskButton").classList.toggle("hidden", nowCompleted);
+        $("reopenTaskButton").classList.toggle("hidden", !nowCompleted);
+        $("focusTaskButton").classList.toggle("hidden", nowCompleted);
+        $("archiveTaskButton").classList.toggle("hidden", Boolean(detail.task.archivedAt));
+        const reminder = (detail.task.reminders ?? [])[0];
+        let offset = "";
+        if (reminder && detail.task.dueDate) {
+          const dueText = String(detail.task.dueDate);
+          const dueAt = new Date(dueText.includes("T") ? dueText : `${dueText}T00:00:00`);
+          const diff = Math.round((dueAt.getTime() - new Date(reminder.remindAt).getTime()) / 60000);
+          if (["0", "10", "30", "60", "1440"].includes(String(diff))) offset = String(diff);
+        }
+        $("taskReminderOffset").value = offset;
+        $("taskReminderOffset").disabled = !detail.task.dueDate;
+        state.initialReminderOffset = offset;
+        renderTaskMetaBadges(detail.task);
+      }
       renderTaskDetail();
     } catch (error) {
       showToast(error.message);
@@ -3265,7 +3550,15 @@
       checkbox.checked = Number(subtask.completed) === 1;
       checkbox.addEventListener("change", () => toggleSubtask(subtask.id, checkbox.checked));
       const title = element("span", "grow", subtask.title);
-      row.append(checkbox, title);
+      const remove = element("button", "btn ghost sm", t("Remove"));
+      remove.type = "button";
+      remove.setAttribute("aria-label", t("Remove {{name}}", { name: subtask.title }));
+      remove.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void deleteSubtask(subtask);
+      });
+      row.append(checkbox, title, remove);
       list.append(row);
     }
 
@@ -3459,8 +3752,19 @@
     }
   }
 
-  async function addSubtask() {
-    const title = $("subtaskTitle").value.trim();
+  async function deleteSubtask(subtask) {
+    if (!state.editing) return;
+    try {
+      await request(`/api/subtasks/${encodeURIComponent(subtask.id)}`, { method: "DELETE" });
+      await loadTaskDetail(state.editing.id);
+      await loadBoard(state.currentBoardId);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function addSubtask(titleOverride = null) {
+    const title = (titleOverride ?? $("subtaskTitle").value).trim();
     if (!title || !state.editing) return;
     try {
       await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/subtasks`, {
@@ -3468,9 +3772,31 @@
         body: { title },
       });
       $("subtaskTitle").value = "";
+      $("subtaskSuggestions").replaceChildren();
       await loadTaskDetail(state.editing.id);
     } catch (error) {
       showToast(error.message);
+    }
+  }
+
+  function showChecklistSuggestions() {
+    const task = state.detail?.task;
+    const container = $("subtaskSuggestions");
+    if (!task) return;
+    container.replaceChildren();
+    const suggestions = suggestChecklistItems(
+      task.title,
+      task.description,
+      (task.subtasks ?? []).map((item) => item.title),
+    );
+    for (const suggestion of suggestions) {
+      const button = element("button", "btn ghost sm", `+ ${suggestion}`);
+      button.type = "button";
+      button.addEventListener("click", () => void addSubtask(suggestion));
+      container.append(button);
+    }
+    if (!suggestions.length) {
+      container.append(element("span", "field-hint", t("No new checklist ideas for this task.")));
     }
   }
 
@@ -3502,6 +3828,11 @@
     try {
       const task = state.editing;
       const recurrenceRule = $("taskRecurrence").value || null;
+      const dueDay = $("taskDue").value || "";
+      const dueAllDay = $("taskDueAllDay").checked;
+      const dueDate = dueDay
+        ? (dueAllDay ? dueDay : `${dueDay}T${$("taskDueTime").value || "09:00"}:00`)
+        : null;
       const body = {
         title: $("taskTitle").value.trim(),
         description: $("taskDescription").value.trim(),
@@ -3510,12 +3841,16 @@
         actualMinutes: $("taskActual").value ? Number($("taskActual").value) : null,
         labels: $("taskLabels").value.split(",").map((label) => label.trim()).filter(Boolean),
         startDate: $("taskStart").value || null,
-        dueDate: $("taskDue").value || null,
-        dueAllDay: $("taskDueAllDay").checked,
+        dueDate,
+        dueAllDay,
         assigneeId: $("taskAssignee").value || null,
         recurrenceRule,
         ...(recurrenceRule ? {} : { recurrenceEndsAt: null }),
       };
+      if ($("taskReminderOffset").value !== state.initialReminderOffset) {
+        body.reminderOffsetMinutes = $("taskReminderOffset").value === ""
+          ? null : Number($("taskReminderOffset").value);
+      }
       let saved = null;
       if (task) {
         saved = await requestOrQueue(
@@ -3564,6 +3899,73 @@
       showToast(error.message);
     } finally {
       save.disabled = false;
+    }
+  }
+
+  async function moveEditingTask(columnId) {
+    const task = state.editing;
+    if (!task || !columnId || columnId === task.columnId) return;
+    try {
+      const result = await request(`/api/tasks/${encodeURIComponent(task.id)}/move`, {
+        method: "PATCH",
+        body: { version: task.version, columnId },
+      });
+      state.editing = { ...task, ...result.task };
+      await Promise.all([loadTaskDetail(task.id), loadBoard(state.currentBoardId), loadToday()]);
+      window.DriftSound?.play("move");
+      showToast(t("Task moved."));
+    } catch (error) {
+      $("taskColumn").value = task.columnId;
+      showToast(error.message);
+    }
+  }
+
+  async function copyTaskLink() {
+    const task = state.editing;
+    if (!task) return;
+    const url = `${window.location.origin}/?task=${encodeURIComponent(task.id)}`;
+    try {
+      await navigator.clipboard?.writeText(url);
+      showToast(t("Link copied."));
+    } catch {
+      showToast(url);
+    }
+  }
+
+  async function archiveCurrentTask() {
+    const task = state.editing;
+    if (!task) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(task.id)}`, {
+        method: "PATCH",
+        body: { archived: true, version: task.version },
+      });
+      closeModal();
+      await loadBoard(state.currentBoardId);
+      await loadToday();
+      showToast(t("Task archived."));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function toggleDrawerComplete() {
+    const task = state.editing;
+    if (!task) return;
+    const completed = Number(task.completed) !== 1;
+    try {
+      const result = await request(`/api/tasks/${encodeURIComponent(task.id)}/${completed ? "complete" : "reopen"}`, {
+        method: "POST",
+      });
+      if (result?.task) {
+        state.editing = { ...task, ...result.task };
+        state.detail = state.detail ? { ...state.detail, task: { ...state.detail.task, ...result.task } } : state.detail;
+      }
+      await Promise.all([loadTaskDetail(task.id), loadBoard(state.currentBoardId), loadToday()]);
+      window.DriftSound?.play(completed ? "complete" : "tap");
+      showToast(t(completed ? "Task completed." : "Task reopened."));
+    } catch (error) {
+      showToast(error.message);
     }
   }
 
@@ -3989,18 +4391,33 @@
       }
       const button = element("button", `settings-nav-item${index === 0 ? " active" : ""}`);
       button.type = "button";
+      button.dataset.section = definition.id;
       button.append(icon(definition.icon), element("span", "", t(definition.label)));
       button.addEventListener("click", () => {
         nav.querySelectorAll("button").forEach((node) => node.classList.toggle("active", node === button));
         const target = document.getElementById(`settings-${definition.id}`);
         target?.scrollIntoView({ behavior: "smooth", block: "start" });
         target?.refreshSettingsSection?.();
+        history.replaceState({}, "", `/settings#${definition.id}`);
       });
       nav.append(button);
       container.append(definition.render());
     });
     window.DriftI18n?.translateSubtree(nav);
     window.DriftI18n?.translateSubtree(container);
+    window.setTimeout(focusSettingsHash, 30);
+  }
+
+  function focusSettingsHash() {
+    const hash = location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const target = document.getElementById(`settings-${hash}`);
+    const nav = $("settingsNav");
+    const button = nav?.querySelector(`[data-section="${hash}"]`);
+    if (!target || !button) return;
+    nav.querySelectorAll("button").forEach((node) => node.classList.toggle("active", node === button));
+    target.scrollIntoView({ block: "start" });
+    target.refreshSettingsSection?.();
   }
 
   function renderAccountSettings() {
@@ -6695,6 +7112,12 @@
     $("notificationsButton").addEventListener("click", openNotificationsModal);
     $("closeNotificationsModal").addEventListener("click", () => $("notificationsModal").classList.add("hidden"));
     $("markAllReadButton").addEventListener("click", markAllRead);
+    $("notificationSettingsButton").addEventListener("click", () => {
+      $("notificationsModal").classList.add("hidden");
+      history.replaceState({}, "", "/settings#notifications");
+      setView("settings");
+      renderSettings();
+    });
     $("notificationsModal").addEventListener("click", (event) => {
       if (event.target === $("notificationsModal")) $("notificationsModal").classList.add("hidden");
     });
@@ -6708,7 +7131,21 @@
     $("closeModal").addEventListener("click", closeModal);
     $("cancelModal").addEventListener("click", closeModal);
     $("taskForm").addEventListener("submit", saveTask);
-    $("subtaskAddButton").addEventListener("click", addSubtask);
+    $("taskColumn").addEventListener("change", (event) => {
+      if (state.editing) void moveEditingTask(event.target.value);
+    });
+    $("taskDueAllDay").addEventListener("change", (event) => {
+      $("taskDueTime").disabled = event.target.checked;
+      if (!event.target.checked && !$("taskDueTime").value) $("taskDueTime").value = "09:00";
+    });
+    $("taskDue").addEventListener("change", () => {
+      $("taskReminderOffset").disabled = !$("taskDue").value;
+    });
+    $("taskCompleteToggle").addEventListener("click", () => void toggleDrawerComplete());
+    $("copyTaskLinkButton").addEventListener("click", () => void copyTaskLink());
+    $("archiveTaskButton").addEventListener("click", () => void archiveCurrentTask());
+    $("subtaskAddButton").addEventListener("click", () => void addSubtask());
+    $("subtaskSuggestButton").addEventListener("click", showChecklistSuggestions);
     $("commentAddButton").addEventListener("click", addComment);
     $("dependencyAddButton").addEventListener("click", addDependency);
     $("attachmentUploadButton").addEventListener("click", uploadAttachment);

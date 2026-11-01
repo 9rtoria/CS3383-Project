@@ -37,6 +37,16 @@ public class AttachmentController {
         return attachmentService.upload(CurrentUser.id(session), taskId, file);
     }
 
+    @PostMapping("/attachments")
+    public Map<String, Object> uploadTopLevel(
+        HttpSession session,
+        @RequestPart("taskId") String taskId,
+        @RequestPart("workspaceId") String workspaceId,
+        @RequestPart("file") MultipartFile file
+    ) {
+        return attachmentService.upload(CurrentUser.id(session), taskId, file);
+    }
+
     @GetMapping("/attachments/{id}")
     public ResponseEntity<Resource> download(HttpSession session, @PathVariable String id) {
         AttachmentService.AttachmentFile file = attachmentService.download(CurrentUser.id(session), id);

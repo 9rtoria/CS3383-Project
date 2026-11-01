@@ -181,10 +181,14 @@
           continue;
         }
         try {
+          const headers = {};
+          if (write.body !== undefined) headers["content-type"] = "application/json";
+          if (write.idempotencyKey) headers["idempotency-key"] = write.idempotencyKey;
+          if (write.workspaceId) headers["x-workspace-id"] = write.workspaceId;
           const response = await fetch(write.path, {
             method: write.method || "POST",
             credentials: "same-origin",
-            headers: write.body === undefined ? undefined : { "content-type": "application/json" },
+            headers,
             body: write.body === undefined ? undefined : JSON.stringify(write.body),
           });
           if (response.status === 401) {

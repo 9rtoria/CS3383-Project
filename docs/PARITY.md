@@ -21,15 +21,15 @@ Status key:
 |---|---|---|
 | `/api/account` | DONE | Profile update; DELETE anonymizes the user, soft-deletes personal workspaces, revokes tokens/sessions, and audits |
 | `/api/archive` | DONE | Completed and explicitly archived tasks plus archived boards with task counts and versions for restore |
-| `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
+| `/api/attachments` | DONE | Top-level multipart upload with `taskId`, `workspaceId`, and `file`; task-scoped upload remains supported |
 | `/api/attachments/{id}` | DONE | Download/delete |
 | `/api/audit` | DONE | Admin audit feed with cursor pagination and retention purge |
 | `/api/auth/guest` | DONE | Guest session |
 | `/api/auth/magic` | DONE | Session-bound state, SHA-256 token, 15-minute expiry, queued email with development link |
 | `/api/auth/magic/verify` | DONE | One-time atomic consumption, state match, account creation, MFA handoff, safe redirect |
 | `/api/auth/mfa/challenge` | DONE | In-memory 5-minute challenge; TOTP or one-time backup code |
-| `/api/auth/oauth/{provider}` | MISSING | |
-| `/api/auth/oauth/{provider}/callback` | MISSING | |
+| `/api/auth/oauth/{provider}` | DONE | GitHub, Google, and Apple authorisation redirects when the provider env credentials are configured; session-bound state and safe `next` |
+| `/api/auth/oauth/{provider}/callback` | DONE | Code exchange, profile mapping, account linking/creation, guest claim, MFA handoff, session rotation |
 | `/api/auth/signin` | DONE | Password sign-in |
 | `/api/auth/signout` | DONE | Session invalidate |
 | `/api/auth/signup` | DONE | Guest claim supported |
@@ -44,30 +44,30 @@ Status key:
 | `/api/boards/{id}/duplicate` | DONE | Copies columns, tasks, labels, assignee, and recurrence |
 | `/api/boards/{id}/share` | DONE | Toggle a read-only public link for team workspaces |
 | `/api/share/{token}` | DONE | Public read-only board payload and page |
-| `/api/bootstrap` | DONE | Core payload; no settings/theme bundle yet |
+| `/api/bootstrap` | DONE | User, workspaces, boards/columns, labels, and board-template catalog; personal settings load through `/api/settings` |
 | `/api/calendar` | DONE | Date-range tasks and plan blocks |
 | `/api/calendar/ics` | DONE | Authenticated ICS download |
-| `/api/client-errors` | MISSING | Schema only |
+| `/api/client-errors` | DONE | Public 202 endpoint persists sanitised client errors with user, URL, UA, and request ID |
 | `/api/columns` | DONE | Create with optional `afterId`; template boards seed done columns and WIP limits |
 | `/api/columns/reorder` | DONE | Complete order validation and persisted positions |
 | `/api/columns/{id}` | DONE | Name, WIP limit/enforcement, done flag, position, soft delete with empty-column guard |
 | `/api/export` | DONE | JSON workspace export and formula-safe CSV; private-board filtering; audit |
 | `/api/health` | DONE | |
 | `/api/import` | DONE | CSV/JSON tasks into a board with columns, labels, assignee, due dates, estimates, and skip counts |
-| `/api/insights` | PARTIAL | Basic counts/priority breakdown |
-| `/api/invites/{token}` | PARTIAL | POST accept; no public GET preview |
-| `/api/labels` | MISSING | Labels are created through task input, no label API |
-| `/api/metrics` | MISSING | |
+| `/api/insights` | DONE | Rich board/member/task/totals payload with 14/30/60-day range, timezone-aware overdue and due-this-week counts |
+| `/api/invites/{token}` | DONE | Public GET preview with `canAccept`, POST accept; dedicated `/invite/{token}` page with sign-in handoff |
+| `/api/labels` | DONE | List with task counts plus create/upsert and delete |
+| `/api/metrics` | DONE | Public process metrics; tenant counts only with an authenticated ADMIN workspace scope |
 | `/api/notifications` | DONE | GET + mark read/read-all |
-| `/api/openapi` | MISSING | |
+| `/api/openapi` | DONE | Serves the checked-in OpenAPI 3 description as YAML |
 | `/api/search` | DONE | Tokenized title/description/label search with status, priority, board, label, and date filters; empty query returns recent tasks |
 | `/api/security/mfa` | DONE | Status/sessions, TOTP setup with QR, enable with backup codes, disable guard, session revoke rows |
 | `/api/settings` | PARTIAL | GET/PATCH personal preferences; settings UI ported |
 | `/api/share/{token}` | DONE | Public read-only board payload and `/share/{token}` page |
-| `/api/subtasks/{id}` | PARTIAL | PATCH; DELETE not exposed |
+| `/api/subtasks/{id}` | DONE | PATCH and DELETE with membership and board-visibility checks |
 | `/api/tasks` | DONE | GET list, POST create |
 | `/api/tasks/bulk` | DONE | Complete, archive, delete, and move up to 100 tasks with undo |
-| `/api/tasks/{id}` | DONE | GET/PATCH/DELETE |
+| `/api/tasks/{id}` | DONE | GET/PATCH/DELETE; PATCH supports field-presence-safe due dates, completion/reopen, archived, reminder offsets, dependencies, focus date, labels, recurrence, and versioned conflict handling |
 | `/api/tasks/{id}/comments` | DONE | POST; detail returns comments |
 | `/api/tasks/{id}/move` | DONE | |
 | `/api/tasks/{id}/reorder` | DONE | Keyboard order up/down with undo |
@@ -77,10 +77,10 @@ Status key:
 | `/api/tokens/{id}` | DONE | Revoke token |
 | `/api/undo/{id}` | DONE | Auto-plan, task create/complete/move/delete, board delete, and bulk action undo hooks |
 | `/api/upcoming` | DONE | Due-date groups |
-| `/api/views` | MISSING | Schema only |
+| `/api/views` | DONE | Per-user saved view list, upsert, and delete with filters JSON |
 | `/api/webhooks` | DONE | Admin list/create; Slack, Teams, and generic payloads; signing secret shown once |
 | `/api/webhooks/{id}` | DONE | Enable/disable, URL/events update, delete |
-| `/api/workspaces` | PARTIAL | POST create; no full list/update |
+| `/api/workspaces` | DONE | GET memberships with workspace details and role; POST create |
 | `/api/workspaces/{id}` | DONE | GET workspace/policies, versioned PATCH policies, and DELETE owner workspace with the only-workspace guard |
 | `/api/workspaces/{id}/invites` | DONE | Create invite |
 | `/api/workspaces/{id}/members` | DONE | List/change role/remove |
@@ -107,7 +107,7 @@ Status key:
 | Model | Project3383 status | Notes |
 |---|---|---|
 | User | DONE | `app_user`; soft delete, anonymized credentials, MFA fields prepared |
-| Session | SCHEMA | `auth_session` table; runtime uses HttpSession, account deletion revokes rows |
+| Session | DONE | HttpSession is mirrored to `auth_session` with hashed token, IP hash, UA, MFA timestamp, sliding expiry, touch, revoke, and cross-device enforcement |
 | Workspace | DONE | Soft delete, policies, version; deleted workspaces are excluded from bootstrap and API access |
 | Membership | DONE | |
 | Board | DONE | |
@@ -122,7 +122,7 @@ Status key:
 | ActivityEvent | DONE | Recorded for task, comment, checklist, attachment, Today, and recurrence changes |
 | AuditEvent | DONE | Admin audit log, retention purge, cursor pagination |
 | Reminder | DONE | |
-| View | SCHEMA | No saved-view UI/API |
+| View | DONE | Per-user saved view API and board payload |
 | AutomationRule | DONE | Trigger/conditions/action, board scope, enable/disable, last run |
 | AutomationRun | DONE | Before/after snapshots, activity, audit, 60-second undo |
 | Notification | DONE | |
@@ -136,12 +136,12 @@ Status key:
 | ApiToken | DONE | Bearer auth, workspace scope, expiry, revocation, audit |
 | Webhook | DONE | Kind, URL, enable/disable, event subscriptions, HMAC signing secret |
 | WebhookDelivery | DONE | Persisted payload/status/response, async delivery, retry at 5/15/45 min |
-| IdempotencyKey | SCHEMA | |
+| IdempotencyKey | DONE | 24-hour idempotency cache with replay header and method/path conflict rejection |
 | UndoAction | DONE | Auto-plan and task/board undo records with TTL |
-| EmailMessage | SCHEMA | |
+| EmailMessage | DONE | Magic-link queue plus optional SMTP delivery worker; local development keeps queued rows and surfaces the dev link |
 | JobRun | SCHEMA | |
-| ClientError | SCHEMA | |
-| OAuthAccount | SCHEMA | |
+| ClientError | DONE | Public client-error intake with sanitisation and request context |
+| OAuthAccount | DONE | Provider/account link table used by GitHub, Google, and Apple callback linking |
 | BackupRun | SCHEMA | |
 | FeatureFlag | SCHEMA | |
 
@@ -149,11 +149,11 @@ Status key:
 
 | Area | Status | Notes |
 |---|---|---|
-| Auth / guest / signup / signin / magic link | DONE | Dedicated `/auth` split layout with password, signup, magic-link, guest-claim, and MFA states |
-| App shell / workspace switcher | DONE | |
+| Auth / guest / signup / signin / magic link / OAuth | DONE | Dedicated `/auth` split layout with password, signup, magic-link, guest-claim, MFA, and provider buttons that appear only when GitHub/Google/Apple credentials are configured |
+| App shell / workspace switcher / deep links | DONE | SPA shell plus `/settings`, `/settings#section`, `/offline`, `/invite/{token}`, `?view=`, `?board=`, and `?task=` links |
 | Board / columns / task CRUD | DONE | Board settings, templates, column add/edit/delete/reorder, WIP limits with enforced `WIP_LIMIT` 409s, duplicate, archive/restore, soft delete, visibility |
 | Task archive | DONE | Bulk archive, dedicated Archive view for archived and completed work, reopen, restore, activity, and audit |
-| Task drawer fields | PARTIAL | Assignee and recurrence implemented; reminder display and full label management still partial |
+| Task drawer fields | DONE | Status/column, assignee, due date + time, all-day, estimate, actual time, priority, labels, recurrence, reminder offset, notes, checklist suggestions/deletion, dependencies, attachments, comments, activity, Focus, copy link, archive, complete/reopen |
 | Task comments / checklist | DONE | |
 | Task activity feed | DONE | Task detail activity trail with actors and relative times |
 | Task dependencies | DONE | |
@@ -167,12 +167,12 @@ Status key:
 | Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; exact visual parity pending |
 | Focus Mode | DONE | Full-screen timer, ring, pause/resume, complete, early leave, actual-minutes persistence |
 | Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
-| Calendar / ICS | DONE | Month calendar and ICS download |
+| Calendar / ICS | DONE | Month calendar, configurable week start, selected-day panel with plan blocks/due items, and ICS download |
 | Search / Archive / Upcoming | DONE | Redesigned horizon view with ranges and dated rows; archive shows archived boards plus archived/completed tasks with restore/reopen; search field with status, priority, and board filters |
 | Insights | DONE | Timeline Gantt with 14/30/60-day ranges and a workload view with counts and estimated load |
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
-| Offline / PWA | PARTIAL | Service worker, manifest, cached bootstrap/board/today/settings, offline queue, retry/discard, sync banner; no idempotent replay/conflict resolution |
+| Offline / PWA | DONE | Service worker, manifest, cached bootstrap/board/today/settings, offline queue with per-write idempotency keys, replay, retry/discard, explicit 409 failures, dedicated `/offline` page |
 | i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
 | Webhooks | DONE | Admin CRUD, Slack/Teams/generic payloads, HMAC signature, async delivery with retries, SSRF/HTTPS guard |
@@ -182,21 +182,19 @@ Status key:
 | SSO | DONE | Organization OIDC config with discovery, state/nonce, domain allowlist, encrypted secret, guest linking, MFA handoff, and local fake-provider test |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
-| Notifications / Reminders | DONE | In-app only |
+| Notifications / Reminders | DONE | In-app inbox, unread badge, click-to-open task, polling, visible-tab reminder sound, permission-gated background browser notifications, reminder offsets, and optional SMTP queue delivery |
 | Members / Invites / Roles | DONE | |
 | Account / workspace deletion | DONE | Soft delete with ownership/only-workspace guards, session and token revocation, audit, and offline-cache clearing |
 | Export / Import | DONE | Workspace JSON/CSV export with visibility filtering and CSV injection guard; CSV/JSON task import into a board |
 
 ## 4. Known accepted differences / limitations
 
-- Runtime session is a custom Spring MVC `HttpSession` interceptor, not full Spring Security form login.
-- Full token-based CSRF remains hardening; cookie mutations are protected by Origin validation.
+- Runtime session remains a Spring MVC `HttpSession`, now mirrored to `auth_session` for revocation and device visibility rather than replaced by Spring Security form login.
+- Cookie mutations are protected by Origin/Sec-Fetch-Site validation; no separate token-based CSRF scheme is issued.
 - SQLite schema is managed by Flyway versioned migrations.
-- `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is still mirrored for API compatibility but is no longer the source of truth.
-- Today rebalance/applyPlan are implemented; exact reference ranking and visual parity still need comparison.
-- Auto-plan is settings-aware, mode-aware, refreshable, delegated-cleanup capable, and undoable; safe/delegated recomputation is an approximation of the reference and exact UI parity is still pending.
-- UI is functionally close but not pixel-parity with ProjectA2.
-- No live SMTP or live external OIDC provider verification; SSO is covered by a local fake-provider test.
+- `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is mirrored for API compatibility.
+- External OAuth, SMTP, and OIDC delivery require real provider credentials. The flows are implemented and covered by local contracts; live provider verification remains an environment/deployment check. Apple identity tokens are verified against Apple's JWKS with issuer, audience, and expiry checks.
+- i18n covers the shell, Today, planning, capture, Focus, Sound, Settings, boards, tasks, calendar, archive, search, and new drawer strings; a small number of provider/admin/edge strings remain English.
 
 ## 5. Phase gate
 
@@ -254,14 +252,21 @@ Status key:
 - [x] Sound layer, palettes, volume, typing texture, previews, and localStorage persistence
 - [x] Quick capture natural-language parsing, browser voice capture, and text fallback
 - [x] English / Traditional Chinese translation layer with settings-driven locale
-- [x] Offline/PWA core: service worker, manifest, cached views, write queue, retry/discard, online sync
+- [x] Offline/PWA core: service worker, manifest, cached views, write queue, retry/discard, idempotent online sync, explicit conflict failures
 - [x] Baseline API/unit smoke tests and setup/runbook
+- [x] Board columns APIs, WIP limits/enforcement, templates, archived-board restore
+- [x] Drawer status/due-time/archive/checklist suggestions/deletion/copy-link/reminder-offset parity
+- [x] Calendar selected-day panel and configurable week start
+- [x] Persistent `auth_session` rows with device revocation, idempotency key replay, client-error intake, labels/views/metrics/OpenAPI APIs
+- [x] OAuth provider redirect/callback with GitHub, Google, and JWKS-verified Apple profiles
+- [x] `/settings`, `/settings#section`, `/offline`, `/invite/{token}`, `?view=`, `?board=`, and `?task=` deep links
+- [x] In-process reminder/retention/email delivery workers and optional SMTP transport
+- [x] `SEED_DEMO=true` demo account/workspace seed
 
-## 6. Next work after Phase 0/1
+## 6. Remaining hardening / environment checks
 
-1. Full Spring Security filter-chain migration and token-based CSRF hardening.
-2. Remaining drawer parity for a label manager and reminder editing.
-3. Auto-plan exact safe/delegated recompute and scheduled retention cleanup.
-4. OAuth provider sign-in (GitHub/Google/Apple) if required by the reference scope.
-5. Live-provider SSO/SMTP verification and production deployment hardening.
-6. Keep the acceptance suite current as the remaining limitations are closed.
+1. Full Spring Security filter-chain migration and token-based CSRF if the deployment requires it.
+2. Live OAuth, SMTP, and external OIDC provider verification with real credentials.
+3. HTTPS termination, `Secure` cookies, forwarded-header policy, and production static caching.
+4. Compare auto-plan scoring weights against the reference for exact tie-breaking, though the deterministic behavior and settings contract are implemented.
+5. Complete the last provider/admin/edge Traditional Chinese strings and perform manual NVDA/VoiceOver verification.

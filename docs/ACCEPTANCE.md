@@ -8,13 +8,13 @@ Date: 2026-11-02
 
 | Check | Result |
 |---|---|
-| `./mvnw test` | 27 tests, 0 failures, 0 errors |
+| `./mvnw test` | 30 tests, 0 failures, 0 errors |
 | `./mvnw -DskipTests package` | Passed; executable jar produced |
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
-| Flyway migrations | V1–V9 validated and applied |
+| Flyway migrations | V1–V9 validated and applied; schema advances through the column/WIP migration |
 | Git | Clean working tree at the acceptance commit |
 
-The API smoke suite covers guest sessions, account claim/sign-in, roles and invites, board and task CRUD, drag/move/conflict handling, Today selection and rebalancing, recurrence, comments/checklist/dependencies/attachments, reminders, calendar/upcoming/search/archive/insights, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), and security headers/origin rejection.
+The API smoke suite covers guest sessions, persistent/revocable sessions, account claim/sign-in, roles and invite preview/acceptance, board templates/columns/WIP/archived boards, task CRUD and field-presence-safe PATCH, drag/move/conflict handling, checklist deletion, Today selection and rebalancing, recurrence, comments/dependencies/attachments, reminders, calendar/upcoming/search/archive/rich insights, labels/views/metrics/OpenAPI/client errors, idempotent replay and key conflicts, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), and security headers/origin rejection.
 
 ## Browser acceptance
 
@@ -24,6 +24,10 @@ Playwright browser runs verified:
 - Today selection, capacity card, auto-plan controls, Day Flow, Focus entry point.
 - Board grid/list toggle, search/priority/assignee filters, task counts, card metadata.
 - Board templates (`blank`, `personal-week`, `project-sprint`, `content-calendar`), column create/edit/delete, WIP badges, enforced WIP create/move errors, and archived-board restore from Archive.
+- Task drawer status/column move, due date + time, all-day toggle, reminder offset, checklist suggestions and deletion, complete/reopen toggle, copy-link fallback, archive, and activity.
+- Calendar day selection panel with plan/due rows, configurable Monday/Sunday/Saturday week start, and `?view=calendar` deep link.
+- `/settings` and `/settings#notifications` deep links, `/invite/{token}` preview/sign-in handoff, `/offline` fallback page, and `?board=` / `?task=` deep links.
+- Real persisted sessions with cross-device revoke, idempotent replay header, duplicate-write suppression, and method/path conflict rejection.
 - Calendar month navigation, dated task rows, draw-from-grid selection.
 - Upcoming 7/14/30-day ranges, dated groups, priority/label/time rows, open drawer without losing the view.
 - Archive split into archived and completed, reopen, restore.
@@ -41,6 +45,7 @@ Screenshots are in [`docs/screenshots`](screenshots/):
 |---|---|
 | Today | `today.png` |
 | Board | `board.png` |
+| Board templates | `board-templates.png` |
 | Task drawer | `task-drawer.png` |
 | Calendar | `calendar.png` |
 | Insights | `insights.png` |
@@ -50,6 +55,7 @@ Screenshots are in [`docs/screenshots`](screenshots/):
 | Archive | `archive.png` |
 | Search | `search.png`, `search-filtered.png` |
 | Auth | `auth-signin.png`, `auth-claim.png`, `auth-mfa.png` |
+| Offline page | `offline.png` |
 | Mobile | `mobile-today.png`, `mobile-upcoming.png`, `mobile-search.png` |
 
 ## Accessibility
@@ -80,7 +86,7 @@ Initial bootstrap requests (guest, settings, Today, notifications, board) are is
 ## Security checks
 
 - Security headers verified: CSP, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, no-store on API responses.
-- Session cookie is `HttpOnly`, `SameSite=Lax`, renamed to `DRIFTSESSION`.
+- Session cookie is `HttpOnly`, `SameSite=Lax`, renamed to `DRIFTSESSION`; each session is mirrored to `auth_session` with a hashed token, UA/IP hash, sliding expiry, and revocation checks on every authenticated API request.
 - Unauthenticated `/api/bootstrap` returns 401.
 - Cross-origin unsafe writes return 403 `CSRF_REJECTED` (origin/fetch-site guard).
 - Passwords use BCrypt; API tokens are shown once and stored as SHA-256 hashes; webhook secrets are shown once and delivery payloads are HMAC-signed.
@@ -88,16 +94,19 @@ Initial bootstrap requests (guest, settings, Today, notifications, board) are is
 - MFA secrets are AES-GCM encrypted with a local key; backup codes are one-time hashes; workspace `require_mfa` is enforced on access paths.
 - Webhook and OIDC outbound URLs reject private/non-HTTPS targets unless local-development private access is explicitly enabled.
 - Account/workspace deletion anonymizes credentials, revokes sessions/tokens, hides workspaces from bootstrap, and clears local offline caches.
+- Offline mutations carry per-write idempotency keys; the server replays the stored response, rejects key reuse on a different method/path, and expired keys are purged.
+- Apple OAuth identity tokens are verified against Apple's JWKS; GitHub and Google use provider profile endpoints over TLS.
 
 ## Known limitations (documented, not silent)
 
 These are environment-dependent or intentionally deferred items recorded in [`PARITY.md`](PARITY.md):
 
-1. OAuth provider sign-in (GitHub/Google/Apple) is not implemented; the default local reference configuration also hides these providers. Organization SSO via OIDC is implemented and covered by a fake-provider test.
-2. Magic-link and invite email delivery queue messages and return a development link; no SMTP transport is configured in local development. Live external SSO/SMTP verification therefore remains a deployment check.
-3. A dedicated label manager and reminder editing UI are not present; task drawer label assignment and reminder creation exist.
-4. Auto-plan uses settings-aware preview/apply/refresh/undo and safe/delegated cleanup; an exact recomputation of every reference planning heuristic is approximated.
-5. Production deployment hardening (HTTPS termination, `Secure` cookies, proxy forwarded headers, scheduled retention workers) is not part of the local run profile.
+1. OAuth provider buttons appear only when `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, or `APPLE_CLIENT_ID`/`APPLE_CLIENT_SECRET` are configured. Live provider verification needs real credentials; the default local app hides the buttons.
+2. Magic-link mail is queued and the development link is returned. `spring.mail.*` delivery is implemented, but no live SMTP server is configured for the local acceptance run.
+3. A dedicated standalone label-manager screen is not present; label APIs, label assignment, task-scoped labels, and label counts are implemented. Reminder offsets and custom reminder timestamps are available in the drawer.
+4. Auto-plan is deterministic and settings-aware, with preview/apply/refresh/undo, safe apply, and delegated stale cleanup. It never calls an external model; exact scoring weights may differ slightly from the reference.
+5. Production deployment hardening (HTTPS termination, `Secure` cookies, proxy forwarded headers) is not part of the local profile. Scheduled reminder delivery, retention purge, and email delivery workers do run in-process.
+6. A few provider/admin/edge strings remain English in the Traditional Chinese preview.
 
 ## Runbook
 

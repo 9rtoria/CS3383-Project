@@ -1,5 +1,6 @@
 package com.project3383.api;
 
+import com.project3383.app.SessionService;
 import com.project3383.app.SsoService;
 import com.project3383.auth.AuthInterceptor;
 import com.project3383.auth.CurrentUser;
@@ -23,9 +24,11 @@ import java.util.Map;
 public class SsoController {
 
     private final SsoService ssoService;
+    private final SessionService sessionService;
 
-    public SsoController(SsoService ssoService) {
+    public SsoController(SsoService ssoService, SessionService sessionService) {
         this.ssoService = ssoService;
+        this.sessionService = sessionService;
     }
 
     @GetMapping("/api/workspaces/{workspaceId}/sso")
@@ -67,6 +70,7 @@ public class SsoController {
         }
         session.setAttribute(AuthInterceptor.SESSION_USER, completion.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, true);
+        sessionService.start(session, completion.userId(), null, true);
         return redirect(baseUrl + "/");
     }
 

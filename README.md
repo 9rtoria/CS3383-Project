@@ -12,18 +12,22 @@ Implemented:
 - SQLite schema with Flyway versioned migrations
 - Guest session creation (`POST /api/auth/guest`)
 - Email/password sign-up, sign-in, guest claim, and sign-out
-- Passwordless magic-link sign-in and a dedicated `/auth` page with password, signup, magic-link, and MFA modes
-- Bootstrap payload with workspace, board, and columns
+- Passwordless magic-link sign-in and a dedicated `/auth` page with password, signup, magic-link, MFA, and provider buttons
+- GitHub, Google, and JWKS-verified Apple OAuth redirect/callback with guest claim and account linking
+- Persistent `auth_session` rows with sliding expiry, device/UA visibility, and remote revocation
+- Bootstrap payload with workspaces, boards, columns, labels, and the board-template catalog
 - Workspace create/switch, including a new team workspace
 - Workspace members, invite links, role changes, and member removal
-- Board create/read/update/delete, duplicate, archive, and private visibility
+- Board create/read/update/delete, templates, duplicate, archive/restore, and private visibility
+- Board column create/edit/delete/reorder, WIP limits/enforcement, done columns, and archived boards in Archive
 - Public read-only board share links
 - Task create / update / move / soft-delete APIs
 - Task assignee, recurrence rules, and automatic next-occurrence creation
 - Task detail API with comments, checklist, labels, dependencies, attachments, activity, completion, and reopen
 - Attachment upload/download/delete with local storage, MIME allowlist, and 10 MB limit
-- Task start date, all-day due date, and tracked actual minutes
-- Version-based 409 conflict handling
+- Task start date, all-day due date, due time, reminder offsets, and tracked actual minutes
+- Task drawer status change, complete/reopen toggle, checklist suggestions/deletion, copy link, archive, dependencies, comments, attachments, and activity
+- Version-based 409 conflict handling and field-presence-safe PATCH semantics
 - Today list with capacity and accept/dismiss actions
 - Plain HTML/CSS/JS UI:
   - Today view
@@ -32,15 +36,15 @@ Implemented:
   - Drag task between columns
   - Delete task
   - Sign out
-- JUnit/MockMvc smoke test for guest / task / move / Today
-- Reminders, in-app notifications, and background delivery
+- JUnit/MockMvc suite covering auth/sessions, boards/columns/WIP/templates, task patches, invites, idempotency, labels/views/metrics/OpenAPI, Today, archive, enterprise controls, and security
+- Reminders, in-app notifications, polling, visible-tab chime, permission-gated browser notifications, and optional SMTP delivery
 - Workspace-scoped, per-user Today selection with capacity, reasons, blocked-dependency state, rebalance, and applyPlan
 - Day Flow 24-hour time rail with capacity ring, now marker, chosen/suggested blocks, drag-to-Later, and Rebalance
 - Focus Mode full-screen timer with pause/resume, complete, early leave, and actual-minutes persistence
 - Sound layer and Sound Lab: synthesized interface sounds, three palettes, volume, typing texture, previews, and localStorage persistence
 - Quick Capture with natural-language parsing and browser voice input with text fallback
 - English / Traditional Chinese locale with settings-driven persistence and translated core surfaces
-- Offline/PWA: service worker, manifest, cached views, queued writes, retry/discard, and online sync
+- Offline/PWA: service worker, manifest, cached views, queued writes with idempotency keys, retry/discard, online replay, explicit 409 failures, and a dedicated `/offline` page
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Undo toast actions for task create / complete / move / delete and board delete
@@ -57,17 +61,23 @@ Implemented:
 - Versioned workspace policies for required MFA, automations, attachments, public sharing, archived-task retention, and audit retention, with MFA and attachment enforcement
 - Organization SSO through OIDC discovery/callback with encrypted client secrets, domain allowlists, guest account linking, and MFA handoff
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
-- Calendar month view, tokenized task search with status/priority/board filters, timeline and workload Insights, and redesigned Upcoming/Archive views with reopen and restore
+- Calendar month view with configurable week start and selected-day panel, tokenized task search with status/priority/board filters, rich timeline/workload Insights, and redesigned Upcoming/Archive views with reopen and restore
 - ICS download plus a Settings calendar feed row
+- Labels, saved views, metrics, OpenAPI, client-error intake, and workspace-list APIs
+- `/settings`, `/settings#section`, `/offline`, `/invite/{token}`, `?view=`, `?board=`, and `?task=` deep links
+- `SEED_DEMO=true` demo account/workspace seed (`demo@drift.local` / `DriftDemo123!`)
+- Reminder, retention, and email workers with in-process scheduling
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
 - Settings storage/API (`/api/settings` GET/PATCH) and account profile update (`/api/account` PATCH)
 - Origin-based CSRF protection for cookie-authenticated mutations
 
-Not implemented yet:
+Remaining deployment or verification work:
 
-- Full accessibility, E2E, performance, and final parity sign-off
-- OAuth provider sign-in and live external SSO verification
-- Label manager and reminder editing in the task drawer
+- Live OAuth/SMTP/external OIDC verification with real provider credentials
+- Production HTTPS/`Secure` cookies, forwarded-header policy, and static caching
+- Optional full Spring Security filter-chain/token-based CSRF migration
+- Manual NVDA/VoiceOver pass and the last provider/admin Traditional Chinese strings
+- Exact auto-plan scoring-weight tie-break comparison with the reference
 
 The current Phase 0 parity matrix is at:
 

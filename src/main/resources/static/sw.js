@@ -1,7 +1,7 @@
 /* Project3383 service worker: network-first navigation, cache-first static
  * assets. Authenticated API responses are never cached. Offline writes live
  * in localStorage and are replayed by the browser app. */
-const VERSION = "project3383-v2";
+const VERSION = "project3383-v3";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const PRECACHE = [
@@ -16,6 +16,9 @@ const PRECACHE = [
   "/share.js",
   "/auth.html",
   "/auth.js",
+  "/invite.html",
+  "/invite.js",
+  "/offline.html",
   "/manifest.webmanifest",
   "/icon.svg",
   "/icon-maskable.svg",
@@ -46,6 +49,8 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     const sharePage = url.pathname.startsWith("/share/");
+    const invitePage = url.pathname.startsWith("/invite/");
+    const offlinePage = url.pathname === "/offline";
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -57,7 +62,7 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(async () =>
           (await caches.match(request))
-          || (await caches.match(sharePage ? "/share.html" : "/"))
+          || (await caches.match(offlinePage ? "/offline.html" : invitePage ? "/invite.html" : sharePage ? "/share.html" : "/"))
           || (await caches.match("/index.html"))),
     );
     return;

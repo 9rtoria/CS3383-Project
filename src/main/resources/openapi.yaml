@@ -1,0 +1,505 @@
+openapi: 3.0.3
+info:
+  title: Drift API
+  version: 1.0.0
+  description: Local-first workspace, board, task, planning, and administration API.
+servers:
+  - url: /
+security:
+  - sessionCookie: []
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: DRIFTSESSION
+    bearerToken:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        columnId: { type: string }
+        completed: { type: integer }
+        version: { type: integer }
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        "200": { description: OK }
+  /api/bootstrap:
+    get:
+      summary: Current user and workspace bootstrap
+      responses:
+        "200": { description: Bootstrap payload }
+  /api/auth/guest:
+    post:
+      summary: Create or resume a guest session
+      responses:
+        "200": { description: Session bootstrap }
+  /api/auth/signup:
+    post:
+      summary: Claim a guest session or create an account
+      responses:
+        "200": { description: Session bootstrap }
+  /api/auth/signin:
+    post:
+      summary: Password sign-in
+      responses:
+        "200": { description: Session bootstrap or MFA challenge }
+  /api/auth/magic:
+    post:
+      summary: Request a magic sign-in link
+      responses:
+        "200": { description: Request accepted }
+  /api/auth/magic/verify:
+    get:
+      summary: Verify a magic sign-in link
+      responses:
+        "302": { description: Redirect to the app or MFA challenge }
+  /api/auth/mfa/challenge:
+    post:
+      summary: Complete a sign-in MFA challenge
+      responses:
+        "200": { description: Session bootstrap }
+  /api/auth/sso/{workspaceId}:
+    get:
+      summary: Begin workspace OIDC sign-in
+      parameters:
+        - in: path
+          name: workspaceId
+          required: true
+          schema: { type: string }
+      responses:
+        "302": { description: Redirect to the identity provider }
+  /api/auth/sso/{workspaceId}/callback:
+    get:
+      summary: Complete workspace OIDC sign-in
+      responses:
+        "302": { description: Redirect to the app }
+  /api/auth/signout:
+    delete:
+      summary: Revoke and end the current session
+      responses:
+        "200": { description: Signed out }
+  /api/boards:
+    get:
+      summary: List boards
+      responses:
+        "200": { description: Boards }
+    post:
+      summary: Create a board
+      responses:
+        "200": { description: Created board }
+  /api/boards/{id}:
+    get:
+      summary: Read a board with columns and tasks
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Board payload }
+    patch:
+      summary: Update or archive a board
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Updated board }
+    delete:
+      summary: Soft-delete a board
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted board with undo }
+  /api/boards/{id}/duplicate:
+    post:
+      summary: Duplicate a board
+      responses:
+        "200": { description: Duplicated board }
+  /api/boards/{id}/share:
+    post:
+      summary: Enable or disable a public board link
+      responses:
+        "200": { description: Share state and URL }
+  /api/columns:
+    post:
+      summary: Create a column
+      responses:
+        "201": { description: Created column }
+  /api/columns/reorder:
+    put:
+      summary: Reorder board columns
+      responses:
+        "200": { description: Reordered }
+  /api/columns/{id}:
+    patch:
+      summary: Update a column, WIP limit, done flag, or position
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Updated column }
+    delete:
+      summary: Soft-delete an empty column
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted }
+  /api/tasks:
+    get:
+      summary: List workspace tasks
+      responses:
+        "200": { description: Tasks }
+    post:
+      summary: Create a task
+      responses:
+        "201": { description: Created task }
+  /api/tasks/{id}:
+    get:
+      summary: Read full task detail
+      responses:
+        "200": { description: Task detail }
+    patch:
+      summary: Update a task
+      responses:
+        "200": { description: Updated task }
+    delete:
+      summary: Soft-delete a task
+      responses:
+        "200": { description: Deleted task with undo }
+  /api/tasks/{id}/move:
+    patch:
+      summary: Move a task to a column
+      responses:
+        "200": { description: Moved task }
+  /api/tasks/{id}/reorder:
+    patch:
+      summary: Reorder a task within its column
+      responses:
+        "200": { description: Reordered task }
+  /api/tasks/{id}/complete:
+    post:
+      summary: Complete a task
+      responses:
+        "200": { description: Completed task }
+  /api/tasks/{id}/reopen:
+    post:
+      summary: Reopen a task
+      responses:
+        "200": { description: Reopened task }
+  /api/tasks/{id}/restore:
+    post:
+      summary: Restore an archived task
+      responses:
+        "200": { description: Restored task }
+  /api/tasks/{id}/comments:
+    post:
+      summary: Add a comment
+      responses:
+        "201": { description: Created comment }
+  /api/tasks/{id}/subtasks:
+    post:
+      summary: Add a checklist item
+      responses:
+        "201": { description: Created checklist item }
+  /api/subtasks/{id}:
+    patch:
+      summary: Update a checklist item
+      responses:
+        "200": { description: Updated checklist item }
+    delete:
+      summary: Delete a checklist item
+      responses:
+        "200": { description: Deleted }
+  /api/tasks/{id}/dependencies:
+    post:
+      summary: Add a task dependency
+      responses:
+        "200": { description: Dependencies }
+  /api/tasks/{id}/dependencies/{dependsOnTaskId}:
+    delete:
+      summary: Remove a task dependency
+      responses:
+        "200": { description: Dependencies }
+  /api/tasks/{id}/reminders:
+    post:
+      summary: Add a task reminder
+      responses:
+        "200": { description: Reminders }
+  /api/reminders/{id}:
+    delete:
+      summary: Remove a reminder
+      responses:
+        "200": { description: Reminders }
+  /api/tasks/bulk:
+    post:
+      summary: Complete, archive, move, or delete tasks
+      responses:
+        "200": { description: Bulk result with undo }
+  /api/today:
+    get:
+      summary: Read today's plan and suggestions
+      responses:
+        "200": { description: Today payload }
+    post:
+      summary: Accept, dismiss, rebalance, or apply a plan
+      responses:
+        "200": { description: Updated Today payload }
+  /api/auto-plan:
+    get:
+      summary: Preview a local auto-plan
+      responses:
+        "200": { description: Plan options }
+    post:
+      summary: Apply or clear an auto-plan
+      responses:
+        "200": { description: Plan applied }
+  /api/calendar:
+    get:
+      summary: Read dated tasks and plan blocks
+      responses:
+        "200": { description: Calendar payload }
+  /api/calendar/ics:
+    get:
+      summary: Download an ICS calendar feed
+      responses:
+        "200": { description: ICS document }
+  /api/upcoming:
+    get:
+      summary: Read upcoming due-date groups
+      responses:
+        "200": { description: Upcoming payload }
+  /api/archive:
+    get:
+      summary: Read archived boards and archived/completed tasks
+      responses:
+        "200": { description: Archive payload }
+  /api/search:
+    get:
+      summary: Search tasks
+      responses:
+        "200": { description: Search results }
+  /api/insights:
+    get:
+      summary: Read planning insights
+      responses:
+        "200": { description: Insights payload }
+  /api/labels:
+    get:
+      summary: List workspace labels
+      responses:
+        "200": { description: Labels }
+    post:
+      summary: Create or update a label
+      responses:
+        "200": { description: Label }
+    delete:
+      summary: Delete a label
+      responses:
+        "200": { description: Deleted }
+  /api/views:
+    get:
+      summary: List saved views
+      responses:
+        "200": { description: Views }
+    post:
+      summary: Create or update a saved view
+      responses:
+        "200": { description: View }
+    delete:
+      summary: Delete a saved view
+      responses:
+        "200": { description: Deleted }
+  /api/notifications:
+    get:
+      summary: List notifications
+      responses:
+        "200": { description: Notifications and unread count }
+  /api/notifications/{id}/read:
+    patch:
+      summary: Mark one notification read
+      responses:
+        "200": { description: Notifications }
+  /api/notifications/read-all:
+    patch:
+      summary: Mark every notification read
+      responses:
+        "200": { description: Notifications }
+  /api/attachments:
+    post:
+      summary: Upload an attachment for a task
+      responses:
+        "200": { description: Attachment }
+  /api/attachments/{id}:
+    get:
+      summary: Download an attachment
+      responses:
+        "200": { description: File }
+    delete:
+      summary: Delete an attachment
+      responses:
+        "200": { description: Deleted }
+  /api/workspaces:
+    get:
+      summary: List workspaces for the current user
+      responses:
+        "200": { description: Workspaces }
+    post:
+      summary: Create a workspace
+      responses:
+        "200": { description: Created workspace }
+  /api/workspaces/{id}:
+    get:
+      summary: Read workspace policies
+      responses:
+        "200": { description: Workspace }
+    patch:
+      summary: Update workspace policies
+      responses:
+        "200": { description: Updated workspace }
+    delete:
+      summary: Delete an owned workspace
+      responses:
+        "200": { description: Deleted }
+  /api/workspaces/{id}/members:
+    get:
+      summary: List workspace members
+      responses:
+        "200": { description: Members }
+  /api/workspaces/{id}/invites:
+    post:
+      summary: Invite a member
+      responses:
+        "200": { description: Invite and token }
+  /api/invites/{token}:
+    get:
+      summary: Preview an invitation
+      security: []
+      responses:
+        "200": { description: Invite preview }
+    post:
+      summary: Accept an invitation
+      responses:
+        "200": { description: Accepted workspace bootstrap }
+
+  /api/security/mfa:
+    get:
+      summary: Read MFA status and active sessions
+      responses:
+        "200": { description: Security status }
+    post:
+      summary: Set up, enable, or disable TOTP MFA
+      responses:
+        "200": { description: Security status }
+    delete:
+      summary: Revoke another session
+      responses:
+        "200": { description: Revocation result }
+  /api/tokens:
+    get:
+      summary: List API tokens
+      responses:
+        "200": { description: Tokens }
+    post:
+      summary: Create an API token
+      responses:
+        "201": { description: Token and one-time secret }
+  /api/tokens/{id}:
+    delete:
+      summary: Revoke an API token
+      responses:
+        "200": { description: Revoked }
+  /api/webhooks:
+    get:
+      summary: List webhooks
+      responses:
+        "200": { description: Webhooks }
+    post:
+      summary: Create a webhook
+      responses:
+        "201": { description: Webhook and signing secret }
+  /api/webhooks/{id}:
+    patch:
+      summary: Update a webhook
+      responses:
+        "200": { description: Webhook }
+    delete:
+      summary: Delete a webhook
+      responses:
+        "200": { description: Deleted }
+  /api/automations:
+    get:
+      summary: List automation rules
+      responses:
+        "200": { description: Rules }
+    post:
+      summary: Create an automation rule
+      responses:
+        "201": { description: Rule }
+  /api/automations/preview:
+    post:
+      summary: Preview an automation's impact
+      responses:
+        "200": { description: Preview diff }
+  /api/automations/{id}:
+    patch:
+      summary: Update or enable an automation
+      responses:
+        "200": { description: Rule }
+    delete:
+      summary: Delete an automation
+      responses:
+        "200": { description: Deleted }
+  /api/audit:
+    get:
+      summary: Read the audit log
+      responses:
+        "200": { description: Audit events }
+  /api/export:
+    get:
+      summary: Export workspace data
+      responses:
+        "200": { description: JSON or CSV document }
+  /api/import:
+    post:
+      summary: Import tasks into a board
+      responses:
+        "200": { description: Import result }
+  /api/metrics:
+    get:
+      summary: Read process and workspace metrics
+      security: []
+      responses:
+        "200": { description: Metrics }
+  /api/client-errors:
+    post:
+      summary: Record a client-side error
+      security: []
+      responses:
+        "202": { description: Received }
+  /api/openapi:
+    get:
+      summary: Download this OpenAPI description
+      security: []
+      responses:
+        "200": { description: OpenAPI YAML }
+  /api/share/{token}:
+    get:
+      summary: Read a public shared board
+      security: []
+      responses:
+        "200": { description: Shared board }
+  /api/undo/{id}:
+    post:
+      summary: Undo a recent action
+      responses:
+        "200": { description: Undo result }

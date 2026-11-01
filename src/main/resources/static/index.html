@@ -309,8 +309,9 @@
           </div>
           <aside class="calendar-side">
             <div class="calendar-side-card">
-              <h3>Pick a day</h3>
-              <p>Select a date to read it without the grid.</p>
+              <h3 id="calendarDayTitle">Pick a day</h3>
+              <p id="calendarDayHint">Select a date to read it without the grid.</p>
+              <div id="calendarDayList" class="calendar-day-list" data-i18n-skip></div>
             </div>
             <div class="calendar-side-card">
               <h3>Dated tasks</h3>
@@ -505,6 +506,7 @@
       </div>
       <div id="notificationList" class="detail-list" data-i18n-skip></div>
       <div class="modal-actions">
+        <button type="button" id="notificationSettingsButton" class="btn ghost">Notification settings</button>
         <button type="button" id="markAllReadButton" class="btn">Mark all read</button>
       </div>
     </div>
@@ -612,10 +614,14 @@
       </div>
 
       <form id="taskForm" class="task-form">
-        <div class="field task-title-field">
-          <label for="taskTitle">Title</label>
-          <input id="taskTitle" name="title" class="input" maxlength="300" required autocomplete="off" placeholder="What needs doing?">
+        <div class="task-title-row">
+          <button type="button" id="taskCompleteToggle" class="task-complete-toggle hidden" aria-label="Complete task"></button>
+          <div class="field task-title-field">
+            <label for="taskTitle">Title</label>
+            <input id="taskTitle" name="title" class="input" maxlength="300" required autocomplete="off" placeholder="What needs doing?">
+          </div>
         </div>
+        <div id="taskMetaBadges" class="task-meta-badges" data-i18n-skip></div>
         <div class="field task-notes-field">
           <label for="taskDescription">Notes</label>
           <textarea id="taskDescription" name="description" class="textarea" maxlength="10000" placeholder="Optional context, links, or next steps"></textarea>
@@ -664,8 +670,11 @@
             <input id="taskStart" name="startDate" class="input" type="date">
           </div>
           <div class="field">
-            <label for="taskDue">Due date</label>
-            <input id="taskDue" name="dueDate" class="input" type="date">
+            <label for="taskDue">Due</label>
+            <div class="task-due-controls">
+              <input id="taskDue" name="dueDate" class="input" type="date">
+              <input id="taskDueTime" name="dueTime" class="input" type="time" aria-label="Due time">
+            </div>
           </div>
         </div>
         <div class="form-row">
@@ -674,14 +683,25 @@
             <input id="taskActual" name="actualMinutes" class="input" type="number" min="0" max="1440" step="5" placeholder="0">
           </div>
           <div class="field" id="columnField">
-            <label for="taskColumn">Column</label>
+            <label for="taskColumn" id="taskColumnLabel">Column</label>
             <select id="taskColumn" name="columnId" class="select"></select>
           </div>
         </div>
-        <div class="field">
-          <label style="display:flex;align-items:center;gap:8px;font-weight:500">
+        <div class="form-row">
+          <div class="field">
+            <label for="taskReminderOffset">Reminder</label>
+            <select id="taskReminderOffset" class="select">
+              <option value="">No reminder</option>
+              <option value="0">At due time</option>
+              <option value="10">10 minutes before</option>
+              <option value="30">30 minutes before</option>
+              <option value="60">1 hour before</option>
+              <option value="1440">1 day before</option>
+            </select>
+          </div>
+          <label class="checkbox task-allday-toggle">
             <input id="taskDueAllDay" name="dueAllDay" type="checkbox" checked>
-            All-day due date
+            <span>All-day due date</span>
           </label>
         </div>
         <div id="taskDetail" class="hidden">
@@ -691,9 +711,11 @@
               <span id="subtaskProgress" class="muted small"></span>
             </div>
             <div id="subtaskList" class="detail-list" data-i18n-skip></div>
+            <div id="subtaskSuggestions" class="checklist-suggestions" data-i18n-skip></div>
             <div id="subtaskForm" class="comment-compose">
               <input id="subtaskTitle" class="input" maxlength="300" placeholder="Add a checklist item" aria-label="New checklist item">
               <button type="button" id="subtaskAddButton" class="btn sm">Add</button>
+              <button type="button" id="subtaskSuggestButton" class="btn ghost sm">Suggest</button>
             </div>
           </div>
           <div class="detail-section">
@@ -738,8 +760,10 @@
           <button type="button" id="focusTaskButton" class="btn soft hidden">Focus</button>
           <button type="button" id="completeTaskButton" class="btn spacer hidden">Complete</button>
           <button type="button" id="reopenTaskButton" class="btn spacer hidden">Reopen</button>
+          <button type="button" id="copyTaskLinkButton" class="btn ghost sm hidden">Link</button>
+          <button type="button" id="archiveTaskButton" class="btn ghost sm hidden">Archive</button>
           <button type="button" id="deleteTaskButton" class="btn danger hidden">Delete</button>
-          <button type="button" id="cancelModal" class="btn">Cancel</button>
+          <button type="button" id="cancelModal" class="btn">Close</button>
           <button type="submit" id="saveTaskButton" class="btn primary">Save task</button>
         </div>
       </form>

@@ -41,4 +41,8 @@ public class ApiException extends RuntimeException {
     public static ApiException wipLimit(String message) {
         return new ApiException(HttpStatus.CONFLICT, "WIP_LIMIT", message);
     }
+
+    public static ApiException dependencyBlocked(String message) {
+        return new ApiException(HttpStatus.CONFLICT, "DEPENDENCY_BLOCKED", message);
+    }
 }

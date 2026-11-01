@@ -6,6 +6,12 @@
   const ERROR_MESSAGES = {
     magic_state: "This sign-in link was opened in a different browser. Request a new link.",
     magic_invalid: "This sign-in link is invalid, expired, or has already been used.",
+    provider_unavailable: "That sign-in provider is not configured.",
+    access_denied: "The provider sign-in was cancelled.",
+    missing_code: "The provider did not return a sign-in code.",
+    state_mismatch: "This provider sign-in was opened in a different browser. Try again.",
+    state_invalid: "This provider sign-in expired. Try again.",
+    oauth_failed: "The provider sign-in could not be completed. Try again or use email.",
     sso_unavailable: "Single sign-on is not enabled for that workspace.",
     sso_discovery_failed: "The workspace identity provider could not be reached.",
     sso_failed: "Single sign-on could not be completed. Contact your workspace admin.",
@@ -253,8 +259,30 @@
     });
   }
 
+  async function loadProviders() {
+    try {
+      const result = await api("/api/auth/providers");
+      const providers = result?.providers ?? [];
+      const section = $("oauthSection");
+      const row = $("oauthProviders");
+      if (!providers.length) return;
+      row.replaceChildren();
+      for (const provider of providers) {
+        const link = document.createElement("a");
+        link.className = "oauth-button";
+        link.href = `/api/auth/oauth/${encodeURIComponent(provider.id)}?next=${encodeURIComponent(state.next || "/")}`;
+        link.textContent = `Continue with ${provider.label || provider.id}`;
+        row.append(link);
+      }
+      section.classList.remove("hidden");
+    } catch {
+      // Provider sign-in is optional; password, magic link, and guest access still work.
+    }
+  }
+
   async function init() {
     wire();
+    void loadProviders();
     const initialError = query.get("error");
     if (initialError) showError(ERROR_MESSAGES[initialError] || "Sign-in could not be completed. Please try again.");
     try {

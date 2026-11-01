@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace invitation · Drift</title>
+  <meta name="theme-color" content="#2f6b56">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="auth-body">
+  <main id="main" class="invite-page">
+    <a class="brand invite-brand" href="/" aria-label="Drift home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h12a5 5 0 0 1 0 10H9"/><circle cx="5" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <strong>Drift</strong>
+    </a>
+    <section class="card invite-card" aria-labelledby="inviteTitle">
+      <p class="eyebrow">Workspace invitation</p>
+      <h1 id="inviteTitle" class="page-title">Checking this invitation…</h1>
+      <p id="inviteCopy" class="page-sub">One moment while Drift reads the invite.</p>
+      <div id="inviteMeta" class="invite-meta"></div>
+      <div id="inviteError" class="auth-error hidden" role="alert"></div>
+      <div class="invite-actions">
+        <a class="btn ghost" href="/">Back to app</a>
+        <a id="inviteSignIn" class="btn hidden" href="/auth">Sign in</a>
+        <button id="inviteAccept" class="btn primary hidden" type="button">Accept invitation</button>
+      </div>
+    </section>
+  </main>
+  <script src="/i18n.js" defer></script>
+  <script src="/invite.js" defer></script>
+</body>
+</html>

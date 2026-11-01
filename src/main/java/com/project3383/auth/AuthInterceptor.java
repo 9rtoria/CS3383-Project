@@ -2,6 +2,7 @@ package com.project3383.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project3383.app.ApiTokenService;
+import com.project3383.app.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -20,13 +21,18 @@ public class AuthInterceptor implements HandlerInterceptor {
     public static final String TOKEN_WORKSPACE = "project3383.tokenWorkspaceId";
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApiTokenService apiTokenService;
+    private final SessionService sessionService;
 
-    public AuthInterceptor(ApiTokenService apiTokenService) {
+    public AuthInterceptor(ApiTokenService apiTokenService, SessionService sessionService) {
         this.apiTokenService = apiTokenService;
+        this.sessionService = sessionService;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        if ("GET".equals(request.getMethod()) && request.getRequestURI().matches("^/api/invites/[^/]+$")) {
+            return true;
+        }
         String authorization = request.getHeader("Authorization");
         if (authorization != null && authorization.startsWith("Bearer ")) {
             Map<String, Object> token = apiTokenService.authenticate(authorization.substring(7).trim());
@@ -64,6 +70,21 @@ public class AuthInterceptor implements HandlerInterceptor {
                     )));
                     return false;
                 }
+            }
+            if (!sessionService.touch(session, userId.toString())) {
+                try {
+                    session.invalidate();
+                } catch (IllegalStateException ignored) {
+                    // Session was already invalidated.
+                }
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.setCharacterEncoding("UTF-8");
+                response.getWriter().write(objectMapper.writeValueAsString(Map.of(
+                    "code", "UNAUTHORIZED",
+                    "message", "This session has expired or was revoked."
+                )));
+                return false;
             }
             return true;
         }
