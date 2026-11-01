@@ -247,5 +247,22 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/today").session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.planBlocks").isArray());
+
+        mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .header("Origin", "https://evil.example")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(taskJson))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/settings").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings.capacity_minutes").value(300));
+        mockMvc.perform(patch("/api/settings")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("capacityMinutes", 240))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings.capacity_minutes").value(240));
     }
 }

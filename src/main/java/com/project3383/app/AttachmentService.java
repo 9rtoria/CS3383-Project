@@ -57,7 +57,7 @@ public class AttachmentService {
         String mimeType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
         if (!ALLOWED.contains(mimeType)) throw ApiException.badRequest("That file type is not allowed.");
         Map<String, Object> task = task(taskId);
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMember(userId, (String) task.get("workspaceId"));
 
         String original = sanitizeName(file.getOriginalFilename());
         String extension = "";
@@ -110,7 +110,7 @@ public class AttachmentService {
             WHERE a.id = ? AND a.deleted_at IS NULL
             """, attachmentId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Attachment not found."));
-        requireMembership(userId, (String) row.get("workspaceId"));
+        requireMember(userId, (String) row.get("workspaceId"));
         jdbc.update("UPDATE attachment SET deleted_at = ? WHERE id = ?", Instant.now().toString(), attachmentId);
         try { Files.deleteIfExists(directory.resolve((String) row.get("storageName"))); } catch (IOException ignored) { }
         return Map.of("deleted", true);
@@ -135,6 +135,15 @@ public class AttachmentService {
             SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Task not found.");
+    }
+
+    private void requireMember(String userId, String workspaceId) {
+        String role = jdbc.queryForList("""
+            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            """, userId, workspaceId).stream().findFirst()
+            .map(row -> row.get("role").toString())
+            .orElseThrow(() -> ApiException.notFound("Task not found."));
+        if ("GUEST".equals(role)) throw ApiException.forbidden("You do not have permission for this action.");
     }
 
     private String sanitizeName(String name) {

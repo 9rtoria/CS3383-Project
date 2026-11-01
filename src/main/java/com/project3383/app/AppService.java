@@ -274,7 +274,7 @@ public class AppService {
         if (input == null || blank(input.workspaceId()) || blank(input.name())) {
             throw ApiException.badRequest("Workspace and board name are required.");
         }
-        requireMembership(userId, input.workspaceId());
+        requireMinimumRole(userId, input.workspaceId(), "MEMBER");
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM board WHERE workspace_id = ?", Integer.class, input.workspaceId());
         if (count != null && count >= 20) throw ApiException.badRequest("This workspace already has the maximum number of boards.");
         int position = jdbc.queryForObject("""
@@ -377,7 +377,7 @@ public class AppService {
             throw ApiException.badRequest("A task and action are required.");
         }
         Map<String, Object> task = taskRow(input.taskId());
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         String today = LocalDate.now().toString();
         if ("accept".equals(input.action())) {
             jdbc.update("""
@@ -403,7 +403,7 @@ public class AppService {
     public Map<String, Object> createTask(String userId, ApiDtos.TaskCreate input) {
         if (input == null || blank(input.title())) throw ApiException.badRequest("Task title is required.");
         String workspaceId = input.workspaceId();
-        requireMembership(userId, workspaceId);
+        requireMinimumRole(userId, workspaceId, "MEMBER");
         Map<String, Object> column = jdbc.queryForList("""
             SELECT c.id, c.board_id AS boardId, b.workspace_id AS workspaceId
             FROM board_column c JOIN board b ON b.id = c.board_id
@@ -457,7 +457,7 @@ public class AppService {
 
     public Map<String, Object> addComment(String userId, String taskId, ApiDtos.CommentCreate input) {
         Map<String, Object> task = taskRow(taskId);
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         if (input == null || blank(input.body())) throw ApiException.badRequest("Comment text is required.");
         String commentId = id();
         jdbc.update("""
@@ -473,7 +473,7 @@ public class AppService {
 
     public Map<String, Object> addSubtask(String userId, String taskId, ApiDtos.SubtaskCreate input) {
         Map<String, Object> task = taskRow(taskId);
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         if (input == null || blank(input.title())) throw ApiException.badRequest("Checklist title is required.");
         int position = jdbc.queryForObject("""
             SELECT COALESCE(MAX(position), -1) + 1 FROM subtask WHERE task_id = ?
@@ -489,7 +489,7 @@ public class AppService {
     public Map<String, Object> updateSubtask(String userId, String subtaskId, ApiDtos.SubtaskUpdate input) {
         Map<String, Object> subtask = subtaskRow(subtaskId);
         Map<String, Object> task = taskRow((String) subtask.get("taskId"));
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         String title = input == null || input.title() == null ? (String) subtask.get("title") : input.title().trim();
         if (blank(title)) throw ApiException.badRequest("Checklist title is required.");
         boolean completed = input != null && input.completed() != null
@@ -512,7 +512,7 @@ public class AppService {
 
     public Map<String, Object> addDependency(String userId, String taskId, ApiDtos.DependencyCreate input) {
         Map<String, Object> task = taskRow(taskId);
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         if (input == null || blank(input.dependsOnTaskId())) throw ApiException.badRequest("Choose a task to wait on.");
         if (taskId.equals(input.dependsOnTaskId())) throw ApiException.badRequest("A task cannot depend on itself.");
         Map<String, Object> dependency = taskRow(input.dependsOnTaskId());
@@ -530,7 +530,7 @@ public class AppService {
 
     public Map<String, Object> removeDependency(String userId, String taskId, String dependsOnTaskId) {
         Map<String, Object> task = taskRow(taskId);
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         jdbc.update("""
             DELETE FROM task_dependency WHERE task_id = ? AND depends_on_task_id = ?
             """, taskId, dependsOnTaskId);
@@ -570,7 +570,7 @@ public class AppService {
 
     public Map<String, Object> addReminder(String userId, String taskId, ApiDtos.ReminderCreate input) {
         Map<String, Object> task = taskRow(taskId);
-        requireMembership(userId, (String) task.get("workspaceId"));
+        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
         if (input == null || blank(input.remindAt())) throw ApiException.badRequest("Choose a reminder time.");
         Instant remindAt;
         try {
@@ -616,7 +616,7 @@ public class AppService {
 
     public Map<String, Object> updateTask(String userId, String taskId, ApiDtos.TaskUpdate input) {
         Map<String, Object> current = taskRow(taskId);
-        requireMembership(userId, (String) current.get("workspaceId"));
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
         int version = input.version() == null ? -1 : input.version();
         if (version != ((Number) current.get("version")).intValue()) {
             throw ApiException.conflict("This task changed elsewhere.", ((Number) current.get("version")).intValue());
@@ -650,7 +650,7 @@ public class AppService {
 
     public Map<String, Object> moveTask(String userId, String taskId, ApiDtos.TaskMove input) {
         Map<String, Object> current = taskRow(taskId);
-        requireMembership(userId, (String) current.get("workspaceId"));
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
         int version = input.version() == null ? -1 : input.version();
         if (version != ((Number) current.get("version")).intValue()) {
             throw ApiException.conflict("This task changed elsewhere.", ((Number) current.get("version")).intValue());
@@ -672,7 +672,7 @@ public class AppService {
 
     public Map<String, Object> deleteTask(String userId, String taskId) {
         Map<String, Object> current = taskRow(taskId);
-        requireMembership(userId, (String) current.get("workspaceId"));
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
         jdbc.update("""
             UPDATE task SET deleted_at = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL
             """, Instant.now().toString(), taskId);
@@ -681,7 +681,7 @@ public class AppService {
 
     public Map<String, Object> completeTask(String userId, String taskId, boolean completed) {
         Map<String, Object> current = taskRow(taskId);
-        requireMembership(userId, (String) current.get("workspaceId"));
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
         Map<String, Object> column = jdbc.queryForList("""
             SELECT id FROM board_column
             WHERE board_id = ? AND is_done = ? ORDER BY position LIMIT 1

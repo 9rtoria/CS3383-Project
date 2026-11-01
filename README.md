@@ -4,12 +4,12 @@ A new implementation of the Drift task planner, built with **Java + Spring Boot 
 
 ## Current milestone
 
-This is the first runnable vertical slice, not the full parity build yet.
+This is a working phased implementation, not the full parity build yet. See `docs/PARITY.md` for the honest API/model/UI status.
 
 Implemented:
 
 - Spring Boot 3.5 application on port `3383`
-- SQLite schema and automatic initialization
+- SQLite schema with Flyway versioned migrations
 - Guest session creation (`POST /api/auth/guest`)
 - Email/password sign-up, sign-in, guest claim, and sign-out
 - Bootstrap payload with workspace, board, and columns
@@ -32,6 +32,8 @@ Implemented:
 - JUnit/MockMvc smoke test for guest ??task ??move ??Today
 - Reminders, in-app notifications, and background delivery
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
+- Settings storage/API (`/api/settings` GET/PATCH)
+- Origin-based CSRF protection for cookie-authenticated mutations
 
 Not implemented yet:
 
@@ -39,6 +41,10 @@ Not implemented yet:
 - SSO/MFA/API tokens/Webhooks/Automations
 - Offline/PWA, Focus Mode, voice, sound, i18n
 - Full visual and behavioral parity with `ProjectA2`
+
+The current Phase 0 parity matrix is at:
+
+`docs/PARITY.md`
 
 The full phased checklist is at:
 
