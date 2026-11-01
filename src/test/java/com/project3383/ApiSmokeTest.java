@@ -205,5 +205,12 @@ class ApiSmokeTest {
                 ))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.suggestions[?(@.title == 'Smoke task')]").isEmpty());
+
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/complete").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.completed").value(1));
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/reopen").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.completed").value(0));
     }
 }

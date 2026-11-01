@@ -631,6 +631,21 @@ public class AppService {
         return Map.of("deleted", true);
     }
 
+    public Map<String, Object> completeTask(String userId, String taskId, boolean completed) {
+        Map<String, Object> current = taskRow(taskId);
+        requireMembership(userId, (String) current.get("workspaceId"));
+        Map<String, Object> column = jdbc.queryForList("""
+            SELECT id FROM board_column
+            WHERE board_id = ? AND is_done = ? ORDER BY position LIMIT 1
+            """, current.get("boardId"), completed ? 1 : 0).stream().findFirst()
+            .orElseThrow(() -> ApiException.badRequest("This board has no suitable column."));
+        jdbc.update("""
+            UPDATE task SET column_id = ?, version = version + 1, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL
+            """, column.get("id"), Instant.now().toString(), taskId);
+        return linked(Map.of("task", task(userId, taskId)));
+    }
+
     private List<Map<String, Object>> boards(String userId, String workspaceId) {
         List<Map<String, Object>> boards = jdbc.queryForList("""
             SELECT b.id, b.name, b.position FROM board b
@@ -652,9 +667,11 @@ public class AppService {
                    t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes,
-                   t.focus_date AS focusDate, t.version, t.updated_at AS updatedAt
+                   t.focus_date AS focusDate, t.version, t.updated_at AS updatedAt,
+                   c.is_done AS completed
             FROM task t
             JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
             WHERE t.board_id = ? AND t.column_id = ? AND t.deleted_at IS NULL
               AND b.workspace_id = t.workspace_id
             ORDER BY t.position, t.created_at
@@ -684,11 +701,12 @@ public class AppService {
 
     private Map<String, Object> taskRow(String taskId) {
         return jdbc.queryForList("""
-            SELECT id, workspace_id AS workspaceId, board_id AS boardId, column_id AS columnId,
-                   title, description, priority, start_date AS startDate, due_date AS dueDate,
-                   due_all_day AS dueAllDay, estimate_minutes AS estimateMinutes,
-                   actual_minutes AS actualMinutes, version
-            FROM task WHERE id = ? AND deleted_at IS NULL
+            SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId, t.column_id AS columnId,
+                   t.title, t.description, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
+                   t.actual_minutes AS actualMinutes, t.version, c.is_done AS completed
+            FROM task t JOIN board_column c ON c.id = t.column_id
+            WHERE t.id = ? AND t.deleted_at IS NULL
             """, taskId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Task not found."));
     }

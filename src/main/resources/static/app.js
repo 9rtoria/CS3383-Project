@@ -514,6 +514,9 @@
     if (columnId) $("taskColumn").value = columnId;
     else if (task?.columnId) $("taskColumn").value = task.columnId;
     $("columnField").classList.toggle("hidden", Boolean(task));
+    const completed = Boolean(task) && Number(task.completed) === 1;
+    $("completeTaskButton").classList.toggle("hidden", !task || completed);
+    $("reopenTaskButton").classList.toggle("hidden", !task || !completed);
     $("deleteTaskButton").classList.toggle("hidden", !task);
     $("taskModal").classList.remove("hidden");
     window.setTimeout(() => $("taskTitle").focus(), 20);
@@ -765,6 +768,20 @@
     }
   }
 
+  async function setTaskCompleted(completed) {
+    if (!state.editing) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/${completed ? "complete" : "reopen"}`, {
+        method: "POST",
+      });
+      closeModal();
+      await loadBoard(state.currentBoardId);
+      await loadToday();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   async function deleteTask() {
     const task = state.editing;
     if (!task || !window.confirm(`Delete “${task.title}”?`)) return;
@@ -809,6 +826,8 @@
       if (event.key === "Enter") { event.preventDefault(); void addSubtask(); }
     });
     $("deleteTaskButton").addEventListener("click", deleteTask);
+    $("completeTaskButton").addEventListener("click", () => setTaskCompleted(true));
+    $("reopenTaskButton").addEventListener("click", () => setTaskCompleted(false));
     $("authButton").addEventListener("click", openAuthModal);
     $("closeAuthModal").addEventListener("click", closeAuthModal);
     $("authModeButton").addEventListener("click", () => setAuthMode(state.authMode === "signin" ? "signup" : "signin"));

@@ -17,7 +17,7 @@ Implemented:
 - Workspace members, invite links, role changes, and member removal
 - Board create/read API
 - Task create / update / move / soft-delete APIs
-- Task detail API with comments, checklist, labels, dependencies, and attachments
+- Task detail API with comments, checklist, labels, dependencies, attachments, completion, and reopen
 - Attachment upload/download/delete with local storage, MIME allowlist, and 10 MB limit
 - Task start date, all-day due date, and tracked actual minutes
 - Version-based 409 conflict handling
@@ -97,6 +97,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | GET | `/api/tasks/{id}` | Task detail with comments and checklist |
 | PATCH | `/api/tasks/{id}` | Update a task with version check |
 | PATCH | `/api/tasks/{id}/move` | Move a task to another column |
+| POST | `/api/tasks/{id}/complete` | Move a task to the Done column |
+| POST | `/api/tasks/{id}/reopen` | Move a task back to the first open column |
 | DELETE | `/api/tasks/{id}` | Soft-delete a task |
 | POST | `/api/tasks/{id}/comments` | Add a comment |
 | POST | `/api/tasks/{id}/subtasks` | Add a checklist item |

@@ -75,6 +75,16 @@ public class TaskController {
         return appService.moveTask(CurrentUser.id(session), id, input);
     }
 
+    @PostMapping("/{id}/complete")
+    public Map<String, Object> complete(HttpSession session, @PathVariable String id) {
+        return appService.completeTask(CurrentUser.id(session), id, true);
+    }
+
+    @PostMapping("/{id}/reopen")
+    public Map<String, Object> reopen(HttpSession session, @PathVariable String id) {
+        return appService.completeTask(CurrentUser.id(session), id, false);
+    }
+
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(HttpSession session, @PathVariable String id) {
         return appService.deleteTask(CurrentUser.id(session), id);
