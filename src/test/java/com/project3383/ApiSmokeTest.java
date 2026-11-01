@@ -165,10 +165,20 @@ class ApiSmokeTest {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.subtask.title").value("First step"));
 
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/reminders")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "remindAt", java.time.Instant.now().plusSeconds(3600).toString()
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reminders[0].channel").value("in_app"));
+
         mockMvc.perform(get("/api/tasks/" + task.path("id").asText()).session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.comments[0].body").value("First comment"))
-            .andExpect(jsonPath("$.task.subtasks[0].title").value("First step"));
+            .andExpect(jsonPath("$.task.subtasks[0].title").value("First step"))
+            .andExpect(jsonPath("$.task.reminders[0].channel").value("in_app"));
 
         mockMvc.perform(post("/api/workspaces/" + workspaceId + "/invites")
                 .session(session)

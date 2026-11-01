@@ -105,6 +105,37 @@ CREATE TABLE IF NOT EXISTS task_label (
     FOREIGN KEY (label_id) REFERENCES label(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS reminder (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    remind_at TEXT NOT NULL,
+    sent_at TEXT,
+    channel TEXT NOT NULL DEFAULT 'in_app',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reminder_due ON reminder(sent_at, remind_at);
+CREATE INDEX IF NOT EXISTS idx_reminder_task ON reminder(task_id, user_id);
+
+CREATE TABLE IF NOT EXISTS notification (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    workspace_id TEXT,
+    task_id TEXT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    link TEXT,
+    read_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_user ON notification(user_id, read_at, created_at);
+
 CREATE TABLE IF NOT EXISTS attachment (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,

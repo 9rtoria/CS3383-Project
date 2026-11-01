@@ -30,10 +30,10 @@ Implemented:
   - Delete task
   - Sign out
 - JUnit/MockMvc smoke test for guest ??task ??move ??Today
+- Reminders, in-app notifications, and background delivery
 
 Not implemented yet:
 
-- Task drawer parity (reminders)
 - Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
 - SSO/MFA/API tokens/Webhooks/Automations
@@ -106,6 +106,11 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/tasks/{id}/attachments` | Upload an attachment |
 | GET | `/api/attachments/{id}` | Download an attachment |
 | DELETE | `/api/attachments/{id}` | Delete an attachment |
+| POST | `/api/tasks/{id}/reminders` | Set a reminder |
+| DELETE | `/api/reminders/{id}` | Remove a reminder |
+| GET | `/api/notifications` | List in-app notifications |
+| PATCH | `/api/notifications/{id}/read` | Mark one notification read |
+| PATCH | `/api/notifications/read-all` | Mark all notifications read |
 
 ## Guardrails
 

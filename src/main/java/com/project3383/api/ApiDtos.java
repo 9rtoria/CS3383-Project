@@ -104,4 +104,9 @@ public final class ApiDtos {
         String dependsOnTaskId
     ) {
     }
+
+    public record ReminderCreate(
+        String remindAt
+    ) {
+    }
 }

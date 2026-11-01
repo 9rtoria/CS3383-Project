@@ -442,6 +442,7 @@ public class AppService {
             SELECT id, name, mime_type AS mimeType, size, created_at AS createdAt
             FROM attachment WHERE task_id = ? AND deleted_at IS NULL ORDER BY created_at DESC
             """, taskId));
+        task.put("reminders", reminderList(taskId, userId));
         return linked(Map.of("task", task));
     }
 
@@ -556,6 +557,44 @@ public class AppService {
             for (String next : graph.getOrDefault(current, List.of())) queue.add(next);
         }
         return false;
+    }
+
+    public Map<String, Object> addReminder(String userId, String taskId, ApiDtos.ReminderCreate input) {
+        Map<String, Object> task = taskRow(taskId);
+        requireMembership(userId, (String) task.get("workspaceId"));
+        if (input == null || blank(input.remindAt())) throw ApiException.badRequest("Choose a reminder time.");
+        Instant remindAt;
+        try {
+            remindAt = Instant.parse(input.remindAt());
+        } catch (Exception exception) {
+            throw ApiException.badRequest("Reminder time must be an ISO instant.");
+        }
+        if (remindAt.isBefore(Instant.now().plusSeconds(30))) throw ApiException.badRequest("Reminder must be in the future.");
+        String reminderId = id();
+        jdbc.update("""
+            INSERT INTO reminder (id, task_id, user_id, remind_at, channel, created_at)
+            VALUES (?, ?, ?, ?, 'in_app', ?)
+            """, reminderId, taskId, userId, remindAt.toString(), Instant.now().toString());
+        return linked(Map.of("reminders", reminderList(taskId, userId)));
+    }
+
+    public Map<String, Object> removeReminder(String userId, String reminderId) {
+        Map<String, Object> row = jdbc.queryForList("""
+            SELECT r.task_id AS taskId, t.workspace_id AS workspaceId
+            FROM reminder r JOIN task t ON t.id = r.task_id
+            WHERE r.id = ? AND r.user_id = ?
+            """, reminderId, userId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Reminder not found."));
+        requireMembership(userId, (String) row.get("workspaceId"));
+        jdbc.update("DELETE FROM reminder WHERE id = ? AND user_id = ?", reminderId, userId);
+        return linked(Map.of("reminders", reminderList((String) row.get("taskId"), userId)));
+    }
+
+    private List<Map<String, Object>> reminderList(String taskId, String userId) {
+        return jdbc.queryForList("""
+            SELECT id, remind_at AS remindAt, sent_at AS sentAt, channel
+            FROM reminder WHERE task_id = ? AND user_id = ? ORDER BY remind_at
+            """, taskId, userId);
     }
 
     private Map<String, Object> subtaskRow(String subtaskId) {

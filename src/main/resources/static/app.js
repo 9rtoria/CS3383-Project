@@ -11,6 +11,7 @@
     editing: null,
     detail: null,
     workspaceTasks: [],
+    notifications: [],
     authMode: "signin",
   };
 
@@ -88,6 +89,7 @@
       renderSidebar();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
       await loadToday();
+      await loadNotifications();
       setView("today");
       const inviteToken = new URLSearchParams(location.search).get("invite");
       if (inviteToken) {
@@ -165,6 +167,48 @@
 
   function closeAuthModal() {
     $("authModal").classList.add("hidden");
+  }
+
+  async function loadNotifications() {
+    try {
+      const result = await request("/api/notifications");
+      state.notifications = result.notifications ?? [];
+      $("notificationCount").textContent = String(result.unreadCount ?? 0);
+    } catch {
+      // Notification polling must never interrupt the main workspace flow.
+    }
+  }
+
+  async function openNotificationsModal() {
+    await loadNotifications();
+    renderNotifications();
+    $("notificationsModal").classList.remove("hidden");
+  }
+
+  function renderNotifications() {
+    const list = $("notificationList");
+    list.replaceChildren();
+    if (!state.notifications.length) list.append(element("div", "empty", "No notifications."));
+    for (const notification of state.notifications) {
+      const row = element("div", `detail-item${notification.readAt ? "" : " unread"}`);
+      const grow = element("div", "grow");
+      grow.append(element("strong", "", notification.title));
+      if (notification.body) grow.append(element("p", "", notification.body));
+      grow.append(element("p", "small muted", new Date(notification.createdAt).toLocaleString()));
+      row.append(grow);
+      list.append(row);
+    }
+  }
+
+  async function markAllRead() {
+    try {
+      const result = await request("/api/notifications/read-all", { method: "PATCH" });
+      state.notifications = result.notifications ?? [];
+      $("notificationCount").textContent = String(result.unreadCount ?? 0);
+      renderNotifications();
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   async function openMembersModal() {
@@ -495,6 +539,7 @@
     $("dependencyList").replaceChildren();
     $("dependencySelect").replaceChildren();
     $("attachmentList").replaceChildren();
+    $("reminderList").replaceChildren();
     $("subtaskProgress").textContent = "";
     const board = currentBoard();
     const columns = board?.columns ?? [];
@@ -608,6 +653,48 @@
       remove.addEventListener("click", () => deleteAttachment(attachment.id));
       row.append(link, size, remove);
       attachmentList.append(row);
+    }
+
+    const reminders = task.reminders ?? [];
+    const reminderList = $("reminderList");
+    reminderList.replaceChildren();
+    if (!reminders.length) reminderList.append(element("div", "empty", "No reminder set."));
+    for (const reminder of reminders) {
+      const row = element("div", "detail-item");
+      const text = reminder.sentAt
+        ? `Sent ${new Date(reminder.remindAt).toLocaleString()}`
+        : new Date(reminder.remindAt).toLocaleString();
+      const label = element("span", "grow", text);
+      const remove = element("button", "btn ghost sm", "Remove");
+      remove.type = "button";
+      remove.addEventListener("click", () => removeReminder(reminder.id));
+      row.append(label, remove);
+      reminderList.append(row);
+    }
+  }
+
+  async function addReminder() {
+    const value = $("reminderAt").value;
+    if (!value || !state.editing) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/reminders`, {
+        method: "POST",
+        body: { remindAt: new Date(value).toISOString() },
+      });
+      $("reminderAt").value = "";
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function removeReminder(id) {
+    if (!state.editing) return;
+    try {
+      await request(`/api/reminders/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
     }
   }
 
@@ -808,6 +895,12 @@
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
     $("newBoardButton").addEventListener("click", createBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);
+    $("notificationsButton").addEventListener("click", openNotificationsModal);
+    $("closeNotificationsModal").addEventListener("click", () => $("notificationsModal").classList.add("hidden"));
+    $("markAllReadButton").addEventListener("click", markAllRead);
+    $("notificationsModal").addEventListener("click", (event) => {
+      if (event.target === $("notificationsModal")) $("notificationsModal").classList.add("hidden");
+    });
     $("membersButton").addEventListener("click", openMembersModal);
     $("closeMembersModal").addEventListener("click", () => $("membersModal").classList.add("hidden"));
     $("inviteButton").addEventListener("click", inviteMember);
@@ -822,6 +915,7 @@
     $("commentAddButton").addEventListener("click", addComment);
     $("dependencyAddButton").addEventListener("click", addDependency);
     $("attachmentUploadButton").addEventListener("click", uploadAttachment);
+    $("reminderAddButton").addEventListener("click", addReminder);
     $("subtaskTitle").addEventListener("keydown", (event) => {
       if (event.key === "Enter") { event.preventDefault(); void addSubtask(); }
     });

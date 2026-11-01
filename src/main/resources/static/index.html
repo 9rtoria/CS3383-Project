@@ -50,6 +50,7 @@
         </div>
         <div class="top-actions">
           <span id="dateChip" class="date-chip"></span>
+          <button type="button" id="notificationsButton" class="btn">Notifications <span id="notificationCount">0</span></button>
           <button type="button" id="newTaskButton" class="btn primary">New task</button>
         </div>
       </header>
@@ -75,6 +76,22 @@
         <div id="board" class="board"></div>
       </section>
     </main>
+  </div>
+
+  <div id="notificationsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="notificationsTitle">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Inbox</p>
+          <h2 id="notificationsTitle">Notifications</h2>
+        </div>
+        <button type="button" id="closeNotificationsModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <div id="notificationList" class="detail-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="markAllReadButton" class="btn">Mark all read</button>
+      </div>
+    </div>
   </div>
 
   <div id="membersModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="membersTitle">
@@ -231,6 +248,14 @@
             <div class="comment-compose">
               <input id="attachmentInput" class="input" type="file" aria-label="Attachment file">
               <button type="button" id="attachmentUploadButton" class="btn sm">Upload</button>
+            </div>
+          </div>
+          <div class="detail-section">
+            <h3>Reminder</h3>
+            <div id="reminderList" class="detail-list"></div>
+            <div class="comment-compose">
+              <input id="reminderAt" class="input" type="datetime-local" aria-label="Reminder time">
+              <button type="button" id="reminderAddButton" class="btn sm">Add</button>
             </div>
           </div>
         </div>
