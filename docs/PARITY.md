@@ -97,6 +97,7 @@ Status key:
 | `DELETE /api/reminders/{id}` | DONE | |
 | `PATCH /api/notifications/{id}/read` | DONE | |
 | `PATCH /api/notifications/read-all` | DONE | |
+| `POST /api/tasks/{id}/focus` | DONE | Atomic actual-minutes logging and optional completion (rewrite addition) |
 
 ## 2. Data model parity (37 reference models)
 
@@ -156,12 +157,13 @@ Status key:
 | Task completion / reopen | DONE | |
 | Labels | PARTIAL | Task-scoped labels; no label manager |
 | Today / capacity / accept / dismiss | DONE | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies, rebalance/applyPlan |
-| Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; Focus handoff and exact visual parity pending |
+| Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; exact visual parity pending |
+| Focus Mode | DONE | Full-screen timer, ring, pause/resume, complete, early leave, actual-minutes persistence |
 | Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
 | Calendar / ICS | DONE | Month calendar and ICS download |
 | Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
 | Insights | PARTIAL | Basic counts; full reference views missing |
-| Settings / Focus / Voice / Sound | PARTIAL | Personal settings UI (account, appearance, language, planning, auto-plan, focus, notifications, features); Focus/Voice/Sound surfaces missing |
+| Settings / Voice / Sound | PARTIAL | Personal Settings UI done; Voice/Sound surfaces missing |
 | Offline / PWA | MISSING | |
 | i18n | MISSING | |
 | Public board share | MISSING | |
@@ -211,6 +213,7 @@ Status key:
 - [x] Auto-plan safe/full/delegated modes, refresh, task-change invalidation, and stale cleanup
 - [x] Today rebalance and applyPlan actions
 - [x] Day Flow 24-hour rail, chosen/suggested blocks, drag-to-Later, and Rebalance
+- [x] Focus Mode timer, pause/resume, complete, early leave, and actual-minutes persistence
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
@@ -220,6 +223,6 @@ Status key:
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Focus, Voice, Settings, i18n, Offline.
+6. Voice, i18n, Offline/PWA, sound layer.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

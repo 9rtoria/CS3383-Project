@@ -411,6 +411,7 @@
         </div>
 
         <div class="modal-actions">
+          <button type="button" id="focusTaskButton" class="btn soft hidden">Focus</button>
           <button type="button" id="completeTaskButton" class="btn spacer hidden">Complete</button>
           <button type="button" id="reopenTaskButton" class="btn spacer hidden">Reopen</button>
           <button type="button" id="deleteTaskButton" class="btn danger hidden">Delete</button>
@@ -418,6 +419,56 @@
           <button type="submit" id="saveTaskButton" class="btn primary">Save task</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="focusMode" class="focus-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="focusModeTitle">
+    <div class="focus-mode">
+      <header class="focus-mode-head">
+        <span class="brand"><span class="brand-mark" aria-hidden>≈</span><strong>Drift</strong></span>
+        <button type="button" id="leaveFocusButton" class="btn ghost sm">← Leave focus</button>
+      </header>
+
+      <div id="focusActive" class="focus-active">
+        <div class="focus-stage">
+          <div id="focusOrb" class="focus-orb" aria-hidden></div>
+          <div class="focus-ring-wrap">
+            <svg viewBox="0 0 248 248" class="focus-ring" aria-hidden>
+              <circle class="focus-ring-track" cx="124" cy="124" r="112"></circle>
+              <circle id="focusRingArc" class="focus-ring-value" cx="124" cy="124" r="112"></circle>
+            </svg>
+            <div class="focus-ring-copy">
+              <span id="focusPhaseLabel" class="focus-phase">Ready when you are</span>
+              <strong id="focusClock">00:00</strong>
+              <span id="focusEstimateLabel">of 25m estimated</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="focus-task-copy">
+          <div id="focusTaskMeta" class="eyebrow"></div>
+          <h1 id="focusModeTitle"></h1>
+          <p id="focusPrompt">One task. One timer. No feed, no backlog, no noise.</p>
+          <div id="focusBadges" class="focus-meta"></div>
+        </div>
+
+        <div class="focus-controls">
+          <button type="button" id="focusToggle" class="btn primary lg">Begin focus</button>
+          <button type="button" id="focusComplete" class="btn soft lg" disabled>Complete task</button>
+          <button type="button" id="focusLogLeave" class="btn ghost sm hidden">Log time and leave</button>
+        </div>
+        <p id="focusError" class="field-error hidden" role="alert"></p>
+        <p class="focus-hint">Time is saved to this task when you complete it or leave. No audio is captured; task text stays in this workspace.</p>
+      </div>
+
+      <div id="focusDone" class="focus-done hidden" role="status">
+        <span class="focus-done-mark" aria-hidden>✓</span>
+        <div class="eyebrow">Session complete</div>
+        <h1>That’s enough.</h1>
+        <p id="focusDoneCopy"></p>
+        <div id="focusDoneStats" class="focus-done-stats"></div>
+        <button type="button" id="focusReturn" class="btn primary lg">Return to Today</button>
+      </div>
     </div>
   </div>
 

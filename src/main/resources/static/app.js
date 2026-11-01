@@ -20,6 +20,8 @@
     lastAutoApplyAt: 0,
     dayFlowAnchor: null,
     draggingTaskId: null,
+    focus: null,
+    focusTimer: null,
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
     settings: null,
@@ -872,7 +874,7 @@
     }
     const focusNext = $("dayFlowFocusNext");
     focusNext.classList.toggle("hidden", !next);
-    focusNext.onclick = next ? () => openTaskModal(next.task) : null;
+    focusNext.onclick = next ? () => openFocus(next.task) : null;
 
     const wrap = $("dayFlowRailWrap");
     window.requestAnimationFrame(() => {
@@ -1135,6 +1137,230 @@
     }
   }
 
+  function focusClock(seconds) {
+    const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+  }
+
+  function focusMinutesLabel(minutes) {
+    const safe = Math.max(0, Math.round(Number(minutes) || 0));
+    const hours = Math.floor(safe / 60);
+    const rest = safe % 60;
+    if (!hours) return `${rest}m`;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
+  }
+
+  function focusTargetMinutes(task) {
+    return Math.max(1, Number(task?.estimateMinutes) || Number(state.settings?.focusMinutes) || 25);
+  }
+
+  async function openFocus(task) {
+    if (!task?.id) return;
+    try {
+      const data = await request(`/api/tasks/${encodeURIComponent(task.id)}`);
+      const fresh = data?.task;
+      if (!fresh) throw new Error("Task not found.");
+      if (Number(fresh.completed) === 1) {
+        showToast("Completed tasks cannot be focused.");
+        return;
+      }
+      closeModal();
+      window.clearInterval(state.focusTimer);
+      state.focusTimer = null;
+      state.focus = {
+        task: fresh,
+        phase: "ready",
+        accumulated: 0,
+        startedAt: null,
+        elapsed: 0,
+        busy: false,
+        error: "",
+      };
+      $("focusMode").classList.remove("hidden");
+      renderFocus();
+      if (settingOn(state.settings?.focusAutoStart)) {
+        window.setTimeout(() => {
+          if (state.focus && state.focus.phase === "ready") startFocus();
+        }, 220);
+      }
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function renderFocus() {
+    const focus = state.focus;
+    if (!focus) return;
+    const targetMinutes = focusTargetMinutes(focus.task);
+    const targetSeconds = Math.max(60, targetMinutes * 60);
+    const progress = Math.min(1, focus.elapsed / targetSeconds);
+    const overEstimate = focus.elapsed > targetSeconds;
+    const actualMinutes = Math.max(1, Math.round(focus.elapsed / 60));
+    const deltaMinutes = actualMinutes - targetMinutes;
+    const done = focus.phase === "done";
+    $("focusActive").classList.toggle("hidden", done);
+    $("focusDone").classList.toggle("hidden", !done);
+    $("focusModeTitle").textContent = focus.task.title;
+    $("focusTaskMeta").textContent = `${focus.task.boardName || "Task"} · ${focus.task.columnName || "Open"}`;
+    $("focusPhaseLabel").textContent = focus.phase === "ready" ? "Ready when you are" : focus.phase === "running" ? "In focus" : focus.phase === "paused" ? "Paused" : "Complete";
+    $("focusClock").textContent = focusClock(focus.elapsed);
+    $("focusEstimateLabel").textContent = overEstimate
+      ? "past the estimate — still yours"
+      : `of ${focusMinutesLabel(targetMinutes)} estimated`;
+    $("focusPrompt").textContent = focus.phase === "running"
+      ? "The rest can wait. You only need the next small move."
+      : focus.phase === "paused"
+        ? "Paused. Take the breath, then decide."
+        : "One task. One timer. No feed, no backlog, no noise.";
+    $("focusOrb").classList.toggle("breathing", focus.phase === "running");
+
+    const circumference = 2 * Math.PI * 112;
+    const arc = $("focusRingArc");
+    arc.style.strokeDasharray = String(circumference);
+    arc.style.strokeDashoffset = String(circumference * (1 - progress));
+    arc.classList.toggle("over", overEstimate);
+
+    const badges = $("focusBadges");
+    badges.replaceChildren();
+    if (focus.task.estimateMinutes) badges.append(makeBadge(`${focus.task.estimateMinutes}m estimate`, "slate"));
+    if (focus.task.actualMinutes) badges.append(makeBadge(`${focus.task.actualMinutes}m tracked before`, "accent"));
+    if (focus.task.priority && focus.task.priority !== "none") badges.append(makeBadge(focus.task.priority, "rose"));
+    for (const label of (focus.task.labels ?? []).slice(0, 3)) {
+      badges.append(makeBadge(label.name, label.color || "slate"));
+    }
+
+    if (done) {
+      $("focusDoneCopy").textContent = `${focusClock(focus.elapsed)} of attention for ${focus.task.title}. The estimate was ${targetMinutes} minutes; the point was to begin.`;
+      const stats = $("focusDoneStats");
+      stats.replaceChildren();
+      for (const [value, label] of [
+        [`${actualMinutes}m`, "tracked"],
+        [focusMinutesLabel(targetMinutes), "estimated"],
+        [`${Math.abs(deltaMinutes)}m`, deltaMinutes > 0 ? "over" : deltaMinutes < 0 ? "under" : "on estimate"],
+      ]) {
+        const item = element("span");
+        item.append(element("strong", "", value), document.createTextNode(` ${label}`));
+        stats.append(item);
+      }
+      return;
+    }
+
+    const running = focus.phase === "running";
+    $("focusToggle").textContent = running ? "Pause" : focus.phase === "paused" ? "Resume focus" : "Begin focus";
+    $("focusToggle").className = running ? "btn lg" : "btn primary lg";
+    $("focusComplete").disabled = focus.busy || focus.elapsed < 1;
+    $("focusComplete").textContent = focus.busy ? "Saving…" : "Complete task";
+    $("focusLogLeave").classList.toggle("hidden", focus.elapsed <= 0);
+    $("focusLogLeave").disabled = focus.busy;
+    $("focusError").classList.toggle("hidden", !focus.error);
+    $("focusError").textContent = focus.error || "";
+  }
+
+  function focusTick() {
+    const focus = state.focus;
+    if (!focus || focus.phase !== "running" || focus.startedAt === null) return;
+    focus.elapsed = focus.accumulated + Math.floor((Date.now() - focus.startedAt) / 1000);
+    renderFocus();
+  }
+
+  function startFocus() {
+    const focus = state.focus;
+    if (!focus || focus.phase === "done" || focus.phase === "running") return;
+    focus.startedAt = Date.now();
+    focus.phase = "running";
+    window.clearInterval(state.focusTimer);
+    state.focusTimer = window.setInterval(focusTick, 250);
+    renderFocus();
+  }
+
+  function pauseFocus() {
+    const focus = state.focus;
+    if (!focus || focus.phase !== "running") return;
+    focus.accumulated += Math.floor((Date.now() - (focus.startedAt ?? Date.now())) / 1000);
+    focus.startedAt = null;
+    focus.elapsed = focus.accumulated;
+    focus.phase = "paused";
+    window.clearInterval(state.focusTimer);
+    state.focusTimer = null;
+    renderFocus();
+  }
+
+  function accumulateFocus() {
+    const focus = state.focus;
+    if (!focus || focus.startedAt === null) return;
+    focus.accumulated += Math.floor((Date.now() - focus.startedAt) / 1000);
+    focus.startedAt = null;
+    focus.elapsed = focus.accumulated;
+  }
+
+  async function completeFocus() {
+    const focus = state.focus;
+    if (!focus || focus.busy || focus.phase === "done") return;
+    accumulateFocus();
+    const minutes = Math.max(1, Math.round(focus.elapsed / 60));
+    focus.busy = true;
+    focus.error = "";
+    window.clearInterval(state.focusTimer);
+    state.focusTimer = null;
+    focus.phase = "paused";
+    renderFocus();
+    try {
+      const result = await request(`/api/tasks/${encodeURIComponent(focus.task.id)}/focus`, {
+        method: "POST",
+        body: { minutes, complete: true },
+      });
+      focus.task = result.task;
+      focus.phase = "done";
+      focus.busy = false;
+      renderFocus();
+      await loadToday();
+      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      showToast(`Focus complete — ${minutes}m tracked.`);
+    } catch (error) {
+      focus.busy = false;
+      focus.error = error.message;
+      renderFocus();
+    }
+  }
+
+  async function logFocusTime(minutes) {
+    const focus = state.focus;
+    if (!focus || minutes <= 0) return null;
+    const result = await request(`/api/tasks/${encodeURIComponent(focus.task.id)}/focus`, {
+      method: "POST",
+      body: { minutes, complete: false },
+    });
+    focus.task = result.task;
+    return result.task;
+  }
+
+  async function leaveFocus() {
+    const focus = state.focus;
+    if (!focus || focus.busy) return;
+    if (focus.phase !== "done") {
+      accumulateFocus();
+      const minutes = Math.max(0, Math.round(focus.elapsed / 60));
+      if (minutes > 0) {
+        focus.busy = true;
+        renderFocus();
+        try {
+          await logFocusTime(minutes);
+        } catch (error) {
+          focus.error = error.message;
+          focus.busy = false;
+          renderFocus();
+          return;
+        }
+      }
+    }
+    window.clearInterval(state.focusTimer);
+    state.focusTimer = null;
+    state.focus = null;
+    $("focusMode").classList.add("hidden");
+    await loadToday();
+    if (state.currentBoardId) await loadBoard(state.currentBoardId);
+  }
+
   function openTaskModal(task, columnId = null) {
     state.editing = task;
     state.detail = null;
@@ -1165,6 +1391,7 @@
     else if (task?.columnId) $("taskColumn").value = task.columnId;
     $("columnField").classList.toggle("hidden", Boolean(task));
     const completed = Boolean(task) && Number(task.completed) === 1;
+    $("focusTaskButton").classList.toggle("hidden", !task || completed);
     $("completeTaskButton").classList.toggle("hidden", !task || completed);
     $("reopenTaskButton").classList.toggle("hidden", !task || !completed);
     $("deleteTaskButton").classList.toggle("hidden", !task);
@@ -2199,6 +2426,23 @@
       });
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
+    $("focusTaskButton").addEventListener("click", () => {
+      if (state.editing) void openFocus(state.editing);
+    });
+    $("leaveFocusButton").addEventListener("click", () => void leaveFocus());
+    $("focusToggle").addEventListener("click", () => {
+      if (state.focus?.phase === "running") pauseFocus();
+      else startFocus();
+    });
+    $("focusComplete").addEventListener("click", () => void completeFocus());
+    $("focusLogLeave").addEventListener("click", () => void leaveFocus());
+    $("focusReturn").addEventListener("click", () => void leaveFocus());
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.focus) {
+        event.preventDefault();
+        void leaveFocus();
+      }
+    });
     $("dayFlowRebalance").addEventListener("click", rebalanceToday);
     $("applyTodayPlanButton").addEventListener("click", applyTodayPlan);
     const later = $("dayFlowLater");

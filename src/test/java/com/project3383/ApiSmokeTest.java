@@ -304,6 +304,21 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.planBlocks").isEmpty());
 
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/focus")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("minutes", 10, "complete", false))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.actualMinutes").value(10))
+            .andExpect(jsonPath("$.task.completed").value(0));
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/focus")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("minutes", 5, "complete", true))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.actualMinutes").value(15))
+            .andExpect(jsonPath("$.task.completed").value(1));
+
         mockMvc.perform(post("/api/tasks")
                 .session(session)
                 .header("Origin", "https://evil.example")

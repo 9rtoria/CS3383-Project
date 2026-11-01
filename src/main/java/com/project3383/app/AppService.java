@@ -530,7 +530,8 @@ public class AppService {
         int capacity = capacityForUser(userId);
         List<Map<String, Object>> tasks = jdbc.queryForList("""
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId,
-                   t.column_id AS columnId, t.title, t.description, t.priority,
+                   t.column_id AS columnId, b.name AS boardName, c.name AS columnName,
+                   t.title, t.description, t.priority,
                    t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes,
@@ -1095,6 +1096,31 @@ public class AppService {
         return Map.of("deleted", true);
     }
 
+    public Map<String, Object> focusTask(String userId, String taskId, ApiDtos.FocusLog input) {
+        Map<String, Object> current = taskRow(taskId);
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
+        int minutes = input == null || input.minutes() == null ? 0 : Math.max(0, Math.min(1440, input.minutes()));
+        boolean complete = input != null && Boolean.TRUE.equals(input.complete());
+        if (complete && openDependencyCount(taskId) > 0) {
+            throw ApiException.badRequest("Finish the work this task is waiting on first.");
+        }
+        int actual = (current.get("actualMinutes") == null ? 0 : number(current.get("actualMinutes"))) + minutes;
+        String columnId = (String) current.get("columnId");
+        if (complete) {
+            Map<String, Object> doneColumn = jdbc.queryForList("""
+                SELECT id FROM board_column
+                WHERE board_id = ? AND is_done = 1 ORDER BY position LIMIT 1
+                """, current.get("boardId")).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("This board has no done column."));
+            columnId = (String) doneColumn.get("id");
+        }
+        jdbc.update("""
+            UPDATE task SET actual_minutes = ?, column_id = ?, version = version + 1, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL
+            """, actual, columnId, Instant.now().toString(), taskId);
+        return linked(Map.of("task", task(userId, taskId)));
+    }
+
     public Map<String, Object> completeTask(String userId, String taskId, boolean completed) {
         Map<String, Object> current = taskRow(taskId);
         requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
@@ -1167,10 +1193,13 @@ public class AppService {
     private Map<String, Object> taskRow(String taskId) {
         return jdbc.queryForList("""
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId, t.column_id AS columnId,
+                   b.name AS boardName, c.name AS columnName,
                    t.title, t.description, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes, t.archived_at AS archivedAt, t.version, c.is_done AS completed
-            FROM task t JOIN board_column c ON c.id = t.column_id
+            FROM task t
+            JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
             WHERE t.id = ? AND t.deleted_at IS NULL
             """, taskId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Task not found."));

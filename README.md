@@ -33,6 +33,7 @@ Implemented:
 - Reminders, in-app notifications, and background delivery
 - Workspace-scoped, per-user Today selection with capacity, reasons, blocked-dependency state, rebalance, and applyPlan
 - Day Flow 24-hour time rail with capacity ring, now marker, chosen/suggested blocks, drag-to-Later, and Rebalance
+- Focus Mode full-screen timer with pause/resume, complete, early leave, and actual-minutes persistence
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility

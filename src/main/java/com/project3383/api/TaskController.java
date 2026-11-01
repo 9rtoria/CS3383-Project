@@ -75,6 +75,11 @@ public class TaskController {
         return appService.moveTask(CurrentUser.id(session), id, input);
     }
 
+    @PostMapping("/{id}/focus")
+    public Map<String, Object> focus(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.FocusLog input) {
+        return appService.focusTask(CurrentUser.id(session), id, input);
+    }
+
     @PostMapping("/{id}/complete")
     public Map<String, Object> complete(HttpSession session, @PathVariable String id) {
         return appService.completeTask(CurrentUser.id(session), id, true);

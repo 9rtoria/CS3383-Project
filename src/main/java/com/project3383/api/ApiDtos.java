@@ -118,6 +118,12 @@ public final class ApiDtos {
     ) {
     }
 
+    public record FocusLog(
+        Integer minutes,
+        Boolean complete
+    ) {
+    }
+
     public record AutoPlanRequest(
         String action,
         String workspaceId,
