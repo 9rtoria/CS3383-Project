@@ -1705,6 +1705,146 @@ class ApiSmokeTest {
     }
 
     @Test
+    void mfaSetupSigninChallengeBackupCodeAndDisable() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        String email = "mfa-" + System.nanoTime() + "@example.com";
+        mockMvc.perform(post("/api/auth/signup")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "MFA User",
+                    "email", email,
+                    "password", "Password123"
+                ))))
+            .andExpect(status().isOk());
+
+        MvcResult setup = mockMvc.perform(post("/api/security/mfa")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("action", "setup"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.secret").isNotEmpty())
+            .andExpect(jsonPath("$.qrDataUrl").value(org.hamcrest.Matchers.startsWith("data:image/png;base64,")))
+            .andReturn();
+        JsonNode setupJson = objectMapper.readTree(setup.getResponse().getContentAsString());
+        String secret = setupJson.path("secret").asText();
+        String code = totp(secret);
+
+        MvcResult enabled = mockMvc.perform(post("/api/security/mfa")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "enable", "secret", secret, "code", code))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.backupCodes.length()").value(8))
+            .andReturn();
+        String backupCode = objectMapper.readTree(enabled.getResponse().getContentAsString())
+            .path("backupCodes").get(0).asText();
+        mockMvc.perform(get("/api/security/mfa").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.mfaEnabled").value(true))
+            .andExpect(jsonPath("$.sessions[0].current").value(true));
+
+        mockMvc.perform(delete("/api/auth/signout").session(session)).andExpect(status().isOk());
+        MvcResult challengeResult = mockMvc.perform(post("/api/auth/signin")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Password123"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.mfaRequired").value(true))
+            .andExpect(jsonPath("$.challenge").isNotEmpty())
+            .andReturn();
+        String challenge = objectMapper.readTree(challengeResult.getResponse().getContentAsString())
+            .path("challenge").asText();
+
+        MockHttpSession challengeSession = new MockHttpSession();
+        MvcResult verified = mockMvc.perform(post("/api/auth/mfa/challenge")
+                .session(challengeSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("challenge", challenge, "code", code))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email))
+            .andReturn();
+        MockHttpSession verifiedSession = (MockHttpSession) verified.getRequest().getSession(false);
+        mockMvc.perform(get("/api/bootstrap").session(verifiedSession))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email));
+
+        mockMvc.perform(post("/api/auth/signin")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "email", email, "password", "Password123", "totp", backupCode))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email));
+        mockMvc.perform(post("/api/auth/signin")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "email", email, "password", "Password123", "totp", backupCode))))
+            .andExpect(status().isUnauthorized());
+
+        MockHttpSession disableSession = new MockHttpSession();
+        MvcResult disabled = mockMvc.perform(post("/api/auth/signin")
+                .session(disableSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "email", email, "password", "Password123", "totp", totp(secret)))))
+            .andExpect(status().isOk())
+            .andReturn();
+        MockHttpSession liveSession = (MockHttpSession) disabled.getRequest().getSession(false);
+        mockMvc.perform(post("/api/security/mfa")
+                .session(liveSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("action", "disable", "code", "000000"))))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/security/mfa")
+                .session(liveSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("action", "disable", "code", totp(secret)))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.mfaEnabled").value(false));
+        mockMvc.perform(post("/api/auth/signin")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("email", email, "password", "Password123"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email));
+    }
+
+    private String totp(String secret) {
+        try {
+            int buffer = 0;
+            int bits = 0;
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            for (char character : secret.toUpperCase().toCharArray()) {
+                int value = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(character);
+                if (value < 0) continue;
+                buffer = (buffer << 5) | value;
+                bits += 5;
+                if (bits >= 8) {
+                    bytes.write((buffer >> (bits - 8)) & 0xff);
+                    bits -= 8;
+                }
+            }
+            long counter = Instant.now().getEpochSecond() / 30;
+            byte[] data = new byte[8];
+            for (int index = 7; index >= 0; index--) {
+                data[index] = (byte) (counter & 0xff);
+                counter >>= 8;
+            }
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA1");
+            mac.init(new javax.crypto.spec.SecretKeySpec(bytes.toByteArray(), "HmacSHA1"));
+            byte[] digest = mac.doFinal(data);
+            int offset = digest[digest.length - 1] & 0x0f;
+            int binary = ((digest[offset] & 0x7f) << 24)
+                | ((digest[offset + 1] & 0xff) << 16)
+                | ((digest[offset + 2] & 0xff) << 8)
+                | (digest[offset + 3] & 0xff);
+            return String.format("%06d", binary % 1_000_000);
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    @Test
     void webhooksDeliverSignedEventsAndCanBeDeleted() throws Exception {
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
             new java.net.InetSocketAddress("127.0.0.1", 0), 0);

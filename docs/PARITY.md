@@ -27,7 +27,7 @@ Status key:
 | `/api/auth/guest` | DONE | Guest session |
 | `/api/auth/magic` | MISSING | Email magic link not implemented |
 | `/api/auth/magic/verify` | MISSING | |
-| `/api/auth/mfa/challenge` | MISSING | |
+| `/api/auth/mfa/challenge` | DONE | In-memory 5-minute challenge; TOTP or one-time backup code |
 | `/api/auth/oauth/{provider}` | MISSING | |
 | `/api/auth/oauth/{provider}/callback` | MISSING | |
 | `/api/auth/signin` | DONE | Password sign-in |
@@ -61,9 +61,9 @@ Status key:
 | `/api/notifications` | DONE | GET + mark read/read-all |
 | `/api/openapi` | MISSING | |
 | `/api/search` | PARTIAL | SQL LIKE search, not FTS |
-| `/api/security/mfa` | MISSING | |
+| `/api/security/mfa` | DONE | Status/sessions, TOTP setup with QR, enable with backup codes, disable guard, session revoke rows |
 | `/api/settings` | PARTIAL | GET/PATCH personal preferences; settings UI ported |
-| `/api/share/{token}` | MISSING | |
+| `/api/share/{token}` | DONE | Public read-only board payload and `/share/{token}` page |
 | `/api/subtasks/{id}` | PARTIAL | PATCH; DELETE not exposed |
 | `/api/tasks` | DONE | GET list, POST create |
 | `/api/tasks/bulk` | DONE | Complete, archive, delete, and move up to 100 tasks with undo |
@@ -176,7 +176,8 @@ Status key:
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
 | Webhooks | DONE | Admin CRUD, Slack/Teams/generic payloads, HMAC signature, async delivery with retries, SSRF/HTTPS guard |
 | Automations | DONE | Admin rules for created/moved/completed with priority/column/label/due-date conditions; priority, label, column, and notify actions; dry-run diff, run history, activity/audit, and undo |
-| SSO / MFA | MISSING | |
+| MFA | DONE | TOTP setup with QR, encrypted secret, one-time backup codes, sign-in challenge, disable guard, session list |
+| SSO | MISSING | OIDC schema only |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
 | Notifications / Reminders | DONE | In-app only |
@@ -225,6 +226,7 @@ Status key:
 - [x] Automations with task-event triggers, condition matching, four actions, draft preview, notifications, run history, and undo
 - [x] Workspace JSON/CSV export and CSV/JSON task import with audit records
 - [x] Account and workspace deletion with ownership guards, anonymization, access revocation, and audit
+- [x] TOTP MFA with QR setup, encrypted secrets, one-time backup codes, sign-in challenge, disable guard, and audit-ready fields
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -252,5 +254,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. SSO/MFA and workspace policy settings.
+7. SSO and workspace policy settings.
 8. Full E2E, screenshots, performance, and final parity sign-off.

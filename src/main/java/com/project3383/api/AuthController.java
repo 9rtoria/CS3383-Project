@@ -33,6 +33,7 @@ public class AuthController {
         @SuppressWarnings("unchecked")
         Map<String, Object> user = (Map<String, Object>) boot.get("user");
         session.setAttribute(AuthInterceptor.SESSION_USER, user.get("id"));
+        session.setAttribute(AuthInterceptor.MFA_VERIFIED, false);
         return boot;
     }
 
@@ -42,16 +43,36 @@ public class AuthController {
         AppService.AuthResult result = appService.signup(current == null ? null : current.toString(), input);
         if (request.getSession(false) != null) request.changeSessionId();
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
+        session.setAttribute(AuthInterceptor.MFA_VERIFIED, false);
         return result.bootstrap();
     }
 
     @PostMapping("/signin")
     public Map<String, Object> signin(HttpServletRequest request, @RequestBody ApiDtos.Signin input) {
         AppService.AuthResult result = appService.signin(input);
+        if (result.mfaRequired()) {
+            Map<String, Object> challenge = new java.util.LinkedHashMap<>();
+            challenge.put("mfaRequired", true);
+            challenge.put("challenge", result.challenge());
+            return challenge;
+        }
         HttpSession old = request.getSession(false);
         if (old != null) old.invalidate();
         HttpSession session = request.getSession(true);
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
+        session.setAttribute(AuthInterceptor.MFA_VERIFIED, result.mfaVerified());
+        return result.bootstrap();
+    }
+
+    @PostMapping("/mfa/challenge")
+    public Map<String, Object> mfaChallenge(HttpServletRequest request, @RequestBody ApiDtos.MfaChallengeRequest input) {
+        AppService.AuthResult result = appService.verifyMfaChallenge(
+            input == null ? null : input.challenge(), input == null ? null : input.code());
+        HttpSession old = request.getSession(false);
+        if (old != null) old.invalidate();
+        HttpSession session = request.getSession(true);
+        session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
+        session.setAttribute(AuthInterceptor.MFA_VERIFIED, true);
         return result.bootstrap();
     }
 

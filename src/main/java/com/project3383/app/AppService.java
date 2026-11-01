@@ -42,16 +42,18 @@ public class AppService {
     private final AuditService auditService;
     private final WebhookService webhookService;
     private final AutomationService automationService;
+    private final MfaService mfaService;
 
     public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper,
                       AuditService auditService, WebhookService webhookService,
-                      AutomationService automationService) {
+                      AutomationService automationService, MfaService mfaService) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
         this.webhookService = webhookService;
         this.automationService = automationService;
+        this.mfaService = mfaService;
     }
 
     @Transactional
@@ -204,7 +206,7 @@ public class AppService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
         }
         Map<String, Object> row = jdbc.queryForList("""
-            SELECT id, password_hash AS passwordHash, is_guest AS isGuest
+            SELECT id, password_hash AS passwordHash, is_guest AS isGuest, mfa_enabled AS mfaEnabled
             FROM app_user WHERE email = ? AND deleted_at IS NULL
             """, input.email().trim().toLowerCase()).stream().findFirst()
             .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect."));
@@ -213,10 +215,29 @@ public class AppService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
         }
         String userId = row.get("id").toString();
-        return new AuthResult(userId, bootstrap(userId));
+        if (number(row.get("mfaEnabled")) == 1) {
+            String code = input.totp() == null ? "" : input.totp().trim();
+            if (code.isEmpty()) {
+                return new AuthResult(null, null, true, mfaService.createChallenge(userId), false);
+            }
+            if (!mfaService.verifySecondFactor(userId, code)) {
+                throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "That code is not valid.");
+            }
+            return new AuthResult(userId, bootstrap(userId), false, null, true);
+        }
+        return new AuthResult(userId, bootstrap(userId), false, null, false);
     }
 
-    public record AuthResult(String userId, Map<String, Object> bootstrap) {
+    public AuthResult verifyMfaChallenge(String challenge, String code) {
+        String userId = mfaService.verifyChallenge(challenge, code);
+        return new AuthResult(userId, bootstrap(userId), false, null, true);
+    }
+
+    public record AuthResult(String userId, Map<String, Object> bootstrap, boolean mfaRequired,
+                             String challenge, boolean mfaVerified) {
+        public AuthResult(String userId, Map<String, Object> bootstrap) {
+            this(userId, bootstrap, false, null, false);
+        }
     }
 
     @Transactional

@@ -413,6 +413,8 @@
     $("authModeButton").textContent = "Create account";
     $("authSubmit").textContent = "Sign in";
     $("authNameField").classList.add("hidden");
+    $("authTotpField").classList.add("hidden");
+    $("authTotp").value = "";
     $("authPassword").autocomplete = "current-password";
     $("authModal").classList.remove("hidden");
     window.setTimeout(() => $("authEmail").focus(), 20);
@@ -425,6 +427,10 @@
     $("authModeButton").textContent = signup ? "Sign in instead" : "Create account";
     $("authSubmit").textContent = signup ? "Create account" : "Sign in";
     $("authNameField").classList.toggle("hidden", !signup);
+    if (signup) {
+      $("authTotpField").classList.add("hidden");
+      $("authTotp").value = "";
+    }
     $("authPassword").autocomplete = signup ? "new-password" : "current-password";
   }
 
@@ -439,11 +445,18 @@
         password: $("authPassword").value,
       };
       if (signup) body.name = $("authName").value.trim();
+      if (!signup && $("authTotp").value.trim()) body.totp = $("authTotp").value.trim();
       const result = await request(signup ? "/api/auth/signup" : "/api/auth/signin", {
         method: "POST",
         body,
       });
       if (!result) throw new Error("Email or password is incorrect.");
+      if (result.mfaRequired) {
+        $("authTotpField").classList.remove("hidden");
+        $("authTotp").focus();
+        showToast(t("Enter your authenticator code to continue."));
+        return;
+      }
       state.boot = result;
       window.DriftOffline?.cacheBootstrap(result);
       state.currentWorkspaceId = result.workspaces?.[0]?.id ?? null;
@@ -3167,6 +3180,7 @@
       { id: "sound", label: "Sound", render: renderSoundSettings },
       { id: "notifications", label: "Notifications", render: renderNotificationSettings },
       { id: "features", label: "Features", render: renderFeatureSettings },
+      { id: "security", label: "Security", render: renderSecuritySettings },
     ];
     if (["OWNER", "ADMIN"].includes(role)) {
       definitions.push(
@@ -3943,6 +3957,237 @@
     newRule.addEventListener("click", openRuleModal);
     section.refreshSettingsSection = () => void refreshRules();
     void refreshRules();
+    return section;
+  }
+
+  function renderSecuritySettings() {
+    const { section, card } = createSettingsSection(
+      "security",
+      "Security",
+      "Two-factor authentication is TOTP. Sessions are opaque, hashed, and revocable."
+    );
+    let status = null;
+    let setup = null;
+    let backupCodes = [];
+    let busy = false;
+
+    const refresh = async () => {
+      try {
+        status = await request("/api/security/mfa");
+        render();
+      } catch (error) {
+        card.replaceChildren(element("div", "empty", error.message));
+      }
+    };
+
+    const render = () => {
+      card.replaceChildren();
+      const enabled = Boolean(status?.mfaEnabled);
+      settingsRow(card, t("Two-factor authentication"),
+        enabled ? t("Enabled with an authenticator app.") : t("Add a second factor for password and sign-in."),
+        [
+          makeBadge(enabled ? t("On") : t("Off"), enabled ? "moss" : "slate"),
+          enabled ? null : (() => {
+            const setupButton = element("button", "btn primary sm", t("Set up"));
+            setupButton.type = "button";
+            setupButton.disabled = busy;
+            setupButton.addEventListener("click", async () => {
+              busy = true;
+              render();
+              try {
+                setup = await request("/api/security/mfa", { method: "POST", body: { action: "setup" } });
+                backupCodes = [];
+              } catch (error) {
+                showToast(error.message);
+              } finally {
+                busy = false;
+                render();
+              }
+            });
+            return setupButton;
+          })(),
+        ]);
+
+      if (setup) {
+        const row = element("div", "settings-row");
+        row.style.display = "block";
+        row.style.background = "var(--surface-2)";
+        const form = element("form", "form-grid");
+        form.style.maxWidth = "540px";
+        const qrRow = element("div", "inline");
+        qrRow.style.cssText = "align-items:flex-start;gap:18px;flex-wrap:wrap";
+        if (setup.qrDataUrl) {
+          const image = element("img");
+          image.src = setup.qrDataUrl;
+          image.alt = t("QR code for authenticator app");
+          image.width = 170;
+          image.height = 170;
+          image.style.cssText = "border-radius:12px;background:#fff;padding:8px";
+          qrRow.append(image);
+        }
+        const qrCopy = element("div");
+        qrCopy.style.flex = "1";
+        qrCopy.append(element("strong", "", t("Scan with your authenticator")));
+        qrCopy.append(element("p", "field-hint", t("Or enter this secret manually:")));
+        const secretCode = element("code", "", setup.secret);
+        secretCode.style.cssText = "display:block;word-break:break-all;font-size:10.5px;background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:7px";
+        qrCopy.append(secretCode);
+        qrRow.append(qrCopy);
+        const codeField = element("label", "field");
+        codeField.append(element("span", "", t("Six-digit code")));
+        const codeInput = element("input", "input");
+        codeInput.inputMode = "numeric";
+        codeInput.autocomplete = "one-time-code";
+        codeInput.placeholder = "123456";
+        codeField.append(codeInput);
+        const buttons = element("div", "inline");
+        const verify = element("button", "btn primary", t("Verify and enable"));
+        verify.type = "submit";
+        const cancel = element("button", "btn ghost", t("Cancel"));
+        cancel.type = "button";
+        cancel.addEventListener("click", () => {
+          setup = null;
+          render();
+        });
+        buttons.append(verify, cancel);
+        form.append(qrRow, codeField, buttons);
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          busy = true;
+          verify.disabled = true;
+          try {
+            const result = await request("/api/security/mfa", {
+              method: "POST",
+              body: { action: "enable", secret: setup.secret, code: codeInput.value.trim() },
+            });
+            backupCodes = result?.backupCodes ?? [];
+            setup = null;
+            showToast(t("Two-factor authentication enabled."));
+            await refresh();
+          } catch (error) {
+            showToast(error.message);
+            verify.disabled = false;
+          } finally {
+            busy = false;
+          }
+        });
+        row.append(form);
+        card.append(row);
+      }
+
+      if (backupCodes.length) {
+        const row = element("div", "settings-row");
+        row.style.display = "block";
+        row.style.background = "var(--warning-soft, var(--surface-2))";
+        row.append(element("strong", "", t("Save these backup codes now")));
+        row.append(element("p", "field-hint", t("Each code works once. They will not be shown again.")));
+        const grid = element("div");
+        grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px";
+        for (const code of backupCodes) grid.append(element("code", "", code));
+        row.append(grid);
+        const copy = element("button", "btn sm", t("Copy codes"));
+        copy.type = "button";
+        copy.style.marginTop = "10px";
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard?.writeText(backupCodes.join("\n"));
+            showToast(t("Backup codes copied."));
+          } catch {
+            showToast(t("Could not copy the codes."));
+          }
+        });
+        row.append(copy);
+        card.append(row);
+      }
+
+      if (enabled) {
+        const row = element("div", "settings-row");
+        const copy = element("div", "settings-copy");
+        copy.append(element("strong", "", t("Disable two-factor")));
+        copy.append(element("span", "", t("Not allowed while an organization requires it.")));
+        const controls = element("div", "settings-control inline");
+        const input = element("input", "input");
+        input.style.width = "150px";
+        input.placeholder = t("Code or backup");
+        const disable = element("button", "btn danger sm", t("Disable"));
+        disable.type = "button";
+        disable.addEventListener("click", async () => {
+          if (!input.value.trim()) {
+            showToast(t("Enter a valid authenticator code to turn off two-factor."));
+            return;
+          }
+          disable.disabled = true;
+          try {
+            await request("/api/security/mfa", {
+              method: "POST",
+              body: { action: "disable", code: input.value.trim() },
+            });
+            input.value = "";
+            backupCodes = [];
+            showToast(t("Two-factor authentication disabled."));
+            await refresh();
+          } catch (error) {
+            showToast(error.message);
+            disable.disabled = false;
+          }
+        });
+        controls.append(input, disable);
+        row.append(copy, controls);
+        card.append(row);
+      }
+
+      const sessionsRow = element("div", "settings-row");
+      sessionsRow.style.display = "block";
+      const sessionsHead = element("div", "inline");
+      sessionsHead.style.justifyContent = "space-between";
+      const sessionsCopy = element("div", "settings-copy");
+      sessionsCopy.append(element("strong", "", t("Active sessions")));
+      sessionsCopy.append(element("span", "", t("Revoke anything you do not recognize. The current session stays.")));
+      const refreshButton = element("button", "btn ghost sm", t("Refresh"));
+      refreshButton.type = "button";
+      refreshButton.addEventListener("click", () => void refresh());
+      sessionsHead.append(sessionsCopy, refreshButton);
+      sessionsRow.append(sessionsHead);
+      const sessionList = element("div");
+      sessionList.style.marginTop = "10px";
+      for (const entry of status?.sessions ?? []) {
+        const item = element("div", "inline");
+        item.style.cssText = "padding:8px 0;border-top:1px solid var(--border);justify-content:space-between";
+        const copy = element("span", "");
+        copy.style.fontSize = "11px";
+        copy.append(element("strong", "", entry.current ? t("This device") : (entry.userAgent || t("Unknown device"))));
+        const hint = element("span", "field-hint");
+        hint.style.display = "block";
+        hint.textContent = `${t("Last used")} ${relativeTime(entry.lastUsedAt || entry.createdAt)}`;
+        copy.append(hint);
+        if (entry.current) {
+          item.append(copy, makeBadge(t("Current"), "moss"));
+        } else {
+          const revoke = element("button", "btn ghost sm", t("Revoke"));
+          revoke.type = "button";
+          revoke.addEventListener("click", async () => {
+            try {
+              await request("/api/security/mfa", { method: "DELETE", body: { sessionId: entry.id } });
+              showToast(t("Session revoked."));
+              await refresh();
+            } catch (error) {
+              showToast(error.message);
+            }
+          });
+          item.append(copy, revoke);
+        }
+        sessionList.append(item);
+      }
+      if (!(status?.sessions ?? []).length) {
+        sessionList.append(element("p", "field-hint", t("Open Security to load active sessions.")));
+      }
+      sessionsRow.append(sessionList);
+      card.append(sessionsRow);
+    };
+
+    section.refreshSettingsSection = () => void refresh();
+    card.append(element("div", "empty", t("Loading security…")));
+    void refresh();
     return section;
   }
 

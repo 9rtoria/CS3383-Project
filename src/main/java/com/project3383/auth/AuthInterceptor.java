@@ -15,6 +15,7 @@ import java.util.Map;
 public class AuthInterceptor implements HandlerInterceptor {
 
     public static final String SESSION_USER = "project3383.userId";
+    public static final String MFA_VERIFIED = "project3383.mfaVerified";
     public static final String TOKEN_USER = "project3383.tokenUserId";
     public static final String TOKEN_WORKSPACE = "project3383.tokenWorkspaceId";
     private final ObjectMapper objectMapper = new ObjectMapper();

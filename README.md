@@ -52,6 +52,7 @@ Implemented:
 - Admin automations for task created/moved/completed events with priority, label, column, and notify actions, draft impact previews, run history, notifications, and 60-second undo
 - Workspace JSON/CSV export and CSV/JSON task import with private-board filtering and CSV formula-injection protection
 - Account and workspace deletion with ownership guards, credential anonymization, session/token revocation, audit, and local-cache clearing
+- TOTP two-factor authentication with QR setup, encrypted secrets, one-time backup codes, sign-in challenge, and disable guard
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -61,7 +62,7 @@ Implemented:
 Not implemented yet:
 
 - Full Insights and visual parity
-- SSO/MFA
+- SSO (OIDC)
 - Full accessibility, E2E, performance, and final parity sign-off
 
 The current Phase 0 parity matrix is at:
@@ -109,6 +110,10 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/auth/signup` | Create an account or claim the current guest |
 | POST | `/api/auth/signin` | Sign in with email/password |
 | DELETE | `/api/auth/signout` | Invalidate the session |
+| POST | `/api/auth/mfa/challenge` | Complete a sign-in challenge with TOTP or a backup code |
+| GET | `/api/security/mfa` | MFA status and active-session list |
+| POST | `/api/security/mfa` | Setup, enable, or disable TOTP |
+| DELETE | `/api/security/mfa` | Revoke another session record |
 | GET | `/api/health` | Health check |
 | GET | `/api/bootstrap` | User/workspace/board bootstrap |
 | DELETE | `/api/account` | Anonymize and soft-delete the current account |

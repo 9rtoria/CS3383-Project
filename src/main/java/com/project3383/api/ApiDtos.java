@@ -191,7 +191,21 @@ public final class ApiDtos {
 
     public record Signin(
         String email,
-        String password
+        String password,
+        String totp
+    ) {
+    }
+
+    public record MfaRequest(
+        String action,
+        String secret,
+        String code
+    ) {
+    }
+
+    public record MfaChallengeRequest(
+        String challenge,
+        String code
     ) {
     }
 
