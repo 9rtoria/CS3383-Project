@@ -51,9 +51,9 @@ Status key:
 | `/api/columns` | MISSING | |
 | `/api/columns/reorder` | MISSING | |
 | `/api/columns/{id}` | MISSING | |
-| `/api/export` | MISSING | |
+| `/api/export` | DONE | JSON workspace export and formula-safe CSV; private-board filtering; audit |
 | `/api/health` | DONE | |
-| `/api/import` | MISSING | |
+| `/api/import` | DONE | CSV/JSON tasks into a board with columns, labels, assignee, due dates, estimates, and skip counts |
 | `/api/insights` | PARTIAL | Basic counts/priority breakdown |
 | `/api/invites/{token}` | PARTIAL | POST accept; no public GET preview |
 | `/api/labels` | MISSING | Labels are created through task input, no label API |
@@ -181,7 +181,7 @@ Status key:
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
 | Notifications / Reminders | DONE | In-app only |
 | Members / Invites / Roles | DONE | |
-| Export / Import | MISSING | |
+| Export / Import | DONE | Workspace JSON/CSV export with visibility filtering and CSV injection guard; CSV/JSON task import into a board |
 
 ## 4. Known accepted differences / limitations
 
@@ -222,6 +222,7 @@ Status key:
 - [x] Admin audit log with retention purge and cursor pagination
 - [x] Admin webhooks (Slack/Teams/generic) with signed async delivery, retries, and audit
 - [x] Automations with task-event triggers, condition matching, four actions, draft preview, notifications, run history, and undo
+- [x] Workspace JSON/CSV export and CSV/JSON task import with audit records
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)

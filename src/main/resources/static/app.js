@@ -3175,6 +3175,7 @@
         { id: "audit", label: "Audit log", render: renderAuditSettings },
       );
     }
+    definitions.push({ id: "data", label: "Data & export", render: renderDataSettings });
     definitions.forEach((definition, index) => {
       const button = element("button", `settings-nav-item${index === 0 ? " active" : ""}`, definition.label);
       button.type = "button";
@@ -3942,6 +3943,139 @@
     newRule.addEventListener("click", openRuleModal);
     section.refreshSettingsSection = () => void refreshRules();
     void refreshRules();
+    return section;
+  }
+
+  function renderDataSettings() {
+    const { section, card } = createSettingsSection(
+      "data",
+      "Data & export",
+      "Your work is portable. Export the whole workspace as JSON or a task CSV, or import tasks into a board."
+    );
+    const role = workspace()?.role ?? "GUEST";
+    const canImport = ["OWNER", "ADMIN", "MEMBER"].includes(role);
+
+    const download = (format) => {
+      window.location.assign(`/api/export?workspaceId=${encodeURIComponent(workspace().id)}&format=${format}`);
+    };
+    const jsonButton = element("button", "btn sm", "JSON");
+    jsonButton.type = "button";
+    jsonButton.addEventListener("click", () => download("json"));
+    const csvButton = element("button", "btn sm", "CSV");
+    csvButton.type = "button";
+    csvButton.addEventListener("click", () => download("csv"));
+    settingsRow(card, t("Export workspace"),
+      t("Boards, columns, tasks, labels, checklist items, and comments. Private boards only if you can see them."),
+      [jsonButton, csvButton]);
+
+    const importRow = element("div", "settings-row");
+    importRow.style.cssText = "display:block";
+    const importCopy = element("div", "settings-copy");
+    importCopy.append(element("strong", "", t("Import tasks")));
+    importCopy.append(element("span", "",
+      t("CSV columns: title, description, priority, column, dueDate, estimateMinutes, labels, assignee. JSON accepts an export or a tasks array.")));
+    const form = element("div", "form-grid");
+    form.style.marginTop = "10px";
+
+    const boardField = element("div", "field");
+    boardField.append(element("label", "", t("Import board")));
+    const boardSelect = element("select", "select");
+    boardSelect.append(new Option(t("Choose a board"), ""));
+    for (const board of boards()) boardSelect.append(new Option(board.name, board.id));
+    boardField.append(boardSelect);
+
+    const fileField = element("div", "field");
+    const fileRow = element("div", "inline");
+    const pick = element("label", "btn sm", t("Choose file"));
+    const fileInput = element("input");
+    fileInput.type = "file";
+    fileInput.accept = ".csv,.json,text/csv,application/json";
+    fileInput.hidden = true;
+    pick.append(fileInput);
+    const status = element("span", "badge slate hidden");
+    fileRow.append(pick, status);
+    fileField.append(fileRow);
+
+    const actionRow = element("div", "inline");
+    actionRow.style.cssText = "align-items:flex-end;gap:8px;flex-wrap:wrap";
+    const importButton = element("button", "btn primary sm", t("Import into board"));
+    importButton.type = "button";
+    importButton.disabled = true;
+    const clearButton = element("button", "btn ghost sm", t("Clear"));
+    clearButton.type = "button";
+    clearButton.classList.add("hidden");
+    actionRow.append(importButton, clearButton);
+    const accessNote = canImport ? null : element("span", "field-hint", t("Member access is required to import tasks."));
+    if (accessNote) actionRow.append(accessNote);
+
+    form.append(boardField, fileField, actionRow);
+    importCopy.append(form);
+    importRow.append(importCopy);
+    card.append(importRow);
+
+    let importContent = "";
+    let importFormat = "csv";
+    const syncImport = () => {
+      const ready = Boolean(importContent && boardSelect.value && canImport);
+      importButton.disabled = !ready;
+      clearButton.classList.toggle("hidden", !importContent);
+      status.classList.toggle("hidden", !importContent);
+      if (importContent) {
+        status.textContent = t("{{count}} chars ready", { count: importContent.length.toLocaleString() });
+      }
+    };
+
+    fileInput.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (file.size > 5_000_000) {
+        showToast(t("Import files are limited to 5 MB."));
+        return;
+      }
+      try {
+        importContent = await file.text();
+        importFormat = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+        syncImport();
+      } catch {
+        showToast(t("That file could not be read."));
+      }
+    });
+    boardSelect.addEventListener("change", syncImport);
+    clearButton.addEventListener("click", () => {
+      importContent = "";
+      fileInput.value = "";
+      syncImport();
+    });
+    importButton.addEventListener("click", async () => {
+      if (!boardSelect.value || !importContent) return;
+      importButton.disabled = true;
+      try {
+        const result = await request("/api/import", {
+          method: "POST",
+          body: {
+            workspaceId: workspace().id,
+            boardId: boardSelect.value,
+            format: importFormat,
+            content: importContent,
+          },
+        });
+        const count = Number(result?.imported ?? 0);
+        const skipped = Number(result?.skipped ?? 0);
+        showToast(skipped
+          ? t("Imported {{count}} tasks; skipped {{skipped}}.", { count, skipped })
+          : count === 1 ? t("Imported {{count}} task.", { count })
+          : t("Imported {{count}} tasks.", { count }));
+        importContent = "";
+        fileInput.value = "";
+        syncImport();
+        await refreshBootstrap();
+      } catch (error) {
+        showToast(error.message);
+        importButton.disabled = false;
+      }
+    });
+
+    section.refreshSettingsSection = () => syncImport();
     return section;
   }
 

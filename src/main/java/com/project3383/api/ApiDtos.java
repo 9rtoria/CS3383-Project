@@ -147,6 +147,14 @@ public final class ApiDtos {
     ) {
     }
 
+    public record ImportRequest(
+        String workspaceId,
+        String boardId,
+        String format,
+        String content
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type

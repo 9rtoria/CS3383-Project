@@ -1436,6 +1436,142 @@ class ApiSmokeTest {
     }
 
     @Test
+    void exportAndImportRoundTripCsvAndJson() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+
+        mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Exported task",
+                    "priority", "medium",
+                    "dueDate", "2026-12-15",
+                    "labels", List.of("Client")
+                ))))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "=HYPERLINK(\"https://example.com\")"
+                ))))
+            .andExpect(status().isCreated());
+
+        MvcResult jsonExport = mockMvc.perform(get("/api/export")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("format", "json"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+            .andExpect(jsonPath("$.schemaVersion").value(1))
+            .andReturn();
+        String exportedJson = jsonExport.getResponse().getContentAsString();
+        JsonNode exported = objectMapper.readTree(exportedJson);
+        boolean exportedTaskFound = false;
+        for (JsonNode exportedBoard : exported.path("boards")) {
+            for (JsonNode task : exportedBoard.path("tasks")) {
+                if ("Exported task".equals(task.path("title").asText())) {
+                    exportedTaskFound = true;
+                    if (!"Client".equals(task.path("labels").get(0).asText())) {
+                        throw new AssertionError("Exported task label was missing.");
+                    }
+                }
+            }
+        }
+        if (!exportedTaskFound) throw new AssertionError("Exported task was missing from JSON.");
+
+        MvcResult csvExport = mockMvc.perform(get("/api/export")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("format", "csv"))
+            .andExpect(status().isOk())
+            .andReturn();
+        String exportedCsv = csvExport.getResponse().getContentAsString();
+        if (!exportedCsv.startsWith("\uFEFFboard,column,title")) {
+            throw new AssertionError("CSV export header was missing.");
+        }
+        if (!exportedCsv.contains("Exported task") || !exportedCsv.contains("Client")) {
+            throw new AssertionError("CSV export did not contain the task or label.");
+        }
+        if (!exportedCsv.contains("'=HYPERLINK")) {
+            throw new AssertionError("CSV formula injection was not neutralized.");
+        }
+
+        String csvContent = "title,description,priority,column,dueDate,estimateMinutes,labels,assignee\n"
+            + "CSV import,From a CSV,high,To do,2026-12-20,45,Imported,\n";
+        mockMvc.perform(post("/api/import")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "format", "csv",
+                    "content", csvContent
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imported").value(1))
+            .andExpect(jsonPath("$.skipped").value(0));
+
+        String jsonContent = "{\"tasks\":[{\"title\":\"JSON import\",\"priority\":\"urgent\","
+            + "\"column\":\"To do\",\"dueDate\":\"2026-12-31\",\"labels\":[\"JSON label\"]}]}";
+        mockMvc.perform(post("/api/import")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "format", "json",
+                    "content", jsonContent
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imported").value(1));
+
+        Map<String, Object> csvTask = jdbc.queryForMap("""
+            SELECT priority, due_date AS dueDate, due_all_day AS dueAllDay, estimate_minutes AS estimateMinutes
+            FROM task WHERE title = 'CSV import'
+            """);
+        if (!"high".equals(csvTask.get("priority")) || !"2026-12-20".equals(csvTask.get("dueDate"))
+            || !Integer.valueOf(1).equals(csvTask.get("dueAllDay"))) {
+            throw new AssertionError("CSV import did not preserve priority or due date.");
+        }
+        Map<String, Object> jsonTask = jdbc.queryForMap("""
+            SELECT priority, due_date AS dueDate FROM task WHERE title = 'JSON import'
+            """);
+        if (!"urgent".equals(jsonTask.get("priority")) || !"2026-12-31".equals(jsonTask.get("dueDate"))) {
+            throw new AssertionError("JSON import did not preserve priority or due date.");
+        }
+
+        mockMvc.perform(post("/api/import")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "format", "json",
+                    "content", "{\"tasks\":[]}"
+                ))))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/audit").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.events[?(@.action == 'workspace.exported')]").isNotEmpty())
+            .andExpect(jsonPath("$.events[?(@.action == 'workspace.imported')]").isNotEmpty());
+    }
+
+    @Test
     void webhooksDeliverSignedEventsAndCanBeDeleted() throws Exception {
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
             new java.net.InetSocketAddress("127.0.0.1", 0), 0);

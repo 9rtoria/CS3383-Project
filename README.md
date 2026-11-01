@@ -50,6 +50,7 @@ Implemented:
 - Admin audit log with cursor pagination, actor details, and configurable retention
 - Admin webhooks for Slack, Microsoft Teams, and generic JSON with HMAC signing, async delivery, retries, and delivery status
 - Admin automations for task created/moved/completed events with priority, label, column, and notify actions, draft impact previews, run history, notifications, and 60-second undo
+- Workspace JSON/CSV export and CSV/JSON task import with private-board filtering and CSV formula-injection protection
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -60,7 +61,7 @@ Not implemented yet:
 
 - Full Insights and visual parity
 - SSO/MFA
-- Import/export, account/workspace deletion
+- Account/workspace deletion
 - Full accessibility, E2E, performance, and final parity sign-off
 
 The current Phase 0 parity matrix is at:
@@ -139,6 +140,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/webhooks` | Create a webhook and return the signing secret once |
 | PATCH | `/api/webhooks/{id}` | Enable/disable or update a webhook |
 | DELETE | `/api/webhooks/{id}` | Delete a webhook |
+| GET | `/api/export` | Download workspace JSON or task CSV |
+| POST | `/api/import` | Import tasks from CSV or JSON into a board |
 | POST | `/api/tasks` | Create a task |
 | POST | `/api/tasks/bulk` | Bulk complete, archive, delete, or move tasks |
 | GET | `/api/tasks/{id}` | Task detail with comments and checklist |
