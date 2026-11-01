@@ -40,13 +40,15 @@ public class AppService {
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
+    private final WebhookService webhookService;
 
     public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper,
-                      AuditService auditService) {
+                      AuditService auditService, WebhookService webhookService) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
+        this.webhookService = webhookService;
     }
 
     @Transactional
@@ -1148,6 +1150,8 @@ public class AppService {
         replaceTaskLabels(taskId, workspaceId, input.labels());
         recordActivity(workspaceId, taskId, userId, "task.created", "task", taskId);
         audit(workspaceId, userId, "task.created", "task", taskId, Map.of("title", input.title().trim()));
+        webhookService.dispatch(workspaceId, "task.created",
+            Map.of("taskId", taskId, "title", input.title().trim(), "columnId", input.columnId()));
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         Map<String, Object> undo = createUndo(userId, workspaceId, "task.create", "task", taskId,
             Map.of("columnId", input.columnId()), 10);
@@ -1249,6 +1253,9 @@ public class AppService {
             INSERT INTO task_comment (id, task_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)
             """, commentId, taskId, userId, input.body().trim(), Instant.now().toString());
         recordActivity((String) task.get("workspaceId"), taskId, userId, "comment.created", "comment", commentId);
+        webhookService.dispatch((String) task.get("workspaceId"), "comment.created",
+            Map.of("taskId", taskId, "title", String.valueOf(task.get("title")),
+                "preview", input.body().trim().length() > 160 ? input.body().trim().substring(0, 160) : input.body().trim()));
         return linked(Map.of("comment", jdbc.queryForList("""
             SELECT c.id, c.body, c.created_at AS createdAt, c.author_id AS authorId,
                    u.display_name AS authorName
@@ -1557,6 +1564,9 @@ public class AppService {
             completing ? "task.completed" : "task.moved", "task", taskId);
         audit((String) current.get("workspaceId"), userId,
             completing ? "task.completed" : "task.moved", "task", taskId, Map.of());
+        webhookService.dispatch((String) current.get("workspaceId"),
+            completing ? "task.completed" : "task.moved",
+            Map.of("taskId", taskId, "title", String.valueOf(current.get("title")), "columnId", input.columnId()));
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         Map<String, Object> inverse = new LinkedHashMap<>();
         inverse.put("columnId", current.get("columnId"));
@@ -1579,6 +1589,8 @@ public class AppService {
         recordActivity((String) current.get("workspaceId"), taskId, userId, "task.deleted", "task", taskId);
         audit((String) current.get("workspaceId"), userId, "task.deleted", "task", taskId,
             Map.of("title", String.valueOf(current.get("title"))));
+        webhookService.dispatch((String) current.get("workspaceId"), "task.deleted",
+            Map.of("taskId", taskId, "title", String.valueOf(current.get("title"))));
         Map<String, Object> inverse = new LinkedHashMap<>();
         inverse.put("columnId", current.get("columnId"));
         Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
@@ -1758,6 +1770,10 @@ public class AppService {
             completed ? "task.completed" : "task.reopened", "task", taskId);
         audit((String) current.get("workspaceId"), userId,
             completed ? "task.completed" : "task.reopened", "task", taskId, Map.of());
+        if (completed) {
+            webhookService.dispatch((String) current.get("workspaceId"), "task.completed",
+                Map.of("taskId", taskId, "title", String.valueOf(current.get("title")), "columnId", column.get("id")));
+        }
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (completed) {
             Map<String, Object> inverse = new LinkedHashMap<>();

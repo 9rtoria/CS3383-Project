@@ -31,7 +31,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.hamcrest.Matchers.nullValue;
 
-@SpringBootTest(properties = "spring.datasource.url=jdbc:sqlite:target/test-project3383.db")
+@SpringBootTest(properties = {
+    "spring.datasource.url=jdbc:sqlite:target/test-project3383.db",
+    "project3383.webhook.allow-private=true"
+})
 @AutoConfigureMockMvc
 class ApiSmokeTest {
 
@@ -1234,5 +1237,116 @@ class ApiSmokeTest {
                 .header("Authorization", "Bearer " + expiredRaw)
                 .param("workspaceId", workspaceId))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void webhooksDeliverSignedEventsAndCanBeDeleted() throws Exception {
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
+            new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        java.util.concurrent.atomic.AtomicReference<String> receivedBody = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> receivedSignature = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/hook", exchange -> {
+            receivedBody.set(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            receivedSignature.set(exchange.getRequestHeaders().getFirst("x-drift-signature"));
+            exchange.sendResponseHeaders(200, 0);
+            exchange.close();
+        });
+        server.start();
+        try {
+            MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+            MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+            JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+            JsonNode workspace = boot.path("workspaces").get(0);
+            JsonNode board = workspace.path("boards").get(0);
+            String workspaceId = workspace.path("id").asText();
+            String boardId = board.path("id").asText();
+            String todo = board.path("columns").get(0).path("id").asText();
+
+            MvcResult createdHook = mockMvc.perform(post("/api/webhooks")
+                    .session(session)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of(
+                        "workspaceId", workspaceId,
+                        "kind", "generic",
+                        "url", "http://127.0.0.1:" + server.getAddress().getPort() + "/hook",
+                        "events", List.of("task.created")
+                    ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.webhook.secret").value(org.hamcrest.Matchers.startsWith("whsec_")))
+                .andReturn();
+            JsonNode hook = objectMapper.readTree(createdHook.getResponse().getContentAsString()).path("webhook");
+            String webhookId = hook.path("id").asText();
+            String secret = hook.path("secret").asText();
+
+            mockMvc.perform(get("/api/webhooks").session(session).param("workspaceId", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.webhooks[0].kind").value("generic"))
+                .andExpect(jsonPath("$.webhooks[0].events[0]").value("task.created"));
+
+            mockMvc.perform(patch("/api/webhooks/" + webhookId)
+                    .session(session)
+                    .param("workspaceId", workspaceId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("enabled", false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.webhook.enabled").value(false))
+                .andExpect(jsonPath("$.webhook.events[0]").value("task.created"));
+            mockMvc.perform(patch("/api/webhooks/" + webhookId)
+                    .session(session)
+                    .param("workspaceId", workspaceId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("enabled", true))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.webhook.enabled").value(true))
+                .andExpect(jsonPath("$.webhook.events[0]").value("task.created"));
+
+            mockMvc.perform(post("/api/tasks")
+                    .session(session)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of(
+                        "workspaceId", workspaceId,
+                        "boardId", boardId,
+                        "columnId", todo,
+                        "title", "Webhook task"
+                    ))))
+                .andExpect(status().isCreated());
+
+            Integer status = null;
+            for (int attempt = 0; attempt < 50; attempt++) {
+                List<Integer> statuses = jdbc.queryForList("""
+                    SELECT status FROM webhook_delivery WHERE webhook_id = ? ORDER BY created_at DESC LIMIT 1
+                    """, Integer.class, webhookId);
+                if (!statuses.isEmpty() && statuses.get(0) != null) {
+                    status = statuses.get(0);
+                    break;
+                }
+                Thread.sleep(100);
+            }
+            if (status == null) throw new AssertionError("Webhook delivery did not complete.");
+            if (status != 200) throw new AssertionError("Expected 200 delivery, got " + status);
+            if (receivedBody.get() == null || !receivedBody.get().contains("Webhook task")) {
+                throw new AssertionError("Webhook payload did not contain the task title.");
+            }
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(
+                secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+            String expected = "sha256=" + java.util.HexFormat.of().formatHex(
+                mac.doFinal(receivedBody.get().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            if (!expected.equals(receivedSignature.get())) {
+                throw new AssertionError("Webhook signature did not match.");
+            }
+
+            mockMvc.perform(delete("/api/webhooks/" + webhookId)
+                    .session(session)
+                    .param("workspaceId", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(true));
+            mockMvc.perform(get("/api/audit").session(session).param("workspaceId", workspaceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.events[?(@.action == 'webhook.created')]").isNotEmpty())
+                .andExpect(jsonPath("$.events[?(@.action == 'webhook.deleted')]").isNotEmpty());
+        } finally {
+            server.stop(0);
+        }
     }
 }

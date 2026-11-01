@@ -78,8 +78,8 @@ Status key:
 | `/api/undo/{id}` | DONE | Auto-plan, task create/complete/move/delete, board delete, and bulk action undo hooks |
 | `/api/upcoming` | DONE | Due-date groups |
 | `/api/views` | MISSING | Schema only |
-| `/api/webhooks` | MISSING | Schema only |
-| `/api/webhooks/{id}` | MISSING | |
+| `/api/webhooks` | DONE | Admin list/create; Slack, Teams, and generic payloads; signing secret shown once |
+| `/api/webhooks/{id}` | DONE | Enable/disable, URL/events update, delete |
 | `/api/workspaces` | PARTIAL | POST create only; no full list/update/delete |
 | `/api/workspaces/{id}` | MISSING | |
 | `/api/workspaces/{id}/invites` | DONE | Create invite |
@@ -133,8 +133,8 @@ Status key:
 | Invite | DONE | |
 | OidcConfig | SCHEMA | SSO not implemented |
 | ApiToken | DONE | Bearer auth, workspace scope, expiry, revocation, audit |
-| Webhook | SCHEMA | |
-| WebhookDelivery | SCHEMA | |
+| Webhook | DONE | Kind, URL, enable/disable, event subscriptions, HMAC signing secret |
+| WebhookDelivery | DONE | Persisted payload/status/response, async delivery, retry at 5/15/45 min |
 | IdempotencyKey | SCHEMA | |
 | UndoAction | DONE | Auto-plan and task/board undo records with TTL |
 | EmailMessage | SCHEMA | |
@@ -174,7 +174,8 @@ Status key:
 | Offline / PWA | PARTIAL | Service worker, manifest, cached bootstrap/board/today/settings, offline queue, retry/discard, sync banner; no idempotent replay/conflict resolution |
 | i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
-| Automations / Webhooks | MISSING | |
+| Webhooks | DONE | Admin CRUD, Slack/Teams/generic payloads, HMAC signature, async delivery with retries, SSRF/HTTPS guard |
+| Automations | MISSING | |
 | SSO / MFA | MISSING | |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
@@ -219,6 +220,7 @@ Status key:
 - [x] Phase 2 board/task scope complete
 - [x] Workspace API tokens with bearer auth, expiry, revocation, and audit
 - [x] Admin audit log with retention purge and cursor pagination
+- [x] Admin webhooks (Slack/Teams/generic) with signed async delivery, retries, and audit
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -246,5 +248,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. Automations, webhooks, SSO/MFA, import/export, deletion.
+7. Automations, SSO/MFA, import/export, deletion.
 8. Full E2E, screenshots, performance, and final parity sign-off.

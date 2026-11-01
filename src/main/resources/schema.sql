@@ -429,6 +429,7 @@ CREATE TABLE IF NOT EXISTS api_token (
 CREATE TABLE IF NOT EXISTS webhook (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'slack',
     url TEXT NOT NULL,
     secret_enc TEXT,
     enabled INTEGER NOT NULL DEFAULT 1,
@@ -453,6 +454,8 @@ CREATE TABLE IF NOT EXISTS webhook_delivery (
     created_at TEXT NOT NULL,
     FOREIGN KEY (webhook_id) REFERENCES webhook(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_webhook_delivery_next ON webhook_delivery(next_attempt_at);
 
 CREATE TABLE IF NOT EXISTS idempotency_key (
     id TEXT PRIMARY KEY,

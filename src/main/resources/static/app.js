@@ -3178,7 +3178,9 @@
       button.type = "button";
       button.addEventListener("click", () => {
         nav.querySelectorAll("button").forEach((node) => node.classList.toggle("active", node === button));
-        document.getElementById(`settings-${definition.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const target = document.getElementById(`settings-${definition.id}`);
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        target?.refreshSettingsSection?.();
       });
       nav.append(button);
       container.append(definition.render());
@@ -3700,7 +3702,162 @@
       }
     });
 
+    const hookHeader = element("div", "section-head");
+    hookHeader.style.marginTop = "24px";
+    const hookTitle = element("h3", "", t("Webhooks"));
+    const hookHint = element("span", "field-hint", t("Send selected events to Slack, Teams, or a generic JSON endpoint."));
+    hookHeader.append(hookTitle, hookHint);
+    const createdHook = element("div", "detail-list");
+    const hookList = element("div", "detail-list");
+    hookList.append(element("div", "empty", t("Loading webhooks…")));
+    const hookForm = element("form", "settings-card");
+    hookForm.style.marginTop = "12px";
+    const kindField = element("div", "field");
+    const kindLabel = element("label", "", t("Type"));
+    const kind = element("select", "select");
+    kind.add(new Option(t("Slack"), "slack"));
+    kind.add(new Option(t("Microsoft Teams"), "teams"));
+    kind.add(new Option(t("Generic JSON"), "generic"));
+    kindField.append(kindLabel, kind);
+    const urlField = element("div", "field");
+    const urlLabel = element("label", "", t("Webhook URL"));
+    const url = element("input", "input");
+    url.type = "url";
+    url.placeholder = "https://hooks.example.com/...";
+    urlField.append(urlLabel, url);
+    const hookRow = element("div", "form-row");
+    hookRow.append(kindField, urlField);
+    const eventField = element("div", "field");
+    eventField.append(element("label", "", t("Events")));
+    const eventWrap = element("div");
+    eventWrap.style.cssText = "display:flex;flex-wrap:wrap;gap:8px 14px";
+    const hookEvents = ["task.created", "task.moved", "task.completed", "task.deleted", "comment.created"];
+    const eventBoxes = [];
+    for (const eventName of hookEvents) {
+      const label = element("label", "");
+      label.style.cssText = "display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)";
+      const box = element("input");
+      box.type = "checkbox";
+      box.value = eventName;
+      box.checked = eventName !== "task.deleted" && eventName !== "comment.created";
+      label.append(box, document.createTextNode(eventName));
+      eventWrap.append(label);
+      eventBoxes.push(box);
+    }
+    eventField.append(eventWrap);
+    const hookSubmit = element("button", "btn primary sm", t("Add webhook"));
+    hookSubmit.type = "submit";
+    hookForm.append(hookRow, eventField, hookSubmit);
+    card.append(hookHeader, createdHook, hookList, hookForm);
+
+    const refreshHooks = async () => {
+      try {
+        const result = await request(`/api/webhooks?workspaceId=${encodeURIComponent(workspace().id)}`);
+        const hooks = result?.webhooks ?? [];
+        hookList.replaceChildren();
+        if (!hooks.length) hookList.append(element("div", "empty", t("No webhooks yet.")));
+        for (const hook of hooks) {
+          const item = element("div", "detail-item");
+          const grow = element("div", "grow");
+          grow.append(element("strong", "", `${hook.kind} · ${hook.url}`));
+          grow.append(element("p", "field-hint", `${(hook.events || []).join(", ")} · ${hook.deliveries || 0} ${t("deliveries")}`));
+          grow.append(element("p", "field-hint",
+            hook.lastStatus == null
+              ? t("No deliveries yet.")
+              : `HTTP ${hook.lastStatus} · ${relativeTime(hook.lastDeliveryAt)}`));
+          const toggle = element("button", "btn ghost sm", hook.enabled ? t("Disable") : t("Enable"));
+          toggle.type = "button";
+          toggle.addEventListener("click", async () => {
+            try {
+              await request(`/api/webhooks/${encodeURIComponent(hook.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, {
+                method: "PATCH",
+                body: { enabled: !hook.enabled },
+              });
+              showToast(t("Webhook updated."));
+              await refreshHooks();
+            } catch (error) {
+              showToast(error.message);
+            }
+          });
+          const remove = element("button", "btn danger sm", t("Delete"));
+          remove.type = "button";
+          remove.addEventListener("click", async () => {
+            if (!window.confirm(t("Delete this webhook?"))) return;
+            try {
+              await request(`/api/webhooks/${encodeURIComponent(hook.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
+              createdHook.replaceChildren();
+              showToast(t("Webhook deleted."));
+              await refreshHooks();
+            } catch (error) {
+              showToast(error.message);
+            }
+          });
+          item.append(grow, toggle, remove);
+          hookList.append(item);
+        }
+      } catch (error) {
+        hookList.replaceChildren(element("div", "empty", error.message));
+      }
+    };
+
+    hookForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const selectedEvents = eventBoxes.filter((box) => box.checked).map((box) => box.value);
+      if (!url.value.trim() || !selectedEvents.length) {
+        showToast(t("Choose a webhook URL and at least one event."));
+        return;
+      }
+      hookSubmit.disabled = true;
+      try {
+        const result = await request("/api/webhooks", {
+          method: "POST",
+          body: {
+            workspaceId: workspace().id,
+            kind: kind.value,
+            url: url.value.trim(),
+            events: selectedEvents,
+          },
+        });
+        createdHook.replaceChildren();
+        const secret = result?.webhook?.secret;
+        if (secret) {
+          const item = element("div", "detail-item");
+          const grow = element("div", "grow");
+          grow.append(element("strong", "", t("Webhook created. Copy the signing secret now.")));
+          const output = element("input", "input");
+          output.value = secret;
+          output.readOnly = true;
+          output.setAttribute("aria-label", t("Webhook signing secret"));
+          grow.append(output);
+          const copy = element("button", "btn ghost sm", t("Copy"));
+          copy.type = "button";
+          copy.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard?.writeText(secret);
+              showToast(t("Signing secret copied."));
+            } catch {
+              output.select();
+            }
+          });
+          item.append(grow, copy);
+          createdHook.append(item);
+        }
+        url.value = "";
+        showToast(t("Webhook created."));
+        await refreshHooks();
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        hookSubmit.disabled = false;
+      }
+    });
+
+    section.refreshSettingsSection = () => {
+      void refresh();
+      void refreshHooks();
+    };
     void refresh();
+    void refreshHooks();
     return section;
   }
 
@@ -3751,6 +3908,10 @@
     };
 
     more.addEventListener("click", () => void load(false));
+    section.refreshSettingsSection = () => {
+      cursor = null;
+      void load(true);
+    };
     void load(true);
     return section;
   }

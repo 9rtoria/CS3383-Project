@@ -48,6 +48,7 @@ Implemented:
 - Keyboard shortcuts: C, /, ?, G sequences, Shift+N, Ctrl/Cmd+K, Alt+Arrow move/reorder, single-key toggle
 - Workspace API tokens with bearer authentication, workspace scoping, expiry, and revocation
 - Admin audit log with cursor pagination, actor details, and configurable retention
+- Admin webhooks for Slack, Microsoft Teams, and generic JSON with HMAC signing, async delivery, retries, and delivery status
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -57,7 +58,7 @@ Implemented:
 Not implemented yet:
 
 - Full Insights and visual parity
-- SSO/MFA, Webhooks, Automations
+- SSO/MFA, Automations
 - Import/export, account/workspace deletion
 - Full accessibility, E2E, performance, and final parity sign-off
 
@@ -128,6 +129,10 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/tokens` | Create an API token and return the raw token once |
 | DELETE | `/api/tokens/{id}` | Revoke an API token |
 | GET | `/api/audit` | Admin audit feed with cursor pagination |
+| GET | `/api/webhooks` | Admin webhook list with delivery counts and last status |
+| POST | `/api/webhooks` | Create a webhook and return the signing secret once |
+| PATCH | `/api/webhooks/{id}` | Enable/disable or update a webhook |
+| DELETE | `/api/webhooks/{id}` | Delete a webhook |
 | POST | `/api/tasks` | Create a task |
 | POST | `/api/tasks/bulk` | Bulk complete, archive, delete, or move tasks |
 | GET | `/api/tasks/{id}` | Task detail with comments and checklist |

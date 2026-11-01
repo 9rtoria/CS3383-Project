@@ -97,6 +97,22 @@ public final class ApiDtos {
     ) {
     }
 
+    public record WebhookCreate(
+        String workspaceId,
+        String kind,
+        String url,
+        java.util.List<String> events
+    ) {
+    }
+
+    public record WebhookUpdate(
+        String kind,
+        String url,
+        Boolean enabled,
+        java.util.List<String> events
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type
