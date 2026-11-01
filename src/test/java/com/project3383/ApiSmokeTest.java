@@ -739,4 +739,180 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.task.activity[?(@.action == 'subtask.created')]").isNotEmpty())
             .andExpect(jsonPath("$.task.activity[?(@.action == 'attachment.created')]").isNotEmpty());
     }
+
+    @Test
+    void taskUndoRestoresCreateCompleteMoveAndDelete() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+        String done = board.path("columns").get(2).path("id").asText();
+
+        Map<String, Object> taskBody = new HashMap<>();
+        taskBody.put("workspaceId", workspaceId);
+        taskBody.put("boardId", boardId);
+        taskBody.put("columnId", todo);
+        taskBody.put("title", "Undo create task");
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(taskBody)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.undo.id").isString())
+            .andReturn();
+        JsonNode createdTask = objectMapper.readTree(created.getResponse().getContentAsString());
+        String createdId = createdTask.path("task").path("id").asText();
+        String createUndoId = createdTask.path("undo").path("id").asText();
+        mockMvc.perform(post("/api/undo/" + createUndoId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.undone").value(true));
+        mockMvc.perform(get("/api/tasks/" + createdId).session(session))
+            .andExpect(status().isNotFound());
+
+        Map<String, Object> recurringBody = new HashMap<>(taskBody);
+        recurringBody.put("title", "Undo complete task");
+        recurringBody.put("dueDate", "2026-11-01");
+        recurringBody.put("dueAllDay", true);
+        recurringBody.put("recurrenceRule", "FREQ=DAILY;INTERVAL=1");
+        MvcResult recurring = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(recurringBody)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        JsonNode recurringTask = objectMapper.readTree(recurring.getResponse().getContentAsString()).path("task");
+        String recurringId = recurringTask.path("id").asText();
+        MvcResult moved = mockMvc.perform(patch("/api/tasks/" + recurringId + "/move")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "version", recurringTask.path("version").asInt(),
+                    "columnId", done
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.nextTaskId").isString())
+            .andExpect(jsonPath("$.undo.id").isString())
+            .andReturn();
+        JsonNode movedPayload = objectMapper.readTree(moved.getResponse().getContentAsString());
+        String nextTaskId = movedPayload.path("nextTaskId").asText();
+        String moveUndoId = movedPayload.path("undo").path("id").asText();
+        mockMvc.perform(post("/api/undo/" + moveUndoId).session(session))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/tasks/" + recurringId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.columnId").value(todo))
+            .andExpect(jsonPath("$.task.completed").value(0));
+        mockMvc.perform(get("/api/tasks/" + nextTaskId).session(session))
+            .andExpect(status().isNotFound());
+
+        Map<String, Object> deleteBody = new HashMap<>(taskBody);
+        deleteBody.put("title", "Undo delete task");
+        MvcResult toDelete = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(deleteBody)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String deleteId = objectMapper.readTree(toDelete.getResponse().getContentAsString()).path("task").path("id").asText();
+        MvcResult deleted = mockMvc.perform(delete("/api/tasks/" + deleteId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.undo.id").isString())
+            .andReturn();
+        String deleteUndoId = objectMapper.readTree(deleted.getResponse().getContentAsString()).path("undo").path("id").asText();
+        mockMvc.perform(post("/api/undo/" + deleteUndoId).session(session))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/tasks/" + deleteId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.title").value("Undo delete task"));
+
+        MvcResult expired = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Expired undo task"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String expiredUndoId = objectMapper.readTree(expired.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        jdbc.update("UPDATE undo_action SET expires_at = ? WHERE id = ?",
+            Instant.now().minusSeconds(60).toString(), expiredUndoId);
+        mockMvc.perform(post("/api/undo/" + expiredUndoId).session(session))
+            .andExpect(status().isNotFound());
+
+        String autoUndoId = java.util.UUID.randomUUID().toString();
+        String today = java.time.LocalDate.now().toString();
+        String inverseJson = objectMapper.writeValueAsString(Map.of(
+            "startDate", today,
+            "endDate", today,
+            "previousBlocks", List.of(),
+            "previousSelections", List.of(),
+            "previousFocus", List.of(),
+            "previousArchived", List.of()
+        ));
+        jdbc.update("""
+            INSERT INTO undo_action (id, user_id, workspace_id, action, entity_type,
+                                     entity_id, inverse_json, expires_at, created_at)
+            VALUES (?, ?, ?, 'auto_plan.apply', 'workspace', ?, ?, ?, ?)
+            """, autoUndoId, boot.path("user").path("id").asText(), workspaceId,
+            workspaceId, inverseJson, Instant.now().plusSeconds(300).toString(), Instant.now().toString());
+        mockMvc.perform(post("/api/undo/" + autoUndoId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.undone").value(true))
+            .andExpect(jsonPath("$.action").value("auto_plan.apply"));
+    }
+
+    @Test
+    void boardDeleteUndoRestoresBoardAndTasks() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        String workspaceId = boot.path("workspaces").get(0).path("id").asText();
+
+        MvcResult boardCreated = mockMvc.perform(post("/api/boards")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Undo board"
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String boardId = objectMapper.readTree(boardCreated.getResponse().getContentAsString())
+            .path("board").path("id").asText();
+        JsonNode board = objectMapper.readTree(mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("board");
+        String todo = board.path("columns").get(0).path("id").asText();
+        mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Board undo task"
+                ))))
+            .andExpect(status().isCreated());
+
+        MvcResult deleted = mockMvc.perform(delete("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.undo.id").isString())
+            .andReturn();
+        String undoId = objectMapper.readTree(deleted.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/undo/" + undoId).session(session))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Board undo task"));
+    }
 }

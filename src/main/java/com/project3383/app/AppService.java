@@ -2,6 +2,7 @@ package com.project3383.app;
 
 import com.project3383.api.ApiDtos;
 import com.project3383.api.ApiException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,10 +35,12 @@ public class AppService {
     private static final Set<String> PRIORITIES = Set.of("none", "low", "medium", "high", "urgent");
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
+    private final ObjectMapper objectMapper;
 
-    public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder) {
+    public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -468,8 +471,23 @@ public class AppService {
             SELECT COUNT(*) FROM board WHERE workspace_id = ? AND deleted_at IS NULL AND archived_at IS NULL
             """, Integer.class, board.get("workspaceId"));
         if (active == null || active <= 1) throw ApiException.badRequest("Keep at least one active board.");
-        jdbc.update("UPDATE board SET deleted_at = ? WHERE id = ?", Instant.now().toString(), boardId);
-        return linked(Map.of("deleted", true));
+        String now = Instant.now().toString();
+        List<String> taskIds = jdbc.queryForList("""
+            SELECT id FROM task WHERE board_id = ? AND deleted_at IS NULL
+            """, String.class, boardId);
+        jdbc.update("UPDATE board SET deleted_at = ? WHERE id = ?", now, boardId);
+        jdbc.update("""
+            UPDATE task SET deleted_at = ?, version = version + 1
+            WHERE board_id = ? AND deleted_at IS NULL
+            """, now, boardId);
+        Map<String, Object> inverse = new LinkedHashMap<>();
+        inverse.put("taskIds", taskIds);
+        Map<String, Object> undo = createUndo(userId, (String) board.get("workspaceId"),
+            "board.delete", "board", boardId, inverse, 10);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deleted", true);
+        if (undo != null) result.put("undo", undo);
+        return result;
     }
 
     public Map<String, Object> toggleBoardShare(String userId, String boardId, ApiDtos.ShareToggle input) {
@@ -1108,7 +1126,11 @@ public class AppService {
             position, userId, now, now);
         replaceTaskLabels(taskId, workspaceId, input.labels());
         recordActivity(workspaceId, taskId, userId, "task.created", "task", taskId);
-        return linked(Map.of("task", task(userId, taskId)));
+        Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+        Map<String, Object> undo = createUndo(userId, workspaceId, "task.create", "task", taskId,
+            Map.of("columnId", input.columnId()), 10);
+        if (undo != null) result.put("undo", undo);
+        return result;
     }
 
     public Map<String, Object> taskDetail(String userId, String taskId) {
@@ -1140,6 +1162,29 @@ public class AppService {
                                         entity_type, entity_id, metadata, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)
             """, id(), workspaceId, taskId, actorId, action, entityType, entityId, Instant.now().toString());
+    }
+
+    private Map<String, Object> createUndo(String userId, String workspaceId, String action,
+                                           String entityType, String entityId,
+                                           Map<String, Object> inverse, int ttlSeconds) {
+        String undoId = id();
+        String now = Instant.now().toString();
+        String expiresAt = Instant.now().plusSeconds(ttlSeconds).toString();
+        try {
+            jdbc.update("""
+                INSERT INTO undo_action (id, user_id, workspace_id, action, entity_type,
+                                         entity_id, inverse_json, expires_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, undoId, userId, workspaceId, action, entityType, entityId,
+                objectMapper.writeValueAsString(inverse), expiresAt, now);
+            Map<String, Object> undo = new LinkedHashMap<>();
+            undo.put("id", undoId);
+            undo.put("expiresAt", expiresAt);
+            undo.put("action", action);
+            return undo;
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     private List<Map<String, Object>> activityList(String taskId) {
@@ -1416,6 +1461,13 @@ public class AppService {
         recordActivity((String) current.get("workspaceId"), taskId, userId,
             completing ? "task.completed" : "task.moved", "task", taskId);
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+        Map<String, Object> inverse = new LinkedHashMap<>();
+        inverse.put("columnId", current.get("columnId"));
+        inverse.put("previousCompleted", number(current.get("completed")));
+        if (nextTaskId != null) inverse.put("nextTaskId", nextTaskId);
+        Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
+            "task.move", "task", taskId, inverse, 60);
+        if (undo != null) result.put("undo", undo);
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
     }
@@ -1428,7 +1480,14 @@ public class AppService {
             UPDATE task SET deleted_at = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL
             """, Instant.now().toString(), taskId);
         recordActivity((String) current.get("workspaceId"), taskId, userId, "task.deleted", "task", taskId);
-        return Map.of("deleted", true);
+        Map<String, Object> inverse = new LinkedHashMap<>();
+        inverse.put("columnId", current.get("columnId"));
+        Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
+            "task.delete", "task", taskId, inverse, 10);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deleted", true);
+        if (undo != null) result.put("undo", undo);
+        return result;
     }
 
     public Map<String, Object> focusTask(String userId, String taskId, ApiDtos.FocusLog input) {
@@ -1461,6 +1520,15 @@ public class AppService {
             recordActivity((String) current.get("workspaceId"), taskId, userId, "task.completed", "task", taskId);
         }
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+        if (complete && number(current.get("completed")) == 0) {
+            Map<String, Object> inverse = new LinkedHashMap<>();
+            inverse.put("columnId", current.get("columnId"));
+            inverse.put("previousCompleted", number(current.get("completed")));
+            if (nextTaskId != null) inverse.put("nextTaskId", nextTaskId);
+            Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
+                "task.complete", "task", taskId, inverse, 10);
+            if (undo != null) result.put("undo", undo);
+        }
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
     }
@@ -1484,6 +1552,15 @@ public class AppService {
         recordActivity((String) current.get("workspaceId"), taskId, userId,
             completed ? "task.completed" : "task.reopened", "task", taskId);
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+        if (completed) {
+            Map<String, Object> inverse = new LinkedHashMap<>();
+            inverse.put("columnId", current.get("columnId"));
+            inverse.put("previousCompleted", number(current.get("completed")));
+            if (nextTaskId != null) inverse.put("nextTaskId", nextTaskId);
+            Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
+                "task.complete", "task", taskId, inverse, 10);
+            if (undo != null) result.put("undo", undo);
+        }
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
     }

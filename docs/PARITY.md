@@ -74,7 +74,7 @@ Status key:
 | `/api/today` | DONE | Workspace-scoped GET, per-user selection, accept/dismiss/rebalance/applyPlan, counts |
 | `/api/tokens` | MISSING | |
 | `/api/tokens/{id}` | MISSING | |
-| `/api/undo/{id}` | PARTIAL | Auto-plan apply undo; task/bulk/automation undo not implemented |
+| `/api/undo/{id}` | DONE | Auto-plan, task create/complete/move/delete, board delete, and bulk action undo hooks |
 | `/api/upcoming` | DONE | Due-date groups |
 | `/api/views` | MISSING | Schema only |
 | `/api/webhooks` | MISSING | Schema only |
@@ -135,7 +135,7 @@ Status key:
 | Webhook | SCHEMA | |
 | WebhookDelivery | SCHEMA | |
 | IdempotencyKey | SCHEMA | |
-| UndoAction | PARTIAL | Auto-plan apply undo records |
+| UndoAction | DONE | Auto-plan and task/board undo records with TTL |
 | EmailMessage | SCHEMA | |
 | JobRun | SCHEMA | |
 | ClientError | SCHEMA | |
@@ -157,6 +157,7 @@ Status key:
 | Task dependencies | DONE | |
 | Attachments | DONE | |
 | Task completion / reopen | DONE | |
+| Task undo | DONE | Create, complete, move, delete, and board delete with toast actions |
 | Labels | PARTIAL | Task-scoped labels; no label manager |
 | Today / capacity / accept / dismiss | DONE | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies, rebalance/applyPlan |
 | Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; exact visual parity pending |
@@ -208,6 +209,7 @@ Status key:
 - [x] Task assignee and recurrence with next-occurrence generation
 - [x] Public read-only board share links with token revocation
 - [x] Task activity trail for task, comment, checklist, attachment, Today, and recurrence events
+- [x] Undo for task create/complete/move/delete and board delete
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -234,6 +236,6 @@ Status key:
 3. Full drawer parity for reminders and label management.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Remaining Phase 2 board/task gaps: undo/bulk actions, command palette.
+6. Remaining Phase 2 board/task gaps: bulk actions, command palette.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

@@ -129,6 +129,22 @@
     showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 8000);
   }
 
+  function undoToastAction(undo, after) {
+    if (!undo || !undo.id) return null;
+    return {
+      label: t("Undo"),
+      onClick: async () => {
+        try {
+          await request(`/api/undo/${encodeURIComponent(undo.id)}`, { method: "POST" });
+          if (typeof after === "function") await after();
+          showToast(t("Action undone."));
+        } catch (error) {
+          showToast(error.message);
+        }
+      },
+    };
+  }
+
   function workspace() {
     const workspaces = state.boot?.workspaces ?? [];
     return workspaces.find((item) => item.id === state.currentWorkspaceId) ?? workspaces[0] ?? null;
@@ -861,15 +877,22 @@
   async function deleteCurrentBoard() {
     const board = currentBoard();
     if (!board) return;
-    if (!window.confirm(t("Delete \"{{name}}\"? This cannot be undone here.", { name: board.name }))) return;
+    const workspaceId = workspace().id;
+    if (!window.confirm(t("Delete \"{{name}}\"? You can undo for a few seconds.", { name: board.name }))) return;
     try {
-      await request(`/api/boards/${encodeURIComponent(board.id)}`, { method: "DELETE" });
+      const result = await request(`/api/boards/${encodeURIComponent(board.id)}`, { method: "DELETE" });
       await refreshBootstrap();
       const next = boards()[0] ?? null;
       state.currentBoardId = next?.id ?? null;
       if (next) await loadBoard(next.id);
       setView("board");
-      showToast(t("Board deleted."));
+      showToast(t("Board deleted."), undoToastAction(result?.undo, async () => {
+        state.currentWorkspaceId = workspaceId;
+        await refreshBootstrap();
+        state.currentBoardId = board.id;
+        await loadBoard(board.id);
+        setView("board");
+      }));
     } catch (error) {
       showToast(error.message);
     }
@@ -1055,7 +1078,13 @@
           }
           await loadBoard(state.currentBoardId);
           window.DriftSound?.play("move");
-          if (result?.nextTaskId) showToast(t("Next occurrence created."));
+          showToast(
+            t("Task moved.") + (result?.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
+            undoToastAction(result?.undo, async () => {
+              await loadBoard(state.currentBoardId);
+              await loadToday();
+            })
+          );
         } catch (error) {
           showToast(error.message);
         }
@@ -1766,7 +1795,11 @@
       await loadToday();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
       showToast(t("Focus complete — {{minutes}}m tracked.", { minutes })
-        + (result.nextTaskId ? ` ${t("Next occurrence created.")}` : ""));
+        + (result.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
+        undoToastAction(result.undo, async () => {
+          await loadToday();
+          if (state.currentBoardId) await loadBoard(state.currentBoardId);
+        }));
     } catch (error) {
       focus.busy = false;
       focus.error = error.message;
@@ -2159,8 +2192,9 @@
     button.disabled = true;
     button.firstChild.textContent = t("Adding…");
     try {
+      let created = null;
       try {
-        await request("/api/tasks", { method: "POST", body });
+        created = await request("/api/tasks", { method: "POST", body });
       } catch (error) {
         if (error.code === "NETWORK_ERROR" && window.DriftOffline) {
           queueOfflineWrite("/api/tasks", { method: "POST", body }, { kind: "task.create", label: body.title });
@@ -2174,7 +2208,10 @@
       window.DriftSound?.play("capture");
       await loadBoard(state.currentBoardId);
       await loadToday();
-      showToast(t("Added to {{board}}", { board: board.name }));
+      showToast(t("Added to {{board}}", { board: board.name }), undoToastAction(created?.undo, async () => {
+        await loadBoard(state.currentBoardId);
+        await loadToday();
+      }));
       if (settingOn(state.settings?.captureCloseAfterAdd)) {
         closeCapture();
       } else {
@@ -2571,19 +2608,20 @@
         recurrenceRule,
         ...(recurrenceRule ? {} : { recurrenceEndsAt: null }),
       };
+      let saved = null;
       if (task) {
-        const result = await requestOrQueue(
+        saved = await requestOrQueue(
           `/api/tasks/${encodeURIComponent(task.id)}`,
           { method: "PATCH", body: { ...body, version: task.version } },
           { kind: "task.update", label: body.title }
         );
-        if (result?.queued) {
+        if (saved?.queued) {
           closeModal();
           showToast(t("Saved on this device — will sync when you reconnect."));
           return;
         }
       } else {
-        const result = await requestOrQueue(
+        saved = await requestOrQueue(
           "/api/tasks",
           {
             method: "POST",
@@ -2596,7 +2634,7 @@
           },
           { kind: "task.create", label: body.title }
         );
-        if (result?.queued) {
+        if (saved?.queued) {
           closeModal();
           showToast(t("Saved on this device — will sync when you reconnect."));
           return;
@@ -2606,6 +2644,14 @@
       await loadBoard(state.currentBoardId);
       await loadToday();
       window.DriftSound?.play("capture");
+      if (task) {
+        showToast(t("Task saved."));
+      } else {
+        showToast(t("Task created."), undoToastAction(saved?.undo, async () => {
+          await loadBoard(state.currentBoardId);
+          await loadToday();
+        }));
+      }
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -2630,7 +2676,14 @@
       await loadBoard(state.currentBoardId);
       await loadToday();
       window.DriftSound?.play(completed ? "complete" : "tap");
-      if (result?.nextTaskId) showToast(t("Next occurrence created."));
+      showToast(
+        t(completed ? "Task completed." : "Task reopened.")
+          + (result?.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
+        undoToastAction(result?.undo, async () => {
+          await loadBoard(state.currentBoardId);
+          await loadToday();
+        })
+      );
     } catch (error) {
       showToast(error.message);
     }
@@ -2640,10 +2693,14 @@
     const task = state.editing;
     if (!task || !window.confirm(`Delete “${task.title}”?`)) return;
     try {
-      await request(`/api/tasks/${encodeURIComponent(task.id)}`, { method: "DELETE" });
+      const result = await request(`/api/tasks/${encodeURIComponent(task.id)}`, { method: "DELETE" });
       closeModal();
       await loadBoard(state.currentBoardId);
       await loadToday();
+      showToast(t("Task deleted."), undoToastAction(result?.undo, async () => {
+        await loadBoard(state.currentBoardId);
+        await loadToday();
+      }));
     } catch (error) {
       showToast(error.message);
     }
