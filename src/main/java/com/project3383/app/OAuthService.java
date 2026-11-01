@@ -92,10 +92,11 @@ public class OAuthService {
         }
         String accessToken = token.path("access_token").asText();
         if ("github".equals(id)) {
-            JsonNode user = getJson("https://api.github.com/user", accessToken);
+            JsonNode user = getJson(property("OAUTH_GITHUB_USER_URL", "https://api.github.com/user"), accessToken);
             String email = user.path("email").asText(null);
             if (email == null || email.isBlank()) {
-                JsonNode emails = getJson("https://api.github.com/user/emails", accessToken);
+                JsonNode emails = getJson(property("OAUTH_GITHUB_EMAILS_URL",
+                    "https://api.github.com/user/emails"), accessToken);
                 if (emails != null && emails.isArray()) {
                     for (JsonNode item : emails) {
                         if (item.path("verified").asBoolean(false)
@@ -111,7 +112,8 @@ public class OAuthService {
             return new Profile(user.path("id").asText(), email, name);
         }
         if ("google".equals(id)) {
-            JsonNode profile = getJson("https://openidconnect.googleapis.com/v1/userinfo", accessToken);
+            JsonNode profile = getJson(property("OAUTH_GOOGLE_USERINFO_URL",
+                "https://openidconnect.googleapis.com/v1/userinfo"), accessToken);
             String email = profile.path("email_verified").asBoolean(false)
                 ? profile.path("email").asText(null) : null;
             String name = profile.path("name").asText(null);
@@ -127,7 +129,8 @@ public class OAuthService {
         try {
             com.nimbusds.jwt.SignedJWT signed = com.nimbusds.jwt.SignedJWT.parse(idToken);
             com.nimbusds.jose.jwk.JWKSet jwks = com.nimbusds.jose.jwk.JWKSet
-                .load(new java.net.URL("https://appleid.apple.com/auth/keys"));
+                .load(new java.net.URL(property("OAUTH_APPLE_JWKS_URL",
+                    "https://appleid.apple.com/auth/keys")));
             com.nimbusds.jose.jwk.JWK jwk = jwks.getKeyByKeyId(signed.getHeader().getKeyID());
             if (jwk == null || !(jwk instanceof com.nimbusds.jose.jwk.RSAKey rsaKey)) {
                 throw new IllegalArgumentException("Unknown Apple signing key.");
@@ -163,8 +166,8 @@ public class OAuthService {
             String secret = environment.getProperty("GITHUB_CLIENT_SECRET", "");
             if (clientId.isBlank() || secret.isBlank()) return null;
             return new Provider("github", clientId, secret,
-                "https://github.com/login/oauth/authorize",
-                "https://github.com/login/oauth/access_token",
+                property("OAUTH_GITHUB_AUTHORIZE_URL", "https://github.com/login/oauth/authorize"),
+                property("OAUTH_GITHUB_TOKEN_URL", "https://github.com/login/oauth/access_token"),
                 "read:user user:email", "GitHub");
         }
         if ("google".equals(id)) {
@@ -172,8 +175,8 @@ public class OAuthService {
             String secret = environment.getProperty("GOOGLE_CLIENT_SECRET", "");
             if (clientId.isBlank() || secret.isBlank()) return null;
             return new Provider("google", clientId, secret,
-                "https://accounts.google.com/o/oauth2/v2/auth",
-                "https://oauth2.googleapis.com/token",
+                property("OAUTH_GOOGLE_AUTHORIZE_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
+                property("OAUTH_GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),
                 "openid email profile", "Google");
         }
         if ("apple".equals(id)) {
@@ -181,8 +184,8 @@ public class OAuthService {
             String secret = environment.getProperty("APPLE_CLIENT_SECRET", "");
             if (clientId.isBlank() || secret.isBlank()) return null;
             return new Provider("apple", clientId, secret,
-                "https://appleid.apple.com/auth/authorize",
-                "https://appleid.apple.com/auth/token",
+                property("OAUTH_APPLE_AUTHORIZE_URL", "https://appleid.apple.com/auth/authorize"),
+                property("OAUTH_APPLE_TOKEN_URL", "https://appleid.apple.com/auth/token"),
                 "name email", "Apple");
         }
         return null;
@@ -228,6 +231,11 @@ public class OAuthService {
         } catch (Exception exception) {
             throw new IllegalStateException("The provider profile could not be read.", exception);
         }
+    }
+
+    private String property(String key, String fallback) {
+        String value = environment.getProperty(key);
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private String encode(String value) {

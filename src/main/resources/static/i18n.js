@@ -479,6 +479,7 @@
   "Good afternoon": "午安",
   "Good evening": "晚安",
   "Still up": "還醒著",
+  "{{count}} task chosen for today. Start with it; the rest can wait.": "你已選了 {{count}} 項工作。從它開始，其餘可以等一下。",
   "{{count}} tasks chosen for today. Start with the first one; the rest can wait.": "今天已選 {{count}} 件事。先從第一件開始，其餘可以等一下。",
   "Your day is open. Pick one meaningful thing, or capture whatever is on your mind.": "今天還是開放的。選一件有意義的事，或先把腦袋裡的東西捕捉下來。",
   "Today's capacity": "今日容量",

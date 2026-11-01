@@ -834,7 +834,6 @@
   }
 
   async function loadCalendar() {
-    $("calendarIcsLink").href = `/api/calendar/ics?workspaceId=${encodeURIComponent(workspace().id)}`;
     const year = state.calendarMonth.getFullYear();
     const month = state.calendarMonth.getMonth();
     const start = new Date(year, month, 1);
@@ -1296,8 +1295,11 @@
     header.append(element("div", "timeline-label", t("Task")));
     const dates = element("div", "timeline-dates");
     for (const date of days) {
-      const cell = element("span", dateKey(date) === localDateKey() ? "today" : "");
-      cell.append(element("strong", "", new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "short" }).format(date).toUpperCase()));
+      const isToday = dateKey(date) === localDateKey();
+      const cell = element("span", isToday ? "today" : "");
+      cell.append(element("strong", "", isToday
+        ? t("Today").toUpperCase()
+        : new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "short" }).format(date).toUpperCase()));
       cell.append(element("small", "", new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(date)));
       dates.append(cell);
     }
@@ -2233,7 +2235,7 @@
     const hour = now.getHours();
     const greeting = hour < 12 ? t("Good morning") : hour < 18 ? t("Good afternoon") : t("Good evening");
     const name = state.boot?.user?.name || t("there");
-    $("todayGreeting").textContent = `${greeting}, ${name}.`;
+    $("todayGreeting").textContent = `${greeting}, ${name.split(/\s+/)[0]}.`;
     $("todayDateLabel").textContent = new Intl.DateTimeFormat(state.settings?.locale || undefined, {
       weekday: "long", month: "long", day: "numeric",
     }).format(now).toUpperCase();
@@ -2273,17 +2275,24 @@
     const selected = Number(capacity.selectedMinutes || 0);
     const total = Number(capacity.totalMinutes || 300);
     const percent = total ? Math.min(100, Math.round((selected / total) * 100)) : 0;
-    $("capacityNumber").textContent = `${Math.floor(selected / 60)}h ${selected % 60}m`;
+    $("capacityNumber").textContent = String(selected);
     $("capacityTotal").textContent = String(total);
     const minutesLeft = Math.max(0, total - selected);
     $("capacityBar").firstElementChild.style.width = `${percent}%`;
     $("capacityHint").textContent = capacity.overbooked
       ? t("This day is over capacity.")
-      : t("{{count}} minutes still open.", { count: minutesLeft });
+      : `${minutesLeft} ${t("min left")}`;
     const capacityBadge = $("capacityBadge");
     capacityBadge.textContent = capacity.overbooked ? t("Over capacity") : percent >= 80 ? t("Nearly full") : t("Open");
-    capacityBadge.className = `badge ${capacity.overbooked ? "danger" : percent >= 80 ? "amber" : "moss"}`;
-    $("capacitySuggested").textContent = `${suggestions.length} ${t("suggested")}`;
+    capacityBadge.className = `badge ${capacity.overbooked ? "danger" : "moss"}`;
+    const selectedCount = suggestions.filter((task) => task.selected || task.accepted).length;
+    $("todaySub").textContent = selectedCount
+      ? t(selectedCount === 1
+        ? "{{count}} task chosen for today. Start with it; the rest can wait."
+        : "{{count}} tasks chosen for today. Start with the first one; the rest can wait.",
+        { count: selectedCount })
+      : t("Your day is open. Pick one meaningful thing, or capture whatever is on your mind.");
+    $("capacitySuggested").textContent = `${selectedCount} ${t("suggested")}`;
     $("glanceOpen").textContent = String(suggestions.length);
     $("glanceDue").textContent = String(suggestions.filter((task) => String(task.dueDate || "").slice(0, 10) === dateKey(now)).length);
     $("glanceChosen").textContent = String(suggestions.filter((task) => task.selected || task.accepted).length);

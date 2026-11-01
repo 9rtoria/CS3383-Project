@@ -193,7 +193,7 @@ Status key:
 - Cookie mutations are protected by Origin/Sec-Fetch-Site validation; no separate token-based CSRF scheme is issued.
 - SQLite schema is managed by Flyway versioned migrations.
 - `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is mirrored for API compatibility.
-- External OAuth, SMTP, and OIDC delivery require real provider credentials. The flows are implemented and covered by local contracts; live provider verification remains an environment/deployment check. Apple identity tokens are verified against Apple's JWKS with issuer, audience, and expiry checks.
+- External OAuth, SMTP, and OIDC delivery require real provider credentials. GitHub, Google, and Apple exchange/profile/JWKS contracts are covered by local mock-provider tests, including Apple signature rejection; queued email delivery is covered by a real local SMTP socket test. Live provider/SMTP verification remains an environment check. External OIDC is also covered by a local fake-provider test.
 - i18n covers every statically extracted UI, auth, board, task, calendar, archive, search, settings, and admin string. The audit reports zero missing `t()` keys; provider names and user-authored content stay untranslated by design.
 - Visual parity uses the reference design language, spacing, type scale, palettes, card structure, and interaction states. Rendering differs at the sub-pixel level because this implementation is native HTML/CSS/JS rather than React/Tailwind.
 
@@ -268,5 +268,5 @@ Status key:
 
 1. Full Spring Security filter-chain migration and token-based CSRF if the deployment requires it.
 2. Live OAuth, SMTP, and external OIDC provider verification with real credentials.
-3. HTTPS termination, `Secure` cookies, forwarded-header policy, and production static caching.
+3. Terminate TLS at the reverse proxy; the `prod` profile already supplies `Secure` cookies, forwarded headers, HSTS, compression, and static caching.
 4. Perform manual NVDA/VoiceOver verification; automated axe checks are clean, and all static Traditional Chinese strings are translated.

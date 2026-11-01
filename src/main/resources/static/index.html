@@ -51,6 +51,7 @@
         <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
       </div>
 
+      <div class="side-label nav-label">Plan</div>
       <nav class="nav" aria-label="Views">
         <button type="button" data-view="today" class="active"><svg class="icon nav-icon"><use href="#i-sun"/></svg><span>Today</span></button>
         <button type="button" data-view="upcoming"><svg class="icon nav-icon"><use href="#i-calendar-up"/></svg><span>Upcoming</span></button>
@@ -115,7 +116,7 @@
           <div class="hero-copy">
             <p class="hero-date" id="todayDateLabel">Sunday, November 1</p>
             <h1 class="hero-title" id="todayGreeting">Good evening.</h1>
-            <p class="hero-sub">Your day is open. Pick one meaningful thing, or capture whatever is on your mind.</p>
+            <p class="hero-sub" id="todaySub">Your day is open. Pick one meaningful thing, or capture whatever is on your mind.</p>
             <div class="hero-actions">
               <button type="button" id="todayCaptureButton" class="btn primary"><svg class="icon"><use href="#i-capture"/></svg><span>Capture a task</span></button>
               <button type="button" id="todayMonthButton" class="btn"><svg class="icon"><use href="#i-calendar"/></svg><span>See the month</span></button>
@@ -287,7 +288,6 @@
             <p class="page-sub">Dates are commitments; everything else can stay flexible.</p>
           </div>
           <div class="page-actions">
-            <a id="calendarIcsLink" class="btn sm" href="/api/calendar/ics">Download ICS</a>
             <button type="button" id="calendarTodayButton" class="btn sm">Today</button>
             <button type="button" id="calendarNewTaskButton" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg><span>New task</span></button>
           </div>

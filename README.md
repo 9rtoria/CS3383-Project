@@ -112,6 +112,17 @@ java -jar target\project3383-0.0.1-SNAPSHOT.jar
 
 The database file is created at `data/project3383.db`. Delete it to reset the local demo data.
 
+For a TLS-terminated deployment, run with the production profile:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE='prod'
+java -jar target\project3383-0.0.1-SNAPSHOT.jar
+```
+
+The `prod` profile enables `Secure` cookies, forwarded-header handling, HSTS, compression, and static caching. TLS itself belongs at the reverse proxy.
+
+Provider credentials are read from `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APPLE_CLIENT_ID`, and `APPLE_CLIENT_SECRET`. SMTP uses the standard `SPRING_MAIL_*` environment variables. Never commit secrets.
+
 ## Test
 
 ```powershell

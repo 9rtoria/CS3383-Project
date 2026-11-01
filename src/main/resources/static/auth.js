@@ -27,6 +27,7 @@
     next: safeNext(query.get("next") || "/"),
     challenge: query.get("mfa") === "1" ? (query.get("challenge") || "") : "",
     claim: false,
+    signupAvailable: false,
     busy: false,
   };
 
@@ -109,6 +110,7 @@
       button.classList.toggle("active", button.dataset.mode === state.mode);
     });
     $("tabSignin").classList.toggle("hidden", state.claim);
+    $("tabSignup").classList.toggle("hidden", state.claim || !state.signupAvailable);
     $("signupSubmit").lastChild.textContent = state.claim ? " Save my workspace" : " Create account";
     const active = state.challenge ? forms.mfa : forms[state.mode];
     const focus = active?.querySelector("input");
@@ -289,6 +291,7 @@
       const session = await api("/api/auth/session");
       const boot = session?.authenticated ? session.bootstrap : null;
       const guest = boot?.user?.isGuest === 1 || boot?.user?.isGuest === true;
+      state.signupAvailable = Boolean(guest);
       if (guest && !state.challenge) {
         state.claim = true;
         state.mode = query.get("mode") === "magic" ? "magic" : query.get("mode") === "signin" ? "signin" : "signup";
