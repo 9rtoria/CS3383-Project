@@ -3,6 +3,9 @@ package com.project3383.api;
 import com.project3383.app.AppService;
 import com.project3383.auth.CurrentUser;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -75,6 +78,29 @@ public class AppController {
     @GetMapping("/insights")
     public Map<String, Object> insights(HttpSession session, @RequestParam String workspaceId) {
         return appService.insights(CurrentUser.id(session), workspaceId);
+    }
+
+    @GetMapping("/archive")
+    public Map<String, Object> archive(HttpSession session, @RequestParam String workspaceId) {
+        return appService.archive(CurrentUser.id(session), workspaceId);
+    }
+
+    @GetMapping("/upcoming")
+    public Map<String, Object> upcoming(
+        HttpSession session,
+        @RequestParam String workspaceId,
+        @RequestParam(defaultValue = "14") int days
+    ) {
+        return appService.upcoming(CurrentUser.id(session), workspaceId, days);
+    }
+
+    @GetMapping(value = "/calendar/ics", produces = "text/calendar")
+    public ResponseEntity<String> calendarIcs(HttpSession session, @RequestParam String workspaceId) {
+        String body = appService.calendarIcs(CurrentUser.id(session), workspaceId);
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("text/calendar; charset=utf-8"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"project3383.ics\"")
+            .body(body);
     }
 
     @GetMapping("/health")

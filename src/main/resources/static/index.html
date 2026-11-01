@@ -21,6 +21,8 @@
         <button type="button" data-view="today" class="active">Today</button>
         <button type="button" data-view="board">Board</button>
         <button type="button" data-view="calendar">Calendar</button>
+        <button type="button" data-view="upcoming">Upcoming</button>
+        <button type="button" data-view="archive">Archive</button>
         <button type="button" data-view="search">Search</button>
         <button type="button" data-view="insights">Insights</button>
       </nav>
@@ -93,11 +95,28 @@
               <p class="hint">Tasks and scheduled blocks by due date.</p>
             </div>
             <div class="top-actions">
+              <a id="calendarIcsLink" class="btn sm" href="/api/calendar/ics">Download ICS</a>
               <button type="button" id="calendarPrev" class="btn sm">Previous</button>
               <button type="button" id="calendarNext" class="btn sm">Next</button>
             </div>
           </div>
           <div id="calendarGrid" class="calendar-grid"></div>
+        </div>
+      </section>
+
+      <section id="upcomingView" class="hidden" aria-label="Upcoming">
+        <div class="panel">
+          <h2>Upcoming</h2>
+          <p class="hint">Tasks with due dates in the next 14 days.</p>
+          <div id="upcomingList" class="today-list"></div>
+        </div>
+      </section>
+
+      <section id="archiveView" class="hidden" aria-label="Archive">
+        <div class="panel">
+          <h2>Archive</h2>
+          <p class="hint">Completed work, kept for reference.</p>
+          <div id="archiveList" class="today-list"></div>
         </div>
       </section>
 

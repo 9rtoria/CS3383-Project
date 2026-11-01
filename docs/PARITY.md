@@ -1,4 +1,4 @@
-# Project3383 — Phase 0 Parity Matrix
+# Project3383 ??Phase 0 Parity Matrix
 
 **Reference:** ProjectA2 `a78abe2`  
 **Baseline visuals:** `C:\Users\yanpi\OneDrive\桌面\ProjectA2\docs\screenshots`  
@@ -8,10 +8,10 @@
 
 Status key:
 
-- **DONE** — user-visible behavior and API exist in Project3383
-- **PARTIAL** — some behavior/API exists, but parity gaps remain
-- **SCHEMA** — database table exists, service/UI not yet implemented
-- **MISSING** — not implemented
+- **DONE** ??user-visible behavior and API exist in Project3383
+- **PARTIAL** ??some behavior/API exists, but parity gaps remain
+- **SCHEMA** ??database table exists, service/UI not yet implemented
+- **MISSING** ??not implemented
 
 > This is the Phase 0 source of truth. A feature is not considered ported merely because a table or route exists.
 
@@ -20,7 +20,7 @@ Status key:
 | Reference path | Project3383 status | Notes |
 |---|---|---|
 | `/api/account` | MISSING | Profile update/delete not implemented |
-| `/api/archive` | MISSING | |
+| `/api/archive` | DONE | Completed tasks |
 | `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
 | `/api/attachments/{id}` | DONE | Download/delete |
 | `/api/audit` | MISSING | Schema only |
@@ -45,7 +45,7 @@ Status key:
 | `/api/boards/{id}/share` | MISSING | |
 | `/api/bootstrap` | DONE | Core payload; no settings/theme bundle yet |
 | `/api/calendar` | DONE | Date-range tasks and plan blocks |
-| `/api/calendar/ics` | MISSING | |
+| `/api/calendar/ics` | DONE | Authenticated ICS download |
 | `/api/client-errors` | MISSING | Schema only |
 | `/api/columns` | MISSING | |
 | `/api/columns/reorder` | MISSING | |
@@ -74,7 +74,7 @@ Status key:
 | `/api/tokens` | MISSING | |
 | `/api/tokens/{id}` | MISSING | |
 | `/api/undo/{id}` | MISSING | Schema only |
-| `/api/upcoming` | MISSING | |
+| `/api/upcoming` | DONE | Due-date groups |
 | `/api/views` | MISSING | Schema only |
 | `/api/webhooks` | MISSING | Schema only |
 | `/api/webhooks/{id}` | MISSING | |
@@ -156,8 +156,8 @@ Status key:
 | Today / capacity / accept / dismiss | DONE | |
 | Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
 | Smart Plan / Auto-plan | PARTIAL | Preview/apply/clear; no undo, no full settings |
-| Calendar / ICS | PARTIAL | Month calendar; ICS missing |
-| Search / Archive / Upcoming | PARTIAL | Search implemented with LIKE; Archive/Upcoming missing |
+| Calendar / ICS | DONE | Month calendar and ICS download |
+| Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
 | Insights | PARTIAL | Basic counts; full reference views missing |
 | Settings / Focus / Voice / Sound | PARTIAL | Settings storage/API only; UI/Focus/Voice/Sound missing |
 | Offline / PWA | MISSING | |
@@ -182,7 +182,7 @@ Status key:
 
 ## 5. Phase gate
 
-### Phase 0 — complete when
+### Phase 0 ??complete when
 - [x] API inventory exists
 - [x] Model inventory exists
 - [x] UI/feature inventory exists
@@ -190,7 +190,7 @@ Status key:
 - [x] Baseline screenshots and demo script linked from ProjectA2
 - [x] Each PARTIAL/MISSING item is assigned to a later phase in §6
 
-### Phase 1 — complete when
+### Phase 1 ??complete when
 - [x] Spring Boot + JDK17 + Maven Wrapper
 - [x] SQLite + schema bootstrap
 - [x] Static HTML/CSS/JS served

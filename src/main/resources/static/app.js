@@ -301,6 +301,7 @@
   }
 
   async function loadCalendar() {
+    $("calendarIcsLink").href = `/api/calendar/ics?workspaceId=${encodeURIComponent(workspace().id)}`;
     const year = state.calendarMonth.getFullYear();
     const month = state.calendarMonth.getMonth();
     const start = new Date(year, month, 1);
@@ -337,6 +338,43 @@
       }
       grid.append(day);
     }
+  }
+
+  async function loadUpcoming() {
+    try {
+      const data = await request(`/api/upcoming?workspaceId=${encodeURIComponent(workspace().id)}&days=14`);
+      const container = $("upcomingList");
+      container.replaceChildren();
+      for (const day of data.days ?? []) {
+        if (!(day.tasks ?? []).length) continue;
+        container.append(element("h3", "side-label", day.date));
+        for (const task of day.tasks) container.append(simpleTaskRow(task));
+      }
+      if (!container.childElementCount) container.append(element("div", "empty", "Nothing due in the next 14 days."));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function loadArchive() {
+    try {
+      const data = await request(`/api/archive?workspaceId=${encodeURIComponent(workspace().id)}`);
+      const container = $("archiveList");
+      container.replaceChildren();
+      if (!(data.tasks ?? []).length) container.append(element("div", "empty", "Archive is empty."));
+      for (const task of data.tasks ?? []) container.append(simpleTaskRow(task));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function simpleTaskRow(task) {
+    const row = element("div", "today-row");
+    const grow = element("div", "grow");
+    grow.append(element("h3", "", task.title));
+    grow.append(element("p", "", `${task.boardName || "Board"} · ${task.columnName || "Column"}`));
+    row.append(grow, element("span", "pill", task.priority || "none"));
+    return row;
   }
 
   async function runSearch() {
@@ -469,7 +507,7 @@
 
   function setView(view) {
     state.view = view;
-    for (const [id, name] of [["todayView", "today"], ["boardView", "board"], ["calendarView", "calendar"], ["searchView", "search"], ["insightsView", "insights"]]) {
+    for (const [id, name] of [["todayView", "today"], ["boardView", "board"], ["calendarView", "calendar"], ["upcomingView", "upcoming"], ["archiveView", "archive"], ["searchView", "search"], ["insightsView", "insights"]]) {
       $(id).classList.toggle("hidden", name !== view);
     }
     document.querySelectorAll(".nav button").forEach((button) => {
@@ -482,6 +520,14 @@
       $("viewEyebrow").textContent = "Calendar";
       $("viewTitle").textContent = "Calendar";
       void loadCalendar();
+    } else if (view === "upcoming") {
+      $("viewEyebrow").textContent = "Plan";
+      $("viewTitle").textContent = "Upcoming";
+      void loadUpcoming();
+    } else if (view === "archive") {
+      $("viewEyebrow").textContent = "Workspace";
+      $("viewTitle").textContent = "Archive";
+      void loadArchive();
     } else if (view === "search") {
       $("viewEyebrow").textContent = "Search";
       $("viewTitle").textContent = "Search";

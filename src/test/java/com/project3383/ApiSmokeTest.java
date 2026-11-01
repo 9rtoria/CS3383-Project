@@ -272,6 +272,15 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/insights").session(session).param("workspaceId", workspaceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.open").isNumber());
+        mockMvc.perform(get("/api/archive").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tasks").isArray());
+        mockMvc.perform(get("/api/upcoming").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.days").isArray());
+        mockMvc.perform(get("/api/calendar/ics").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("BEGIN:VCALENDAR")));
 
         mockMvc.perform(get("/api/settings").session(session))
             .andExpect(status().isOk())

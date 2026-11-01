@@ -366,6 +366,84 @@ public class AppService {
         return linked(Map.of("days", days, "start", from.toString(), "end", to.toString()));
     }
 
+    public Map<String, Object> archive(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
+            SELECT t.id, t.title, t.priority, t.due_date AS dueDate,
+                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName
+            FROM task t
+            JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 1
+              AND b.workspace_id = t.workspace_id
+            ORDER BY t.updated_at DESC LIMIT 500
+            """, workspaceId);
+        return linked(Map.of("tasks", tasks));
+    }
+
+    public Map<String, Object> upcoming(String userId, String workspaceId, int days) {
+        requireMembership(userId, workspaceId);
+        int range = Math.max(1, Math.min(60, days));
+        String start = LocalDate.now().toString();
+        String end = LocalDate.now().plusDays(range).toString();
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
+            SELECT t.id, t.title, t.priority, t.due_date AS dueDate,
+                   substr(t.due_date, 1, 10) AS date,
+                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName
+            FROM task t
+            JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+              AND b.workspace_id = t.workspace_id
+              AND substr(t.due_date, 1, 10) BETWEEN ? AND ?
+            ORDER BY t.due_date, t.position LIMIT 500
+            """, workspaceId, start, end);
+        Map<String, List<Map<String, Object>>> byDate = new HashMap<>();
+        for (Map<String, Object> task : tasks) {
+            byDate.computeIfAbsent((String) task.get("date"), key -> new ArrayList<>()).add(task);
+        }
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (LocalDate date = LocalDate.now(); !date.isAfter(LocalDate.now().plusDays(range)); date = date.plusDays(1)) {
+            String key = date.toString();
+            groups.add(linked(Map.of("date", key, "tasks", byDate.getOrDefault(key, List.of()))));
+        }
+        return linked(Map.of("days", groups, "start", start, "end", end));
+    }
+
+    public String calendarIcs(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
+            SELECT t.id, t.title, t.description, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay
+            FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+              AND b.workspace_id = t.workspace_id AND t.due_date IS NOT NULL
+            ORDER BY t.due_date LIMIT 2000
+            """, workspaceId);
+        StringBuilder out = new StringBuilder("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Project3383//Drift//EN\r\nCALSCALE:GREGORIAN\r\n");
+        for (Map<String, Object> task : tasks) {
+            String raw = String.valueOf(task.get("dueDate"));
+            String date = raw.length() >= 10 ? raw.substring(0, 10).replace("-", "") : "";
+            if (date.isBlank()) continue;
+            boolean allDay = number(task.get("dueAllDay")) == 1;
+            out.append("BEGIN:VEVENT\r\n")
+                .append("UID:").append(task.get("id")).append("@project3383\r\n")
+                .append("DTSTAMP:").append(Instant.now().toString().replaceAll("[-:.]", "").replace("Z", "Z")).append("\r\n");
+            if (allDay) out.append("DTSTART;VALUE=DATE:").append(date).append("\r\n");
+            else out.append("DTSTART:").append(date).append("T000000Z\r\n");
+            out.append("SUMMARY:").append(icsEscape(String.valueOf(task.get("title")))).append("\r\n")
+                .append("DESCRIPTION:").append(icsEscape(String.valueOf(task.get("description") == null ? "" : task.get("description")))).append("\r\n")
+                .append("END:VEVENT\r\n");
+        }
+        out.append("END:VCALENDAR\r\n");
+        return out.toString();
+    }
+
+    private String icsEscape(String value) {
+        return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replaceAll("\\r?\\n", "\\n");
+    }
+
     public Map<String, Object> search(String userId, String workspaceId, String query) {
         requireMembership(userId, workspaceId);
         String term = query == null ? "" : query.trim().toLowerCase();
