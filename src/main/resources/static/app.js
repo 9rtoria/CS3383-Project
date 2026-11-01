@@ -14,6 +14,10 @@
     notifications: [],
     autoPlan: null,
     autoPlanSelection: "balanced",
+    autoPlanApplying: false,
+    autoPlanTimer: null,
+    autoPlanDebounce: null,
+    lastAutoApplyAt: 0,
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
     settings: null,
@@ -521,11 +525,13 @@
     state.currentBoardId = boardId;
     renderBoard();
     renderSidebar();
+    scheduleAutoPlanRefresh();
   }
 
   async function loadToday() {
     state.today = await request(`/api/today?workspaceId=${encodeURIComponent(workspace().id)}`);
     renderToday();
+    scheduleAutoPlanRefresh();
   }
 
   function setView(view) {
@@ -800,9 +806,15 @@
     try {
       const result = await request("/api/auto-plan", {
         method: "POST",
-        body: { action: "apply", workspaceId: workspace().id, optionId: state.autoPlanSelection || "balanced" },
+        body: {
+          action: "apply",
+          workspaceId: workspace().id,
+          optionId: state.autoPlanSelection || "balanced",
+          delegated: state.settings?.autoPlanMode === "delegated",
+        },
       });
       $("autoPlanModal").classList.add("hidden");
+      state.lastAutoApplyAt = Date.now();
       await loadToday();
       await loadBoard(state.currentBoardId);
       const applied = result.appliedBlocks ?? result.applied ?? 0;
@@ -820,11 +832,72 @@
   async function undoAutoPlan(undoId) {
     try {
       await request(`/api/undo/${encodeURIComponent(undoId)}`, { method: "POST" });
+      state.lastAutoApplyAt = Date.now();
       await loadToday();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
       showToast("Previous plan restored.");
     } catch (error) {
       showToast(error.message);
+    }
+  }
+
+  function restartAutoPlanScheduler() {
+    window.clearInterval(state.autoPlanTimer);
+    state.autoPlanTimer = null;
+    const settings = state.settings;
+    if (!settings || !settingOn(settings.autoPlanEnabled) || (settings.autoPlanMode || "suggest") === "suggest") return;
+    const minutes = Number(settings.autoPlanRefreshMinutes || 0);
+    if (minutes > 0) {
+      state.autoPlanTimer = window.setInterval(() => void runAutoPlanScheduler(true), minutes * 60_000);
+    }
+  }
+
+  function scheduleAutoPlanRefresh(delay = 1500) {
+    if (state.autoPlanApplying || !state.settings) return;
+    if (!settingOn(state.settings.autoPlanEnabled) || (state.settings.autoPlanMode || "suggest") === "suggest") return;
+    window.clearTimeout(state.autoPlanDebounce);
+    state.autoPlanDebounce = window.setTimeout(() => void runAutoPlanScheduler(true), delay);
+  }
+
+  async function runAutoPlanScheduler(allowApply = true) {
+    const settings = state.settings;
+    if (!settings || !workspace()) return;
+    if (!settingOn(settings.autoPlanEnabled)) return;
+    const mode = settings.autoPlanMode || "suggest";
+    if (mode === "suggest" || !allowApply) return;
+    if (state.autoPlanApplying) return;
+    if (Date.now() - state.lastAutoApplyAt < 30_000) return;
+    state.autoPlanApplying = true;
+    try {
+      const preview = await request("/api/auto-plan", {
+        method: "POST",
+        body: { action: "preview", workspaceId: workspace().id },
+      });
+      const balanced = (preview.options ?? []).find((option) => option.id === "balanced");
+      if (!balanced || !(balanced.blocks ?? []).length) return;
+      const result = await request("/api/auto-plan", {
+        method: "POST",
+        body: {
+          action: "apply",
+          workspaceId: workspace().id,
+          optionId: "balanced",
+          safe: mode === "safe",
+          delegated: mode === "delegated",
+        },
+      });
+      state.lastAutoApplyAt = Date.now();
+      const applied = result.appliedBlocks ?? result.applied ?? 0;
+      if (!applied) return;
+      await loadToday();
+      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      showToast(
+        `Auto-plan refreshed — ${applied} block${applied === 1 ? "" : "s"} scheduled.`,
+        result.undoId ? { label: "Undo", onClick: () => undoAutoPlan(result.undoId) } : null
+      );
+    } catch {
+      // Background planning is best-effort; manual Auto-plan still reports errors.
+    } finally {
+      state.autoPlanApplying = false;
     }
   }
 
@@ -836,6 +909,7 @@
         body: { action: "clear", workspaceId: workspace().id },
       });
       $("autoPlanModal").classList.add("hidden");
+      state.lastAutoApplyAt = Date.now();
       await loadToday();
       showToast("Auto-plan cleared.");
     } catch (error) {
@@ -1290,6 +1364,8 @@
     }
     applySettings();
     renderSettings();
+    restartAutoPlanScheduler();
+    scheduleAutoPlanRefresh(800);
   }
 
   function applySettings(settings = state.settings) {
@@ -1328,6 +1404,17 @@
       try {
         await request("/api/settings", { method: "PATCH", body: patch });
         setSettingsSaveState("saved");
+        const autoPlanKeys = [
+          "autoPlanEnabled", "autoPlanMode", "autoPlanRefreshMinutes", "autoPlanWeeklyMinutes",
+          "autoPlanRestMinutes", "autoPlanDeepWorkMinutes", "autoPlanSplitLongTasks",
+          "autoPlanIncludeWeekends", "autoPlanDefaultEstimateMinutes", "autoPlanCapBehavior",
+          "autoPlanLunchEnabled", "autoPlanLunchStart", "autoPlanLunchEnd", "capacityMinutes",
+          "workdayStart", "workdayEnd", "weekStartsOn",
+        ];
+        if (autoPlanKeys.some((key) => Object.prototype.hasOwnProperty.call(patch, key))) {
+          restartAutoPlanScheduler();
+          scheduleAutoPlanRefresh(500);
+        }
       } catch (error) {
         setSettingsSaveState("error");
         showToast(error.message);

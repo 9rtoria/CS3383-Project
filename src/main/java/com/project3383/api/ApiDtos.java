@@ -120,7 +120,10 @@ public final class ApiDtos {
     public record AutoPlanRequest(
         String action,
         String workspaceId,
-        String optionId
+        String optionId,
+        Boolean safe,
+        Boolean delegated,
+        Integer horizonDays
     ) {
     }
 }

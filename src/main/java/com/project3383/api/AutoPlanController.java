@@ -26,7 +26,13 @@ public class AutoPlanController {
         String userId = CurrentUser.id(session);
         return switch (input.action() == null ? "preview" : input.action()) {
             case "preview" -> autoPlanService.preview(userId, input.workspaceId());
-            case "apply" -> autoPlanService.apply(userId, input.workspaceId(), input.optionId());
+            case "apply" -> autoPlanService.apply(
+                userId,
+                input.workspaceId(),
+                input.optionId(),
+                Boolean.TRUE.equals(input.safe()),
+                Boolean.TRUE.equals(input.delegated())
+            );
             case "clear" -> autoPlanService.clear(userId, input.workspaceId());
             default -> throw ApiException.badRequest("Unknown Auto-plan action.");
         };

@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS task (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT,
+    archived_at TEXT,
     FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE,
     FOREIGN KEY (board_id) REFERENCES board(id) ON DELETE CASCADE,
     FOREIGN KEY (column_id) REFERENCES board_column(id) ON DELETE CASCADE,

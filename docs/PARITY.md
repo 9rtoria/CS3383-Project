@@ -35,7 +35,7 @@ Status key:
 | `/api/auth/signup` | DONE | Guest claim supported |
 | `/api/auth/sso/{workspaceId}` | MISSING | |
 | `/api/auth/sso/{workspaceId}/callback` | MISSING | |
-| `/api/auto-plan` | PARTIAL | Settings-aware preview/apply/clear + undo; no automation modes, refresh, stale cleanup, or task-change recompute |
+| `/api/auto-plan` | PARTIAL | Settings-aware preview/apply/clear, safe mode, delegated stale cleanup, refresh/invalidation, undo; exact reference recompute/UI pending |
 | `/api/automations` | MISSING | Schema only |
 | `/api/automations/preview` | MISSING | |
 | `/api/automations/{id}` | MISSING | |
@@ -148,6 +148,7 @@ Status key:
 | Auth / guest / signup / signin | DONE | |
 | App shell / workspace switcher | DONE | |
 | Board / columns / task CRUD | DONE | |
+| Task archive | PARTIAL | `archived_at` added; delegated stale cleanup + Archive view; no manual archive action/API |
 | Task drawer fields | PARTIAL | Missing recurrence, assignee, reminders display parity, full labels management |
 | Task comments / checklist | DONE | |
 | Task dependencies | DONE | |
@@ -156,7 +157,7 @@ Status key:
 | Labels | PARTIAL | Task-scoped labels; no label manager |
 | Today / capacity / accept / dismiss | PARTIAL | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies; rebalance/applyPlan still missing |
 | Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
-| Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear + undo; automation modes, refresh, stale cleanup missing |
+| Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
 | Calendar / ICS | DONE | Month calendar and ICS download |
 | Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
 | Insights | PARTIAL | Basic counts; full reference views missing |
@@ -178,7 +179,7 @@ Status key:
 - SQLite schema is managed by Flyway versioned migrations.
 - `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is still mirrored for API compatibility but is no longer the source of truth.
 - Today does not yet implement the reference `rebalance` and `applyPlan` actions.
-- Auto-plan is settings-aware and undoable; it does not yet implement automation modes, background refresh, delegated stale cleanup, task-change invalidation, or exact reference UI.
+- Auto-plan is settings-aware, mode-aware, refreshable, delegated-cleanup capable, and undoable; safe/delegated recomputation is an approximation of the reference and exact UI parity is still pending.
 - UI is functionally close but not pixel-parity with ProjectA2.
 - No live SMTP, OAuth/SSO, or production deployment verification.
 
@@ -207,6 +208,7 @@ Status key:
 - [x] Settings table + GET/PATCH `/api/settings`
 - [x] Account profile update + personal Settings UI (appearance, language, planning, auto-plan, focus, notifications, features)
 - [x] Auto-plan consumes capacity/workday/lunch/rest/week/deep-work/estimate settings and supports undo
+- [x] Auto-plan safe/full/delegated modes, refresh, task-change invalidation, and stale cleanup
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
@@ -214,7 +216,7 @@ Status key:
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
 2. Remaining workspace/security/audit/data settings; Today rebalance/applyPlan.
 3. Task recurrence/assignee and full drawer parity.
-4. Auto-plan automation modes, refresh, delegated stale cleanup, task-change invalidation.
+4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Focus, Voice, Settings, i18n, Offline.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.

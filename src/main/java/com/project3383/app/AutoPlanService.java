@@ -66,6 +66,17 @@ public class AutoPlanService {
 
     @Transactional
     public Map<String, Object> apply(String userId, String workspaceId, String optionId) {
+        return apply(userId, workspaceId, optionId, false, false);
+    }
+
+    @Transactional
+    public Map<String, Object> apply(
+        String userId,
+        String workspaceId,
+        String optionId,
+        boolean safe,
+        boolean delegated
+    ) {
         requireMembership(userId, workspaceId);
         String selected = optionId == null ? "balanced" : optionId;
         Map<String, Object> preview = preview(userId, workspaceId);
@@ -76,7 +87,7 @@ public class AutoPlanService {
             .findFirst()
             .orElseThrow(() -> ApiException.badRequest("Unknown Auto-plan option."));
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> blocks = (List<Map<String, Object>>) option.get("blocks");
+        List<Map<String, Object>> proposedBlocks = (List<Map<String, Object>>) option.get("blocks");
         PlanContext context = context(userId, workspaceId);
         String start = context.today;
         String end = context.dates.get(context.dates.size() - 1);
@@ -99,14 +110,53 @@ public class AutoPlanService {
             WHERE workspace_id = ? AND focus_date = ? AND deleted_at IS NULL
             """, workspaceId, start);
 
-        jdbc.update("""
-            DELETE FROM plan_block
-            WHERE user_id = ? AND workspace_id = ? AND source = 'auto' AND locked = 0
-              AND date BETWEEN ? AND ?
-            """, userId, workspaceId, start, end);
-        jdbc.update("""
-            DELETE FROM today_selection WHERE user_id = ? AND workspace_id = ? AND date = ?
-            """, userId, workspaceId, start);
+        List<Map<String, Object>> blocks = proposedBlocks;
+        if (safe) {
+            List<Map<String, Object>> existing = jdbc.queryForList("""
+                SELECT task_id AS taskId, date, start_minute AS startMinute, minutes
+                FROM plan_block WHERE user_id = ? AND workspace_id = ? AND date BETWEEN ? AND ?
+                """, userId, workspaceId, start, end);
+            Set<String> existingAutoTasks = previousBlocks.stream()
+                .map(block -> String.valueOf(block.get("taskId")))
+                .collect(java.util.stream.Collectors.toSet());
+            blocks = proposedBlocks.stream()
+                .filter(block -> !existingAutoTasks.contains(String.valueOf(block.get("taskId"))))
+                .filter(block -> existing.stream().noneMatch(item -> overlaps(block, item)))
+                .toList();
+            if (blocks.isEmpty()) {
+                Map<String, Object> unchanged = linked(Map.of(
+                    "applied", 0,
+                    "appliedBlocks", 0,
+                    "optionId", selected,
+                    "planBlocks", blocksForRange(userId, workspaceId, start, end)
+                ));
+                unchanged.put("undoId", null);
+                unchanged.put("archived", 0);
+                return unchanged;
+            }
+        }
+
+        if (safe) {
+            Set<String> selectedTaskIds = blocks.stream()
+                .map(block -> String.valueOf(block.get("taskId")))
+                .collect(java.util.stream.Collectors.toSet());
+            for (String taskId : selectedTaskIds) {
+                jdbc.update("""
+                    DELETE FROM plan_block
+                    WHERE user_id = ? AND workspace_id = ? AND source = 'auto' AND locked = 0
+                      AND date BETWEEN ? AND ? AND task_id = ?
+                    """, userId, workspaceId, start, end, taskId);
+            }
+        } else {
+            jdbc.update("""
+                DELETE FROM plan_block
+                WHERE user_id = ? AND workspace_id = ? AND source = 'auto' AND locked = 0
+                  AND date BETWEEN ? AND ?
+                """, userId, workspaceId, start, end);
+            jdbc.update("""
+                DELETE FROM today_selection WHERE user_id = ? AND workspace_id = ? AND date = ?
+                """, userId, workspaceId, start);
+        }
 
         Set<String> todayTaskIds = new HashSet<>();
         for (Map<String, Object> block : blocks) {
@@ -127,15 +177,47 @@ public class AutoPlanService {
         }
 
         // Keep the legacy field in sync for clients that still read Task.focusDate.
-        jdbc.update("""
-            UPDATE task SET focus_date = NULL, version = version + 1
-            WHERE workspace_id = ? AND focus_date = ? AND deleted_at IS NULL
-            """, workspaceId, start);
+        if (!safe) {
+            jdbc.update("""
+                UPDATE task SET focus_date = NULL, version = version + 1
+                WHERE workspace_id = ? AND focus_date = ? AND deleted_at IS NULL
+                """, workspaceId, start);
+        }
         for (String taskId : todayTaskIds) {
             jdbc.update("""
                 UPDATE task SET focus_date = ?, version = version + 1
                 WHERE id = ? AND deleted_at IS NULL
                 """, start, taskId);
+        }
+
+        Map<String, Object> settings = loadSettings(userId);
+        String autoPlanMode = settingString(settings, "auto_plan_mode", "suggest");
+        boolean allowStaleArchive = settingBool(settings, "auto_plan_allow_stale_archive", false);
+        int staleDays = Math.max(1, settingInt(settings, "auto_plan_stale_days", 30));
+        Set<String> selectedTaskIds = blocks.stream()
+            .map(block -> String.valueOf(block.get("taskId")))
+            .collect(java.util.stream.Collectors.toSet());
+        List<Map<String, Object>> staleTasks = List.of();
+        if (delegated && "delegated".equals(autoPlanMode) && allowStaleArchive) {
+            String cutoff = Instant.now().minus(staleDays, java.time.temporal.ChronoUnit.DAYS).toString();
+            staleTasks = jdbc.queryForList("""
+                SELECT t.id, t.archived_at AS archivedAt
+                FROM task t JOIN board_column c ON c.id = t.column_id
+                JOIN board b ON b.id = t.board_id
+                WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+                  AND c.is_done = 0 AND b.workspace_id = t.workspace_id
+                  AND t.due_date IS NULL AND t.focus_date IS NULL
+                  AND t.updated_at < ?
+                ORDER BY t.updated_at LIMIT 50
+                """, workspaceId, cutoff).stream()
+                .filter(row -> !selectedTaskIds.contains(String.valueOf(row.get("id"))))
+                .limit(25)
+                .toList();
+            for (Map<String, Object> stale : staleTasks) {
+                jdbc.update("""
+                    UPDATE task SET archived_at = ?, version = version + 1 WHERE id = ?
+                    """, now, stale.get("id"));
+            }
         }
 
         Map<String, Object> inverse = new LinkedHashMap<>();
@@ -144,6 +226,8 @@ public class AutoPlanService {
         inverse.put("previousBlocks", previousBlocks);
         inverse.put("previousSelections", previousSelections);
         inverse.put("previousFocus", previousFocus);
+        inverse.put("previousArchived", staleTasks);
+        inverse.put("safe", safe);
         String undoId = UUID.randomUUID().toString();
         try {
             jdbc.update("""
@@ -161,6 +245,7 @@ public class AutoPlanService {
             "appliedBlocks", blocks.size(),
             "optionId", selected,
             "undoId", undoId,
+            "archived", staleTasks.size(),
             "planBlocks", blocksForRange(userId, workspaceId, start, end)
         ));
     }
@@ -192,6 +277,7 @@ public class AutoPlanService {
         List<Map<String, Object>> previousBlocks = mapList(inverse.get("previousBlocks"));
         List<String> previousSelections = stringList(inverse.get("previousSelections"));
         List<Map<String, Object>> previousFocus = mapList(inverse.get("previousFocus"));
+        List<Map<String, Object>> previousArchived = mapList(inverse.get("previousArchived"));
 
         jdbc.update("""
             DELETE FROM plan_block
@@ -225,6 +311,11 @@ public class AutoPlanService {
                 WHERE id = ? AND deleted_at IS NULL
                 """, focus.get("focusDate"), focus.get("taskId"));
         }
+        for (Map<String, Object> archived : previousArchived) {
+            jdbc.update("""
+                UPDATE task SET archived_at = ?, version = version + 1 WHERE id = ?
+                """, archived.get("archivedAt"), archived.get("id"));
+        }
         jdbc.update("DELETE FROM undo_action WHERE id = ?", undoId);
         return linked(Map.of("undone", true, "action", "auto_plan.apply"));
     }
@@ -248,7 +339,7 @@ public class AutoPlanService {
                    pb.task_id AS taskId, t.title, t.priority
             FROM plan_block pb JOIN task t ON t.id = pb.task_id
             WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date = ?
-              AND t.deleted_at IS NULL
+              AND t.deleted_at IS NULL AND t.archived_at IS NULL
             ORDER BY pb.start_minute
             """, userId, workspaceId, date);
     }
@@ -259,7 +350,7 @@ public class AutoPlanService {
                    pb.task_id AS taskId, t.title, t.priority
             FROM plan_block pb JOIN task t ON t.id = pb.task_id
             WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date BETWEEN ? AND ?
-              AND t.deleted_at IS NULL
+              AND t.deleted_at IS NULL AND t.archived_at IS NULL
             ORDER BY pb.date, pb.start_minute
             """, userId, workspaceId, start, end);
     }
@@ -411,9 +502,11 @@ public class AutoPlanService {
         String rangeEnd = dates.get(dates.size() - 1);
         List<BusyBlock> fixedBlocks = new ArrayList<>();
         for (Map<String, Object> row : jdbc.queryForList("""
-            SELECT date, start_minute AS startMinute, minutes FROM plan_block
-            WHERE user_id = ? AND workspace_id = ? AND date BETWEEN ? AND ?
-              AND (locked = 1 OR source = 'manual')
+            SELECT pb.date, pb.start_minute AS startMinute, pb.minutes
+            FROM plan_block pb JOIN task t ON t.id = pb.task_id
+            WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date BETWEEN ? AND ?
+              AND (pb.locked = 1 OR pb.source = 'manual')
+              AND t.deleted_at IS NULL AND t.archived_at IS NULL
             """, userId, workspaceId, rangeStart, rangeEnd)) {
             fixedBlocks.add(new BusyBlock(
                 String.valueOf(row.get("date")),
@@ -438,7 +531,7 @@ public class AutoPlanService {
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
             """, workspaceId).stream().map(row -> new PlanTask(
             String.valueOf(row.get("id")),
@@ -537,6 +630,15 @@ public class AutoPlanService {
         }
         if (cursor < end) free.add(new int[]{cursor, end});
         return free;
+    }
+
+    private boolean overlaps(Map<String, Object> block, Map<String, Object> existing) {
+        if (!String.valueOf(block.get("date")).equals(String.valueOf(existing.get("date")))) return false;
+        int start = number(block.get("startMinute"));
+        int end = start + number(block.get("minutes"));
+        int existingStart = number(existing.get("startMinute"));
+        int existingEnd = existingStart + number(existing.get("minutes"));
+        return start < existingEnd && existingStart < end;
     }
 
     private List<Integer> taskChunks(PlanTask task, PlanContext context) {

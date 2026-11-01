@@ -350,7 +350,8 @@ public class AppService {
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.workspace_id = t.workspace_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+              AND b.workspace_id = t.workspace_id
               AND substr(t.due_date, 1, 10) BETWEEN ? AND ?
             ORDER BY t.due_date, t.position
             LIMIT 500
@@ -360,7 +361,7 @@ public class AppService {
                    pb.task_id AS taskId, t.title
             FROM plan_block pb JOIN task t ON t.id = pb.task_id
             WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date BETWEEN ? AND ?
-              AND t.deleted_at IS NULL
+              AND t.deleted_at IS NULL AND t.archived_at IS NULL
             ORDER BY pb.date, pb.start_minute
             """, userId, workspaceId, from.toString(), to.toString());
         Map<String, List<Map<String, Object>>> tasksByDate = new HashMap<>();
@@ -391,7 +392,7 @@ public class AppService {
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 1
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND (c.is_done = 1 OR t.archived_at IS NOT NULL)
               AND b.workspace_id = t.workspace_id
             ORDER BY t.updated_at DESC LIMIT 500
             """, workspaceId);
@@ -410,7 +411,7 @@ public class AppService {
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
               AND substr(t.due_date, 1, 10) BETWEEN ? AND ?
             ORDER BY t.due_date, t.position LIMIT 500
@@ -434,7 +435,7 @@ public class AppService {
                    t.due_all_day AS dueAllDay
             FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id AND t.due_date IS NOT NULL
             ORDER BY t.due_date LIMIT 2000
             """, workspaceId);
@@ -473,7 +474,8 @@ public class AppService {
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.workspace_id = t.workspace_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+              AND b.workspace_id = t.workspace_id
               AND (lower(t.title) LIKE ? OR lower(t.description) LIKE ?)
             ORDER BY c.is_done, t.updated_at DESC
             LIMIT 50
@@ -487,26 +489,26 @@ public class AppService {
             SELECT t.priority, COUNT(*) AS count
             FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
             GROUP BY t.priority
             """, workspaceId);
         Integer open = jdbc.queryForObject("""
             SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
             """, Integer.class, workspaceId);
         Integer done = jdbc.queryForObject("""
             SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 1
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 1
               AND b.workspace_id = t.workspace_id
             """, Integer.class, workspaceId);
         Integer overdue = jdbc.queryForObject("""
             SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
               AND substr(t.due_date, 1, 10) < ?
             """, Integer.class, workspaceId, LocalDate.now().toString());
@@ -546,7 +548,7 @@ public class AppService {
               ON d.task_id = t.id AND d.user_id = ? AND d.date = ?
             LEFT JOIN today_selection s
               ON s.task_id = t.id AND s.user_id = ? AND s.date = ?
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id AND d.task_id IS NULL
             ORDER BY selectedFlag DESC,
                      CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1
@@ -598,7 +600,7 @@ public class AppService {
                    pb.date, t.title, t.priority
             FROM plan_block pb JOIN task t ON t.id = pb.task_id
             WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date = ?
-              AND t.deleted_at IS NULL
+              AND t.deleted_at IS NULL AND t.archived_at IS NULL
             ORDER BY pb.start_minute
             """, userId, scopedWorkspaceId, today);
         Map<String, Object> workspace = jdbc.queryForList("""
@@ -811,7 +813,7 @@ public class AppService {
             SELECT t.id, t.title, c.is_done AS completed, t.board_id AS boardId
             FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.workspace_id = t.workspace_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND b.workspace_id = t.workspace_id
             ORDER BY t.title
             """, workspaceId)));
     }
@@ -1022,11 +1024,12 @@ public class AppService {
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes,
                    t.focus_date AS focusDate, t.version, t.updated_at AS updatedAt,
+                   t.archived_at AS archivedAt,
                    c.is_done AS completed
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.board_id = ? AND t.column_id = ? AND t.deleted_at IS NULL
+            WHERE t.board_id = ? AND t.column_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
               AND b.workspace_id = t.workspace_id
             ORDER BY t.position, t.created_at
             """, boardId, columnId);
@@ -1058,7 +1061,7 @@ public class AppService {
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId, t.column_id AS columnId,
                    t.title, t.description, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
-                   t.actual_minutes AS actualMinutes, t.version, c.is_done AS completed
+                   t.actual_minutes AS actualMinutes, t.archived_at AS archivedAt, t.version, c.is_done AS completed
             FROM task t JOIN board_column c ON c.id = t.column_id
             WHERE t.id = ? AND t.deleted_at IS NULL
             """, taskId).stream().findFirst()

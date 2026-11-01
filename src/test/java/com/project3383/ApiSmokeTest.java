@@ -251,6 +251,19 @@ class ApiSmokeTest {
         String undoId = objectMapper.readTree(appliedPlan.getResponse().getContentAsString())
             .path("undoId").asText();
 
+        mockMvc.perform(post("/api/auto-plan")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "apply",
+                    "workspaceId", workspaceId,
+                    "optionId", "balanced",
+                    "safe", true
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.applied").value(0))
+            .andExpect(jsonPath("$.planBlocks").isNotEmpty());
+
         mockMvc.perform(post("/api/undo/" + undoId).session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.undone").value(true))
