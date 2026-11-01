@@ -180,6 +180,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 h1 { margin: 0; font-family: var(--font-display); font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.03em; }
 .top-actions { display: flex; align-items: center; gap: 10px; }
 .date-chip { color: var(--muted); font-size: 13px; }
+.offline-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 22%, var(--border));
+  border-radius: 9px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 11.5px;
+}
+.offline-banner > span:first-child { flex: 1; min-width: 200px; }
 
 .btn {
   border: 1px solid var(--border);

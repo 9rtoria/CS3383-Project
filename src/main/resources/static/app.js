@@ -26,6 +26,7 @@
     captureListening: false,
     captureInterim: "",
     captureSaving: false,
+    offline: typeof navigator !== "undefined" ? !navigator.onLine : false,
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
     settings: null,
@@ -39,12 +40,21 @@
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (options.body !== undefined) headers["content-type"] = "application/json";
-    const response = await fetch(path, {
-      credentials: "same-origin",
-      ...options,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
+    let response;
+    try {
+      response = await fetch(path, {
+        credentials: "same-origin",
+        ...options,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
+    } catch (cause) {
+      window.dispatchEvent(new Event("drift-network-error"));
+      const error = new Error("You are offline. This change can be saved on this device.");
+      error.code = "NETWORK_ERROR";
+      error.cause = cause;
+      throw error;
+    }
     const text = await response.text();
     let data = null;
     try {
@@ -54,9 +64,38 @@
     }
     if (response.status === 401) return null;
     if (!response.ok) {
-      throw new Error(data?.message || `Request failed (${response.status})`);
+      const error = new Error(data?.message || `Request failed (${response.status})`);
+      error.code = data?.code || "HTTP_ERROR";
+      error.status = response.status;
+      throw error;
     }
     return data;
+  }
+
+  function queueOfflineWrite(path, options, meta) {
+    const write = window.DriftOffline?.enqueue({
+      kind: meta.kind,
+      label: meta.label,
+      path,
+      method: options.method || "POST",
+      body: options.body,
+      workspaceId: meta.workspaceId || workspace()?.id || null,
+    });
+    state.offline = true;
+    updateOfflineBanner();
+    return write;
+  }
+
+  async function requestOrQueue(path, options, meta) {
+    try {
+      return await request(path, options);
+    } catch (error) {
+      if (error.code === "NETWORK_ERROR" && window.DriftOffline) {
+        queueOfflineWrite(path, options, meta);
+        return { queued: true };
+      }
+      throw error;
+    }
   }
 
   function element(tag, className, text) {
@@ -94,6 +133,110 @@
     return workspaces.find((item) => item.id === state.currentWorkspaceId) ?? workspaces[0] ?? null;
   }
 
+  function offlineQueue() {
+    return window.DriftOffline?.listQueuedWrites() ?? [];
+  }
+
+  function updateOfflineBanner() {
+    const banner = $("offlineBanner");
+    if (!banner) return;
+    const queue = offlineQueue();
+    const pending = queue.filter((write) => write.status !== "failed").length;
+    const failed = queue.filter((write) => write.status === "failed").length;
+    const show = state.offline || queue.length > 0;
+    banner.classList.toggle("hidden", !show);
+    if (!show) return;
+    const parts = [state.offline
+      ? t("You are offline. Captures and moves are saved on this device.")
+      : t("Back online.")];
+    if (pending) parts.push(t("{{count}} change waiting to sync.", { count: pending }));
+    if (failed) parts.push(t("{{count}} change could not sync.", { count: failed }));
+    $("offlineText").textContent = parts.join(" ");
+    $("offlineRetryButton").classList.toggle("hidden", state.offline || pending === 0);
+  }
+
+  function renderOfflineQueue() {
+    const container = $("offlineQueueList");
+    container.replaceChildren();
+    const queue = offlineQueue();
+    if (!queue.length) {
+      container.append(element("p", "field-hint", t("Everything is synced. Captures and moves you make offline will appear here until they reach the server.")));
+      $("offlineSyncButton").disabled = true;
+      return;
+    }
+    for (const write of queue) {
+      const row = element("div", "detail-item");
+      const grow = element("div", "grow");
+      const head = element("div", "inline");
+      head.append(makeBadge(write.status === "failed" ? t("Failed") : t("Pending"), write.status === "failed" ? "rose" : "slate"));
+      head.append(element("strong", "", write.label || write.path));
+      grow.append(head);
+      grow.append(element("p", "", write.error || `${write.method} ${write.path} · ${new Date(write.createdAt).toLocaleString(state.settings?.locale || undefined)}`));
+      const actions = element("div", "top-actions");
+      if (write.status === "failed") {
+        const retry = element("button", "btn ghost sm", t("Retry"));
+        retry.type = "button";
+        retry.addEventListener("click", () => {
+          window.DriftOffline?.updateQueuedWrite(write.id, { status: "pending", error: "" });
+          renderOfflineQueue();
+          updateOfflineBanner();
+          void syncOfflineQueue(true);
+        });
+        actions.append(retry);
+      }
+      const discard = element("button", "btn ghost sm", t("Discard"));
+      discard.type = "button";
+      discard.addEventListener("click", () => {
+        window.DriftOffline?.removeQueuedWrite(write.id);
+        renderOfflineQueue();
+        updateOfflineBanner();
+      });
+      actions.append(discard);
+      row.append(grow, actions);
+      container.append(row);
+    }
+    $("offlineSyncButton").disabled = state.offline || !queue.some((write) => write.status !== "failed");
+  }
+
+  async function refreshAfterReconnect() {
+    try {
+      const boot = await request("/api/bootstrap");
+      if (boot) {
+        state.boot = boot;
+        window.DriftOffline?.cacheBootstrap(boot);
+        const previousWorkspace = state.currentWorkspaceId;
+        const hasPrevious = boot.workspaces?.some((item) => item.id === previousWorkspace);
+        state.currentWorkspaceId = hasPrevious ? previousWorkspace : boot.workspaces?.[0]?.id ?? null;
+        state.currentBoardId = boards()[0]?.id ?? null;
+        renderAccount();
+        renderSidebar();
+        if (state.currentBoardId) await loadBoard(state.currentBoardId);
+        await loadToday();
+      }
+    } catch {
+      // The next online event or sync will retry.
+    }
+  }
+
+  async function syncOfflineQueue(announce = false) {
+    if (state.offline || !navigator.onLine) return;
+    const result = await window.DriftOffline?.replayOfflineQueue();
+    updateOfflineBanner();
+    if (!result) return;
+    if (result.synced > 0) await refreshAfterReconnect();
+    if (announce && result.synced > 0) showToast(t("{{count}} change synced.", { count: result.synced }));
+    if (announce && result.failed > 0) showToast(t("{{count}} change needs attention.", { count: result.failed }));
+  }
+
+  function openOfflineQueue() {
+    renderOfflineQueue();
+    $("offlineModal").classList.remove("hidden");
+  }
+
+  function closeOfflineQueue() {
+    $("offlineModal").classList.add("hidden");
+  }
+
   function boards() {
     return workspace()?.boards ?? [];
   }
@@ -112,6 +255,7 @@
       // creates the first workspace/board. Using it first avoids a noisy 401.
       const boot = await request("/api/auth/guest", { method: "POST" });
       state.boot = boot;
+      window.DriftOffline?.cacheBootstrap(boot);
       state.currentWorkspaceId = boot.workspaces?.[0]?.id ?? null;
       state.currentBoardId = boards()[0]?.id ?? null;
       renderAccount();
@@ -135,8 +279,37 @@
         if (state.currentBoardId) await loadBoard(state.currentBoardId);
         await loadToday();
       }
+      state.offline = !navigator.onLine;
+      updateOfflineBanner();
+      if (navigator.onLine && offlineQueue().length) void syncOfflineQueue(false);
     } catch (error) {
-      showToast(error.message || "Could not start the app.");
+      const cached = error.code === "NETWORK_ERROR" ? window.DriftOffline?.readCachedBootstrap() : null;
+      if (cached) {
+        state.offline = true;
+        state.boot = cached;
+        state.currentWorkspaceId = cached.workspaces?.[0]?.id ?? null;
+        state.currentBoardId = boards()[0]?.id ?? null;
+        renderAccount();
+        $("dateChip").textContent = new Intl.DateTimeFormat(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }).format(new Date());
+        renderSidebar();
+        if (state.currentBoardId) {
+          try { await loadBoard(state.currentBoardId); } catch { /* cached copy is optional */ }
+        }
+        try { await loadToday(); } catch { /* cached copy is optional */ }
+        const cachedSettings = window.DriftOffline?.readCachedSettings();
+        state.settings = normalizeSettings(cachedSettings || DEFAULT_SETTINGS);
+        applySettings();
+        renderSettings();
+        setView("today");
+        updateOfflineBanner();
+        showToast(t("You are offline. Showing the last saved copy."));
+      } else {
+        showToast(error.message || "Could not start the app.");
+      }
     }
   }
 
@@ -188,6 +361,7 @@
       });
       if (!result) throw new Error("Email or password is incorrect.");
       state.boot = result;
+      window.DriftOffline?.cacheBootstrap(result);
       state.currentWorkspaceId = result.workspaces?.[0]?.id ?? null;
       state.currentBoardId = boards()[0]?.id ?? null;
       closeAuthModal();
@@ -321,6 +495,7 @@
     try {
       const result = await request(`/api/invites/${encodeURIComponent(token)}`, { method: "POST" });
       state.boot = result;
+      window.DriftOffline?.cacheBootstrap(result);
       state.currentWorkspaceId = result.workspaces?.at(-1)?.id ?? state.currentWorkspaceId;
       history.replaceState({}, "", "/");
       showToast("Invitation accepted.");
@@ -465,6 +640,7 @@
         body: { name: name.trim(), type: "team" },
       });
       state.boot = await request("/api/bootstrap");
+      window.DriftOffline?.cacheBootstrap(state.boot);
       state.currentWorkspaceId = result.workspace.id;
       state.currentBoardId = boards()[0]?.id ?? null;
       renderSidebar();
@@ -495,6 +671,7 @@
         body: { workspaceId: workspace().id, name: name.trim() },
       });
       state.boot = await request("/api/bootstrap");
+      window.DriftOffline?.cacheBootstrap(state.boot);
       state.currentBoardId = result.board.id;
       renderSidebar();
       await loadBoard(result.board.id);
@@ -531,7 +708,25 @@
   }
 
   async function loadBoard(boardId) {
-    const data = await request(`/api/boards/${encodeURIComponent(boardId)}`);
+    let data;
+    try {
+      data = await request(`/api/boards/${encodeURIComponent(boardId)}`);
+      window.DriftOffline?.cacheBoard(boardId, data);
+    } catch (error) {
+      if (error.code === "NETWORK_ERROR") {
+        const cached = window.DriftOffline?.readCachedBoard(boardId);
+        if (cached) {
+          state.offline = true;
+          state.board = cached;
+          state.currentBoardId = boardId;
+          renderBoard();
+          renderSidebar();
+          updateOfflineBanner();
+          return;
+        }
+      }
+      throw error;
+    }
     state.board = data;
     state.currentBoardId = boardId;
     renderBoard();
@@ -540,7 +735,25 @@
   }
 
   async function loadToday() {
-    state.today = await request(`/api/today?workspaceId=${encodeURIComponent(workspace().id)}`);
+    const current = workspace();
+    if (!current) return;
+    try {
+      state.today = await request(`/api/today?workspaceId=${encodeURIComponent(current.id)}`);
+      window.DriftOffline?.cacheToday(current.id, state.today);
+    } catch (error) {
+      if (error.code === "NETWORK_ERROR") {
+        const cached = window.DriftOffline?.readCachedToday(current.id);
+        if (cached) {
+          state.offline = true;
+          state.today = cached;
+          updateOfflineBanner();
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
     renderToday();
     scheduleAutoPlanRefresh();
   }
@@ -621,10 +834,16 @@
         const task = allTasks().find((item) => item.id === taskId);
         if (!task || task.columnId === column.id) return;
         try {
-          await request(`/api/tasks/${encodeURIComponent(taskId)}/move`, {
-            method: "PATCH",
-            body: { version: task.version, columnId: column.id },
-          });
+          const result = await requestOrQueue(
+            `/api/tasks/${encodeURIComponent(taskId)}/move`,
+            { method: "PATCH", body: { version: task.version, columnId: column.id } },
+            { kind: "task.move", label: task.title }
+          );
+          if (result?.queued) {
+            window.DriftSound?.play("tap");
+            showToast(t("Saved on this device — will sync when you reconnect."));
+            return;
+          }
           await loadBoard(state.currentBoardId);
           window.DriftSound?.play("move");
         } catch (error) {
@@ -1660,28 +1879,37 @@
     const columnId = $("captureColumn").value;
     if (!board || !columnId) return;
     const parsed = parseQuickAdd(raw);
+    const body = {
+      workspaceId: workspace().id,
+      boardId: board.id,
+      columnId,
+      title: parsed.title || raw,
+      description: "",
+      priority: parsed.priority,
+      startDate: null,
+      dueDate: parsed.dueDate,
+      dueAllDay: parsed.dueAllDay,
+      estimateMinutes: parsed.estimateMinutes,
+      actualMinutes: null,
+      labels: parsed.labels,
+    };
     const button = $("captureAddButton");
     state.captureSaving = true;
     button.disabled = true;
     button.firstChild.textContent = t("Adding…");
     try {
-      await request("/api/tasks", {
-        method: "POST",
-        body: {
-          workspaceId: workspace().id,
-          boardId: board.id,
-          columnId,
-          title: parsed.title || raw,
-          description: "",
-          priority: parsed.priority,
-          startDate: null,
-          dueDate: parsed.dueDate,
-          dueAllDay: parsed.dueAllDay,
-          estimateMinutes: parsed.estimateMinutes,
-          actualMinutes: null,
-          labels: parsed.labels,
-        },
-      });
+      try {
+        await request("/api/tasks", { method: "POST", body });
+      } catch (error) {
+        if (error.code === "NETWORK_ERROR" && window.DriftOffline) {
+          queueOfflineWrite("/api/tasks", { method: "POST", body }, { kind: "task.create", label: body.title });
+          window.DriftSound?.play("tap");
+          showToast(t("Saved on this device — will sync when you reconnect."));
+          if (settingOn(state.settings?.captureCloseAfterAdd)) closeCapture();
+          return;
+        }
+        throw error;
+      }
       window.DriftSound?.play("capture");
       await loadBoard(state.currentBoardId);
       await loadToday();
@@ -2004,20 +2232,35 @@
         dueAllDay: $("taskDueAllDay").checked,
       };
       if (task) {
-        await request(`/api/tasks/${encodeURIComponent(task.id)}`, {
-          method: "PATCH",
-          body: { ...body, version: task.version },
-        });
+        const result = await requestOrQueue(
+          `/api/tasks/${encodeURIComponent(task.id)}`,
+          { method: "PATCH", body: { ...body, version: task.version } },
+          { kind: "task.update", label: body.title }
+        );
+        if (result?.queued) {
+          closeModal();
+          showToast(t("Saved on this device — will sync when you reconnect."));
+          return;
+        }
       } else {
-        await request("/api/tasks", {
-          method: "POST",
-          body: {
-            ...body,
-            workspaceId: workspace().id,
-            boardId: state.currentBoardId,
-            columnId: $("taskColumn").value,
+        const result = await requestOrQueue(
+          "/api/tasks",
+          {
+            method: "POST",
+            body: {
+              ...body,
+              workspaceId: workspace().id,
+              boardId: state.currentBoardId,
+              columnId: $("taskColumn").value,
+            },
           },
-        });
+          { kind: "task.create", label: body.title }
+        );
+        if (result?.queued) {
+          closeModal();
+          showToast(t("Saved on this device — will sync when you reconnect."));
+          return;
+        }
       }
       closeModal();
       await loadBoard(state.currentBoardId);
@@ -2033,9 +2276,16 @@
   async function setTaskCompleted(completed) {
     if (!state.editing) return;
     try {
-      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/${completed ? "complete" : "reopen"}`, {
-        method: "POST",
-      });
+      const result = await requestOrQueue(
+        `/api/tasks/${encodeURIComponent(state.editing.id)}/${completed ? "complete" : "reopen"}`,
+        { method: "POST" },
+        { kind: "task.update", label: state.editing.title }
+      );
+      if (result?.queued) {
+        closeModal();
+        showToast(t("Saved on this device — will sync when you reconnect."));
+        return;
+      }
       closeModal();
       await loadBoard(state.currentBoardId);
       await loadToday();
@@ -2135,8 +2385,11 @@
     try {
       const data = await request("/api/settings");
       state.settings = normalizeSettings(data?.settings);
+      window.DriftOffline?.cacheSettings(state.settings);
     } catch (error) {
-      state.settings = normalizeSettings(DEFAULT_SETTINGS);
+      const cached = window.DriftOffline?.readCachedSettings();
+      state.settings = normalizeSettings(cached || DEFAULT_SETTINGS);
+      if (cached) state.offline = true;
       showToast(error.message);
     }
     applySettings();
@@ -2189,6 +2442,7 @@
     state.settingsQueue = state.settingsQueue.then(async () => {
       try {
         await request("/api/settings", { method: "PATCH", body: patch });
+        window.DriftOffline?.cacheSettings(state.settings);
         setSettingsSaveState("saved");
         const autoPlanKeys = [
           "autoPlanEnabled", "autoPlanMode", "autoPlanRefreshMinutes", "autoPlanWeeklyMinutes",
@@ -2460,6 +2714,7 @@
         body: { name, ...(timezone ? { timezone } : {}) },
       });
       if (data?.user) state.boot.user = { ...state.boot.user, ...data.user };
+      window.DriftOffline?.cacheBootstrap(state.boot);
       renderAccount();
       setSettingsSaveState("saved");
       showToast("Account updated.");
@@ -2478,6 +2733,7 @@
     try {
       const data = await request("/api/account", { method: "PATCH", body: { timezone } });
       if (data?.user) state.boot.user = { ...state.boot.user, ...data.user };
+      window.DriftOffline?.cacheBootstrap(state.boot);
       document.querySelectorAll('#settings-account input[aria-label="Time zone"], #settings-language input[aria-label="Time zone"]').forEach((node) => {
         node.value = data?.user?.timezone || timezone;
       });
@@ -2853,6 +3109,31 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     window.DriftSound?.init();
+    updateOfflineBanner();
+    window.DriftOffline?.subscribeQueue(updateOfflineBanner);
+    window.addEventListener("offline", () => {
+      state.offline = true;
+      updateOfflineBanner();
+    });
+    window.addEventListener("online", () => {
+      state.offline = false;
+      updateOfflineBanner();
+      void refreshAfterReconnect().then(() => syncOfflineQueue(true));
+    });
+    window.addEventListener("drift-network-error", () => {
+      state.offline = true;
+      updateOfflineBanner();
+    });
+    $("offlineReviewButton").addEventListener("click", openOfflineQueue);
+    $("closeOfflineModal").addEventListener("click", closeOfflineQueue);
+    $("offlineModal").addEventListener("click", (event) => {
+      if (event.target === $("offlineModal")) closeOfflineQueue();
+    });
+    $("offlineRetryButton").addEventListener("click", () => void syncOfflineQueue(true));
+    $("offlineSyncButton").addEventListener("click", () => void syncOfflineQueue(true));
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
     window.DriftI18n?.subscribe(() => {
       renderAccount();
       renderSidebar();

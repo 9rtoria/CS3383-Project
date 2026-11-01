@@ -165,7 +165,7 @@ Status key:
 | Insights | PARTIAL | Basic counts; full reference views missing |
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
-| Offline / PWA | MISSING | |
+| Offline / PWA | PARTIAL | Service worker, manifest, cached bootstrap/board/today/settings, offline queue, retry/discard, sync banner; no idempotent replay/conflict resolution |
 | i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
 | Public board share | MISSING | |
 | Automations / Webhooks | MISSING | |
@@ -218,6 +218,7 @@ Status key:
 - [x] Sound layer, palettes, volume, typing texture, previews, and localStorage persistence
 - [x] Quick capture natural-language parsing, browser voice capture, and text fallback
 - [x] English / Traditional Chinese translation layer with settings-driven locale
+- [x] Offline/PWA core: service worker, manifest, cached views, write queue, retry/discard, online sync
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
@@ -227,6 +228,6 @@ Status key:
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Offline/PWA.
+6. Remaining Phase 2 board/task gaps.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

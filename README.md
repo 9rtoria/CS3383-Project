@@ -37,6 +37,7 @@ Implemented:
 - Sound layer and Sound Lab: synthesized interface sounds, three palettes, volume, typing texture, previews, and localStorage persistence
 - Quick Capture with natural-language parsing and browser voice input with text fallback
 - English / Traditional Chinese locale with settings-driven persistence and translated core surfaces
+- Offline/PWA: service worker, manifest, cached views, queued writes, retry/discard, and online sync
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility

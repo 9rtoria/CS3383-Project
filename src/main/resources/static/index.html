@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Drift · Project3383</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#2f6b56">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -62,6 +65,12 @@
           <button type="button" id="newTaskButton" class="btn primary">New task</button>
         </div>
       </header>
+
+      <div id="offlineBanner" class="offline-banner hidden">
+        <span id="offlineText"></span>
+        <button type="button" id="offlineReviewButton" class="btn sm">Review queue</button>
+        <button type="button" id="offlineRetryButton" class="btn sm primary">Retry now</button>
+      </div>
 
       <section id="todayView">
         <div id="dayFlowPanel" class="panel day-flow-panel" style="margin-bottom:16px">
@@ -505,9 +514,27 @@
     </div>
   </div>
 
+  <div id="offlineModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="offlineTitle">
+    <div class="modal" style="max-width:620px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Local queue</p>
+          <h2 id="offlineTitle">Offline queue</h2>
+        </div>
+        <button type="button" id="closeOfflineModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <p class="field-hint">Changes are replayed in the order you made them. Failed items are kept until you retry or discard them.</p>
+      <div id="offlineQueueList" class="detail-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="offlineSyncButton" class="btn primary">Sync now</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="/i18n.js" defer></script>
   <script src="/sound.js" defer></script>
+  <script src="/offline.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>
