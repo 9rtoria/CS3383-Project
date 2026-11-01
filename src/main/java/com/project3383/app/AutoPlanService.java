@@ -37,10 +37,13 @@ public class AutoPlanService {
         requireMembership(userId, workspaceId);
         List<PlanTask> tasks = tasks(workspaceId);
         List<String> dates = dates();
+        Set<String> dismissedToday = new HashSet<>(jdbc.queryForList("""
+            SELECT task_id FROM today_dismissal WHERE user_id = ? AND date = ?
+            """, String.class, userId, dates.get(0)));
         List<Map<String, Object>> options = List.of(
-            option("balanced", "Balanced", tasks, dates, userId, workspaceId, 90, false),
-            option("focus", "Focus first", tasks, dates, userId, workspaceId, 90, true),
-            option("light", "Light day", tasks, dates, userId, workspaceId, 45, false)
+            option("balanced", "Balanced", tasks, dates, userId, workspaceId, 90, false, dismissedToday),
+            option("focus", "Focus first", tasks, dates, userId, workspaceId, 90, true, dismissedToday),
+            option("light", "Light day", tasks, dates, userId, workspaceId, 45, false, dismissedToday)
         );
         return linked(Map.of("options", options));
     }
@@ -64,6 +67,10 @@ public class AutoPlanService {
             DELETE FROM plan_block WHERE user_id = ? AND workspace_id = ? AND source = 'auto'
               AND date BETWEEN ? AND ?
             """, userId, workspaceId, start, end);
+        jdbc.update("""
+            DELETE FROM today_selection WHERE user_id = ? AND workspace_id = ? AND date = ?
+            """, userId, workspaceId, start);
+        Set<String> todayTaskIds = new HashSet<>();
         for (Map<String, Object> block : blocks) {
             jdbc.update("""
                 INSERT INTO plan_block (id, user_id, workspace_id, task_id, date, start_minute, minutes, source, locked, created_at)
@@ -72,8 +79,15 @@ public class AutoPlanService {
                 block.get("date"), block.get("startMinute"), block.get("minutes"),
                 java.time.Instant.now().toString());
             if (start.equals(block.get("date"))) {
+                todayTaskIds.add(String.valueOf(block.get("taskId")));
                 jdbc.update("UPDATE task SET focus_date = ? WHERE id = ?", start, block.get("taskId"));
             }
+        }
+        for (String taskId : todayTaskIds) {
+            jdbc.update("""
+                INSERT OR IGNORE INTO today_selection (user_id, workspace_id, task_id, date, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """, userId, workspaceId, taskId, start, java.time.Instant.now().toString());
         }
         return linked(Map.of("applied", blocks.size(), "optionId", selected,
             "planBlocks", blocksForRange(userId, workspaceId, start, end)));
@@ -117,7 +131,8 @@ public class AutoPlanService {
         String userId,
         String workspaceId,
         int chunkSize,
-        boolean focusOnly
+        boolean focusOnly,
+        Set<String> dismissedToday
     ) {
         List<PlanTask> ordered = new ArrayList<>(tasks);
         ordered.sort(Comparator
@@ -127,6 +142,7 @@ public class AutoPlanService {
             .thenComparing(task -> task.estimate == null ? 30 : task.estimate));
         Map<String, List<int[]>> busy = existingBusy(userId, workspaceId, dates);
         Map<String, Integer> plannedByDate = new HashMap<>();
+        String today = dates.get(0);
         List<Map<String, Object>> blocks = new ArrayList<>();
         List<Map<String, Object>> unscheduled = new ArrayList<>();
         Set<String> blocked = new HashSet<>();
@@ -142,6 +158,7 @@ public class AutoPlanService {
                 int minutes = Math.min(chunkSize, remaining);
                 boolean placed = false;
                 for (String date : dates) {
+                    if (date.equals(today) && dismissedToday.contains(task.id)) continue;
                     if (task.startDate != null && date.compareTo(task.startDate) < 0) continue;
                     if (task.dueDate != null && task.dueDate.compareTo(dates.get(0)) >= 0 && date.compareTo(task.dueDate) > 0) {
                         if (!placedAny) unscheduled.add(unscheduled(task, "Due date is before the available horizon"));

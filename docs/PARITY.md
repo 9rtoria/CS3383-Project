@@ -70,7 +70,7 @@ Status key:
 | `/api/tasks/{id}/comments` | DONE | POST; detail returns comments |
 | `/api/tasks/{id}/move` | DONE | |
 | `/api/tasks/{id}/subtasks` | DONE | POST; detail returns checklist |
-| `/api/today` | DONE | GET suggestions/capacity/plan blocks; POST accept/dismiss |
+| `/api/today` | PARTIAL | Workspace-scoped GET, per-user accept/dismiss, counts; no rebalance/applyPlan actions |
 | `/api/tokens` | MISSING | |
 | `/api/tokens/{id}` | MISSING | |
 | `/api/undo/{id}` | MISSING | Schema only |
@@ -125,6 +125,7 @@ Status key:
 | UserSettings | DONE | Settings UI + GET/PATCH API |
 | PlanBlock | DONE | Auto-plan |
 | TodayDismissal | DONE | |
+| TodaySelection | DONE | Rewrite-specific per-user selection table; reference uses shared `Task.focusDate` |
 | MagicLinkToken | SCHEMA | |
 | Invite | DONE | |
 | OidcConfig | SCHEMA | SSO not implemented |
@@ -153,7 +154,7 @@ Status key:
 | Attachments | DONE | |
 | Task completion / reopen | DONE | |
 | Labels | PARTIAL | Task-scoped labels; no label manager |
-| Today / capacity / accept / dismiss | DONE | |
+| Today / capacity / accept / dismiss | PARTIAL | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies; rebalance/applyPlan still missing |
 | Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
 | Smart Plan / Auto-plan | PARTIAL | Preview/apply/clear; no undo, no full settings |
 | Calendar / ICS | DONE | Month calendar and ICS download |
@@ -173,11 +174,12 @@ Status key:
 ## 4. Known accepted differences / limitations
 
 - Runtime session is a custom Spring MVC `HttpSession` interceptor, not full Spring Security form login.
-- CSRF is currently disabled; Origin validation must be added before Phase 1 is closed.
-- SQLite bootstrap uses `schema.sql`, not flyway migrations yet.
+- Full token-based CSRF remains hardening; cookie mutations are protected by Origin validation.
+- SQLite schema is managed by Flyway versioned migrations.
+- `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is still mirrored for API compatibility but is no longer the source of truth.
+- Today does not yet implement the reference `rebalance` and `applyPlan` actions.
 - Auto-plan is a deterministic first pass; it does not yet support undo, full user settings, task-change invalidation, or exact reference UI.
 - UI is functionally close but not pixel-parity with ProjectA2.
-- `Today` is not yet per-user across multiple workspaces; current implementation is workspace/user-session scoped but plan/selection semantics need comparison.
 - No live SMTP, OAuth/SSO, or production deployment verification.
 
 ## 5. Phase gate
@@ -209,7 +211,7 @@ Status key:
 ## 6. Next work after Phase 0/1
 
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
-2. Per-user Today selection; remaining workspace/security/audit/data settings.
+2. Remaining workspace/security/audit/data settings; Today rebalance/applyPlan.
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan undo, task-change invalidation, full constraints.
 5. Calendar, Search, Insights.

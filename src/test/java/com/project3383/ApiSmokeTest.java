@@ -191,8 +191,9 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.token").isNotEmpty())
             .andExpect(jsonPath("$.invite.email").value("invitee@example.com"));
 
-        mockMvc.perform(get("/api/today").session(session))
+        mockMvc.perform(get("/api/today").session(session).param("workspaceId", workspaceId))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspace.id").value(workspaceId))
             .andExpect(jsonPath("$.suggestions[0].title").value("Smoke task"));
 
         mockMvc.perform(post("/api/today")
@@ -200,7 +201,8 @@ class ApiSmokeTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of(
                     "action", "accept",
-                    "taskId", task.path("id").asText()
+                    "taskId", task.path("id").asText(),
+                    "workspaceId", workspaceId
                 ))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.capacity.selectedMinutes").value(30))
@@ -211,7 +213,8 @@ class ApiSmokeTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of(
                     "action", "dismiss",
-                    "taskId", task.path("id").asText()
+                    "taskId", task.path("id").asText(),
+                    "workspaceId", workspaceId
                 ))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.suggestions[?(@.title == 'Smoke task')]").isEmpty());

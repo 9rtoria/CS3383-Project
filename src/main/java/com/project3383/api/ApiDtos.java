@@ -43,7 +43,8 @@ public final class ApiDtos {
 
     public record TodayAction(
         String action,
-        String taskId
+        String taskId,
+        String workspaceId
     ) {
     }
 

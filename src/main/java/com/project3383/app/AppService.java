@@ -10,8 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -517,62 +519,110 @@ public class AppService {
     }
 
     public Map<String, Object> today(String userId) {
-        String today = LocalDate.now().toString();
+        return today(userId, null);
+    }
+
+    public Map<String, Object> today(String userId, String workspaceId) {
+        String scopedWorkspaceId = resolveWorkspace(userId, workspaceId);
+        String today = todayForUser(userId);
+        int capacity = capacityForUser(userId);
         List<Map<String, Object>> tasks = jdbc.queryForList("""
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId,
                    t.column_id AS columnId, t.title, t.description, t.priority,
                    t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes,
-                   t.focus_date AS focusDate, t.version, t.updated_at AS updatedAt
+                   CASE WHEN s.task_id IS NULL THEN 0 ELSE 1 END AS selectedFlag,
+                   (SELECT COUNT(*)
+                    FROM task_dependency td
+                    JOIN task dep ON dep.id = td.depends_on_task_id
+                    JOIN board_column dc ON dc.id = dep.column_id
+                    WHERE td.task_id = t.id AND dep.deleted_at IS NULL AND dc.is_done = 0) AS openDependencies,
+                   t.version, t.updated_at AS updatedAt
             FROM task t
-            JOIN membership m ON m.workspace_id = t.workspace_id AND m.user_id = ?
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
             LEFT JOIN today_dismissal d
               ON d.task_id = t.id AND d.user_id = ? AND d.date = ?
-            WHERE t.deleted_at IS NULL AND c.is_done = 0
+            LEFT JOIN today_selection s
+              ON s.task_id = t.id AND s.user_id = ? AND s.date = ?
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id AND d.task_id IS NULL
-            ORDER BY CASE WHEN t.focus_date = ? THEN 0 ELSE 1 END,
+            ORDER BY selectedFlag DESC,
                      CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1
                                      WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
                      t.due_date IS NULL, t.due_date, t.position
             LIMIT 100
-            """, userId, userId, today, today);
+            """, userId, today, userId, today, scopedWorkspaceId);
         List<Map<String, Object>> suggestions = new ArrayList<>();
         int selectedMinutes = 0;
+        int selectedCount = 0;
+        int overdueCount = 0;
         for (Map<String, Object> task : tasks) {
             Map<String, Object> suggestion = linked(task);
             suggestion.put("labels", labelsForTask((String) task.get("id")));
-            boolean selected = suggestion.get("focusDate") != null;
+            boolean selected = number(task.get("selectedFlag")) == 1;
+            boolean blocked = number(task.get("openDependencies")) > 0;
+            String due = task.get("dueDate") == null ? null : String.valueOf(task.get("dueDate"));
+            String dueDay = due != null && due.length() >= 10 ? due.substring(0, 10) : null;
+            boolean overdue = dueDay != null && dueDay.compareTo(today) < 0;
+            boolean dueToday = today.equals(dueDay);
+            String priority = String.valueOf(task.get("priority"));
+            int estimate = task.get("estimateMinutes") == null ? 30 : number(task.get("estimateMinutes"));
+            if (overdue) overdueCount++;
+            String reason;
+            if (blocked) reason = "Waiting on a task that is not done yet";
+            else if (overdue) reason = "Overdue since " + dueDay;
+            else if (selected) reason = "You chose this for today";
+            else if (dueToday) reason = "Due today";
+            else if ("urgent".equals(priority) || "high".equals(priority)) {
+                reason = Character.toUpperCase(priority.charAt(0)) + priority.substring(1) + " priority with no due date";
+            } else if (estimate > 0 && estimate <= 20) {
+                reason = "A quick win to build momentum";
+            } else {
+                reason = "Next best use of your available time";
+            }
             suggestion.put("selected", selected);
             suggestion.put("accepted", selected);
-            suggestion.put("reason", selected
-                ? "Chosen for today"
-                : suggestion.get("dueDate") != null ? "Has a due date" : "Open work");
-            if (selected) selectedMinutes += number(suggestion.get("estimateMinutes"));
+            suggestion.put("blocked", blocked);
+            suggestion.put("reason", reason);
+            suggestion.put("focusDate", selected ? today : null);
+            if (selected) {
+                selectedMinutes += Math.max(0, estimate);
+                selectedCount++;
+            }
             suggestions.add(suggestion);
         }
-        int capacity = 300;
         List<Map<String, Object>> planBlocks = jdbc.queryForList("""
             SELECT pb.id, pb.task_id AS taskId, pb.start_minute AS startMinute, pb.minutes,
                    pb.date, t.title, t.priority
             FROM plan_block pb JOIN task t ON t.id = pb.task_id
-            WHERE pb.user_id = ? AND pb.date = ?
+            WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date = ?
               AND t.deleted_at IS NULL
             ORDER BY pb.start_minute
-            """, userId, today);
+            """, userId, scopedWorkspaceId, today);
+        Map<String, Object> workspace = jdbc.queryForList("""
+            SELECT id, name, type FROM workspace WHERE id = ?
+            """, scopedWorkspaceId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Workspace not found."));
+        int remaining = Math.max(0, capacity - selectedMinutes);
         return linked(Map.of(
             "date", today,
             "capacity", linked(Map.of(
                 "totalMinutes", capacity,
                 "selectedMinutes", selectedMinutes,
-                "remainingMinutes", Math.max(0, capacity - selectedMinutes),
+                "remainingMinutes", remaining,
                 "percent", capacity == 0 ? 0 : Math.min(100, Math.round(selectedMinutes * 100f / capacity)),
                 "overbooked", selectedMinutes > capacity
             )),
             "suggestions", suggestions,
-            "planBlocks", planBlocks
+            "planBlocks", planBlocks,
+            "counts", linked(Map.of(
+                "open", suggestions.size(),
+                "selected", selectedCount,
+                "overdue", overdueCount
+            )),
+            "workspace", workspace
         ));
     }
 
@@ -581,27 +631,79 @@ public class AppService {
             throw ApiException.badRequest("A task and action are required.");
         }
         Map<String, Object> task = taskRow(input.taskId());
-        requireMinimumRole(userId, (String) task.get("workspaceId"), "MEMBER");
-        String today = LocalDate.now().toString();
+        String workspaceId = blank(input.workspaceId()) ? (String) task.get("workspaceId") : input.workspaceId();
+        requireMinimumRole(userId, workspaceId, "MEMBER");
+        if (!workspaceId.equals(task.get("workspaceId"))) {
+            throw ApiException.notFound("Task not found.");
+        }
+        String today = todayForUser(userId);
+        String now = Instant.now().toString();
         if ("accept".equals(input.action())) {
+            if (number(task.get("completed")) == 1) {
+                throw ApiException.badRequest("A completed task cannot be added to today's plan.");
+            }
+            jdbc.update("""
+                INSERT OR IGNORE INTO today_selection (user_id, workspace_id, task_id, date, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """, userId, workspaceId, input.taskId(), today, now);
+            // Keep the legacy field in sync for API clients that still read focusDate.
             jdbc.update("""
                 UPDATE task SET focus_date = ?, version = version + 1, updated_at = ?
                 WHERE id = ? AND deleted_at IS NULL
-                """, today, Instant.now().toString(), input.taskId());
+                """, today, now, input.taskId());
             jdbc.update("DELETE FROM today_dismissal WHERE user_id = ? AND task_id = ? AND date = ?",
                 userId, input.taskId(), today);
         } else if ("dismiss".equals(input.action())) {
             jdbc.update("""
+                DELETE FROM today_selection WHERE user_id = ? AND task_id = ? AND date = ?
+                """, userId, input.taskId(), today);
+            jdbc.update("""
                 UPDATE task SET focus_date = NULL, version = version + 1, updated_at = ?
                 WHERE id = ? AND deleted_at IS NULL
-                """, Instant.now().toString(), input.taskId());
+                """, now, input.taskId());
             jdbc.update("""
                 INSERT OR IGNORE INTO today_dismissal (user_id, task_id, date) VALUES (?, ?, ?)
                 """, userId, input.taskId(), today);
+            jdbc.update("""
+                DELETE FROM plan_block
+                WHERE user_id = ? AND workspace_id = ? AND task_id = ? AND date = ?
+                  AND source = 'auto' AND locked = 0
+                """, userId, workspaceId, input.taskId(), today);
         } else {
             throw ApiException.badRequest("Unknown Today action.");
         }
-        return today(userId);
+        return today(userId, workspaceId);
+    }
+
+    private String resolveWorkspace(String userId, String workspaceId) {
+        if (!blank(workspaceId)) {
+            requireMembership(userId, workspaceId);
+            return workspaceId;
+        }
+        List<String> workspaceIds = jdbc.queryForList("""
+            SELECT workspace_id FROM membership WHERE user_id = ? ORDER BY joined_at LIMIT 1
+            """, String.class, userId);
+        if (workspaceIds.isEmpty()) throw ApiException.notFound("Workspace not found.");
+        return workspaceIds.get(0);
+    }
+
+    private String todayForUser(String userId) {
+        List<String> zones = jdbc.queryForList("""
+            SELECT timezone FROM app_user WHERE id = ?
+            """, String.class, userId);
+        String zone = zones.isEmpty() ? null : zones.get(0);
+        try {
+            return LocalDate.now(zone == null || zone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(zone)).toString();
+        } catch (DateTimeException exception) {
+            return LocalDate.now().toString();
+        }
+    }
+
+    private int capacityForUser(String userId) {
+        List<Integer> capacities = jdbc.queryForList("""
+            SELECT capacity_minutes FROM user_settings WHERE user_id = ?
+            """, Integer.class, userId);
+        return capacities.isEmpty() ? 300 : Math.max(15, capacities.get(0));
     }
 
     public Map<String, Object> createTask(String userId, ApiDtos.TaskCreate input) {

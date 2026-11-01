@@ -47,8 +47,8 @@ public class AppController {
     }
 
     @GetMapping("/today")
-    public Map<String, Object> today(HttpSession session) {
-        return appService.today(CurrentUser.id(session));
+    public Map<String, Object> today(HttpSession session, @RequestParam(required = false) String workspaceId) {
+        return appService.today(CurrentUser.id(session), workspaceId);
     }
 
     @PostMapping("/today")

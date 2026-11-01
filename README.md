@@ -29,8 +29,9 @@ Implemented:
   - Drag task between columns
   - Delete task
   - Sign out
-- JUnit/MockMvc smoke test for guest ??task ??move ??Today
+- JUnit/MockMvc smoke test for guest / task / move / Today
 - Reminders, in-app notifications, and background delivery
+- Workspace-scoped, per-user Today selection with capacity, reasons, and blocked-dependency state
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults

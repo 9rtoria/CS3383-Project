@@ -451,6 +451,7 @@
     state.currentBoardId = boards()[0]?.id ?? null;
     renderSidebar();
     if (state.currentBoardId) await loadBoard(state.currentBoardId);
+    await loadToday();
     setView("board");
   }
 
@@ -507,7 +508,7 @@
   }
 
   async function loadToday() {
-    state.today = await request("/api/today");
+    state.today = await request(`/api/today?workspaceId=${encodeURIComponent(workspace().id)}`);
     renderToday();
   }
 
@@ -550,6 +551,7 @@
     } else {
       $("viewEyebrow").textContent = "Plan";
       $("viewTitle").textContent = "Today";
+      void loadToday();
     }
   }
 
@@ -640,12 +642,13 @@
     if (!suggestions.length) {
       list.append(element("div", "empty", "Nothing open. Add a task to begin."));
     }
-    for (const task of suggestions.slice(0, 12)) {
+    for (const task of suggestions.slice(0, 50)) {
       const row = element("div", "today-row");
       const grow = element("div", "grow");
       grow.append(element("h3", "", task.title));
       const bits = [];
       if (task.reason) bits.push(task.reason);
+      if (task.blocked && task.openDependencies) bits.push(`${task.openDependencies} open dependency`);
       if (task.estimateMinutes) bits.push(`${task.estimateMinutes}m`);
       if (task.actualMinutes) bits.push(`${task.actualMinutes}m tracked`);
       if (task.startDate) bits.push(`starts ${task.startDate.slice(0, 10)}`);
@@ -655,7 +658,7 @@
       const actions = element("div", "top-actions");
       const choose = element("button", "btn sm", task.accepted ? "Chosen" : "Choose");
       choose.type = "button";
-      choose.disabled = Boolean(task.accepted);
+      choose.disabled = Boolean(task.accepted || task.blocked);
       choose.addEventListener("click", () => todayAction("accept", task.id));
       const dismiss = element("button", "btn ghost sm", "Dismiss");
       dismiss.type = "button";
@@ -776,7 +779,7 @@
     try {
       await request("/api/today", {
         method: "POST",
-        body: { action, taskId },
+        body: { action, taskId, workspaceId: workspace().id },
       });
       await loadToday();
     } catch (error) {

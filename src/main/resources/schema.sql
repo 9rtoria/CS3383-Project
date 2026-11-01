@@ -211,6 +211,21 @@ CREATE TABLE IF NOT EXISTS today_dismissal (
     FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS today_selection (
+    user_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, date, task_id),
+    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_today_selection_user_date
+    ON today_selection(user_id, date);
+
 CREATE INDEX IF NOT EXISTS idx_task_board_position ON task(board_id, deleted_at, position);
 CREATE INDEX IF NOT EXISTS idx_task_workspace_due ON task(workspace_id, deleted_at, due_date);
 CREATE INDEX IF NOT EXISTS idx_board_workspace ON board(workspace_id);
