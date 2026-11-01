@@ -291,5 +291,23 @@ class ApiSmokeTest {
                 .content(objectMapper.writeValueAsString(Map.of("capacityMinutes", 240))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.settings.capacity_minutes").value(240));
+        mockMvc.perform(patch("/api/settings")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "featuresJson", "{\"dayFlow\":false,\"smartPlan\":true,\"voice\":true}"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings.features_json").value("{\"dayFlow\":false,\"smartPlan\":true,\"voice\":true}"));
+        mockMvc.perform(patch("/api/account")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "Smoke Owner",
+                    "timezone", "Asia/Tokyo"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.name").value("Smoke Owner"))
+            .andExpect(jsonPath("$.user.timezone").value("Asia/Tokyo"));
     }
 }

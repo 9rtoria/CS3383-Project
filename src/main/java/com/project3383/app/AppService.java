@@ -89,6 +89,21 @@ public class AppService {
         return new AuthResult(userId, bootstrap(userId));
     }
 
+    public Map<String, Object> updateAccount(String userId, ApiDtos.AccountUpdate input) {
+        if (input == null) throw ApiException.badRequest("Account details are required.");
+        String name = input.name() == null ? null : input.name().trim();
+        if (name != null && (name.isEmpty() || name.length() > 80)) {
+            throw ApiException.badRequest("Display name must be between 1 and 80 characters.");
+        }
+        String timezone = input.timezone() == null ? null : input.timezone().trim();
+        if (timezone != null && (timezone.isEmpty() || timezone.length() > 80)) {
+            throw ApiException.badRequest("Time zone must be between 1 and 80 characters.");
+        }
+        if (name != null) jdbc.update("UPDATE app_user SET display_name = ? WHERE id = ?", name, userId);
+        if (timezone != null) jdbc.update("UPDATE app_user SET timezone = ? WHERE id = ?", timezone, userId);
+        return linked(Map.of("user", user(userId)));
+    }
+
     public AuthResult signin(ApiDtos.Signin input) {
         if (input == null || blank(input.email()) || blank(input.password())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");

@@ -50,7 +50,9 @@ public class SettingsService {
         Map.entry("digestHour", "digest_hour"),
         Map.entry("quietStart", "quiet_start"),
         Map.entry("quietEnd", "quiet_end"),
-        Map.entry("weekStartsOn", "week_starts_on")
+        Map.entry("weekStartsOn", "week_starts_on"),
+        Map.entry("featuresJson", "features_json"),
+        Map.entry("notificationsJson", "notifications_json")
     );
 
     private final JdbcTemplate jdbc;
@@ -70,7 +72,14 @@ public class SettingsService {
         if (changes == null) return get(userId);
         for (Map.Entry<String, Object> entry : changes.entrySet()) {
             String column = COLUMNS.get(entry.getKey());
-            if (column == null || entry.getValue() == null) continue;
+            if (column == null) continue;
+            if (entry.getValue() == null) {
+                if ("quiet_start".equals(column) || "quiet_end".equals(column)) {
+                    jdbc.update("UPDATE user_settings SET " + column + " = NULL, updated_at = ? WHERE user_id = ?",
+                        Instant.now().toString(), userId);
+                }
+                continue;
+            }
             jdbc.update("UPDATE user_settings SET " + column + " = ?, updated_at = ? WHERE user_id = ?",
                 entry.getValue(), Instant.now().toString(), userId);
         }

@@ -19,7 +19,7 @@ Status key:
 
 | Reference path | Project3383 status | Notes |
 |---|---|---|
-| `/api/account` | MISSING | Profile update/delete not implemented |
+| `/api/account` | PARTIAL | Profile display name/timezone update; delete not implemented |
 | `/api/archive` | DONE | Completed tasks |
 | `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
 | `/api/attachments/{id}` | DONE | Download/delete |
@@ -61,7 +61,7 @@ Status key:
 | `/api/openapi` | MISSING | |
 | `/api/search` | PARTIAL | SQL LIKE search, not FTS |
 | `/api/security/mfa` | MISSING | |
-| `/api/settings` | PARTIAL | GET/PATCH core preferences; UI not ported |
+| `/api/settings` | PARTIAL | GET/PATCH personal preferences; settings UI ported |
 | `/api/share/{token}` | MISSING | |
 | `/api/subtasks/{id}` | PARTIAL | PATCH; DELETE not exposed |
 | `/api/tasks` | DONE | GET list, POST create |
@@ -122,7 +122,7 @@ Status key:
 | AutomationRule | SCHEMA | No automation service |
 | AutomationRun | SCHEMA | |
 | Notification | DONE | |
-| UserSettings | SCHEMA | Settings UI/API still needed |
+| UserSettings | DONE | Settings UI + GET/PATCH API |
 | PlanBlock | DONE | Auto-plan |
 | TodayDismissal | DONE | |
 | MagicLinkToken | SCHEMA | |
@@ -159,7 +159,7 @@ Status key:
 | Calendar / ICS | DONE | Month calendar and ICS download |
 | Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
 | Insights | PARTIAL | Basic counts; full reference views missing |
-| Settings / Focus / Voice / Sound | PARTIAL | Settings storage/API only; UI/Focus/Voice/Sound missing |
+| Settings / Focus / Voice / Sound | PARTIAL | Personal settings UI (account, appearance, language, planning, auto-plan, focus, notifications, features); Focus/Voice/Sound surfaces missing |
 | Offline / PWA | MISSING | |
 | i18n | MISSING | |
 | Public board share | MISSING | |
@@ -203,12 +203,13 @@ Status key:
 - [x] Member/guest write-role enforcement on task, board, attachment, reminder, and workspace-admin paths
 - [x] Flyway versioned baseline migration
 - [x] Settings table + GET/PATCH `/api/settings`
+- [x] Account profile update + personal Settings UI (appearance, language, planning, auto-plan, focus, notifications, features)
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
 
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
-2. Settings UI and per-user Today selection.
+2. Per-user Today selection; remaining workspace/security/audit/data settings.
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan undo, task-change invalidation, full constraints.
 5. Calendar, Search, Insights.

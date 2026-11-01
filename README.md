@@ -33,7 +33,8 @@ Implemented:
 - Reminders, in-app notifications, and background delivery
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
-- Settings storage/API (`/api/settings` GET/PATCH)
+- Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
+- Settings storage/API (`/api/settings` GET/PATCH) and account profile update (`/api/account` PATCH)
 - Origin-based CSRF protection for cookie-authenticated mutations
 
 Not implemented yet:

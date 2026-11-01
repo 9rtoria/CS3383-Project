@@ -78,6 +78,12 @@ public final class ApiDtos {
     ) {
     }
 
+    public record AccountUpdate(
+        String name,
+        String timezone
+    ) {
+    }
+
     public record Signin(
         String email,
         String password

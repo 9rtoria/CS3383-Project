@@ -25,6 +25,7 @@
         <button type="button" data-view="archive">Archive</button>
         <button type="button" data-view="search">Search</button>
         <button type="button" data-view="insights">Insights</button>
+        <button type="button" data-view="settings">Settings</button>
       </nav>
 
       <div>
@@ -62,7 +63,7 @@
       </header>
 
       <section id="todayView">
-        <div class="panel" style="margin-bottom:16px">
+        <div id="dayFlowPanel" class="panel" style="margin-bottom:16px">
           <h2>Day Flow</h2>
           <p class="hint">The shape of today, with or without Auto-plan.</p>
           <div id="dayFlowList" class="today-list"></div>
@@ -137,6 +138,37 @@
           <h2>Insights</h2>
           <p class="hint">A quick view of the current workspace.</p>
           <div id="insightsGrid" class="insight-grid"></div>
+        </div>
+      </section>
+
+      <section id="settingsView" class="hidden" aria-label="Settings">
+        <div class="settings-shell">
+          <aside class="settings-nav" aria-label="Settings sections">
+            <button type="button" id="settingsBack" class="settings-back">&larr; Back to app</button>
+            <div class="settings-workspace">
+              <span class="brand-mark">D</span>
+              <div>
+                <strong id="settingsWorkspaceName">Workspace</strong>
+                <span id="settingsWorkspaceRole">Owner</span>
+              </div>
+            </div>
+            <p class="side-label">You</p>
+            <nav id="settingsNav" class="settings-nav-list"></nav>
+          </aside>
+          <div class="settings-content">
+            <header class="settings-header">
+              <div>
+                <p class="eyebrow">Account &amp; workspace</p>
+                <h1 class="settings-title">Settings</h1>
+                <p class="settings-sub">Quiet controls for how Drift works for you.</p>
+              </div>
+              <div class="settings-header-actions">
+                <span id="settingsSaveState" class="settings-save-state" aria-live="polite">Autosave</span>
+                <button type="button" id="settingsThemeToggle" class="btn sm">Dark</button>
+              </div>
+            </header>
+            <div id="settingsSections"></div>
+          </div>
         </div>
       </section>
     </main>
