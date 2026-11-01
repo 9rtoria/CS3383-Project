@@ -1,0 +1,102 @@
+package com.project3383;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+
+import java.util.Map;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest(properties = "spring.datasource.url=jdbc:sqlite:target/test-project3383.db")
+@AutoConfigureMockMvc
+class ApiSmokeTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Test
+    void guestCanCreateAndMoveATask() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.name").value("Guest"))
+            .andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+        String doing = board.path("columns").get(1).path("id").asText();
+
+        String taskJson = objectMapper.writeValueAsString(Map.of(
+            "workspaceId", workspaceId,
+            "boardId", boardId,
+            "columnId", todo,
+            "title", "Smoke task",
+            "estimateMinutes", 30
+        ));
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(taskJson))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.task.title").value("Smoke task"))
+            .andReturn();
+        JsonNode task = objectMapper.readTree(created.getResponse().getContentAsString()).path("task");
+
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Smoke task"));
+
+        mockMvc.perform(patch("/api/tasks/" + task.path("id").asText() + "/move")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "version", task.path("version").asInt(),
+                    "columnId", doing
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.columnId").value(doing));
+
+        mockMvc.perform(get("/api/today").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestions[0].title").value("Smoke task"));
+
+        mockMvc.perform(post("/api/today")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "accept",
+                    "taskId", task.path("id").asText()
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.capacity.selectedMinutes").value(30))
+            .andExpect(jsonPath("$.suggestions[0].accepted").value(true));
+
+        mockMvc.perform(post("/api/today")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "dismiss",
+                    "taskId", task.path("id").asText()
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestions").isEmpty());
+    }
+}

@@ -1,0 +1,85 @@
+CREATE TABLE IF NOT EXISTS app_user (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE,
+    display_name TEXT NOT NULL,
+    password_hash TEXT,
+    is_guest INTEGER NOT NULL DEFAULT 1,
+    timezone TEXT NOT NULL DEFAULT 'Asia/Hong_Kong',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workspace (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'personal',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS membership (
+    user_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'OWNER',
+    joined_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, workspace_id),
+    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS board (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS board_column (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    is_done INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (board_id) REFERENCES board(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS task (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    board_id TEXT NOT NULL,
+    column_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'none',
+    start_date TEXT,
+    due_date TEXT,
+    due_all_day INTEGER NOT NULL DEFAULT 1,
+    estimate_minutes INTEGER,
+    actual_minutes INTEGER,
+    focus_date TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE,
+    FOREIGN KEY (board_id) REFERENCES board(id) ON DELETE CASCADE,
+    FOREIGN KEY (column_id) REFERENCES board_column(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES app_user(id)
+);
+
+CREATE TABLE IF NOT EXISTS today_dismissal (
+    user_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    PRIMARY KEY (user_id, task_id, date),
+    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_board_position ON task(board_id, deleted_at, position);
+CREATE INDEX IF NOT EXISTS idx_task_workspace_due ON task(workspace_id, deleted_at, due_date);
+CREATE INDEX IF NOT EXISTS idx_board_workspace ON board(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_column_board ON board_column(board_id, position);

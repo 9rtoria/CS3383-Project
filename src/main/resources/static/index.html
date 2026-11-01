@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Drift · Project3383</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">D</div>
+        <div>
+          <strong>Drift</strong>
+          <small>Project3383</small>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Views">
+        <button type="button" data-view="today" class="active">Today</button>
+        <button type="button" data-view="board">Board</button>
+      </nav>
+
+      <div>
+        <div class="side-label">Workspace</div>
+        <div id="workspaceName" class="small muted" style="padding:0 11px 10px">Loading…</div>
+        <div class="side-label">Boards</div>
+        <div id="boardList" class="board-list"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        Local SQLite · Spring Boot<br>
+        <button type="button" id="signOutButton" class="btn ghost sm" style="padding-left:0">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p id="viewEyebrow" class="eyebrow">Plan</p>
+          <h1 id="viewTitle">Today</h1>
+        </div>
+        <div class="top-actions">
+          <span id="dateChip" class="date-chip"></span>
+          <button type="button" id="newTaskButton" class="btn primary">New task</button>
+        </div>
+      </header>
+
+      <section id="todayView">
+        <div class="today-grid">
+          <div class="panel">
+            <h2>Today’s work</h2>
+            <p class="hint">A calm starting point. Choose one thing and make it visible.</p>
+            <div id="todayList" class="today-list"></div>
+          </div>
+          <aside class="panel" aria-label="Capacity">
+            <h2>Capacity</h2>
+            <p class="hint">Estimated work against your day.</p>
+            <div id="capacityNumber" class="capacity-number">0m</div>
+            <div id="capacityBar" class="capacity-bar"><span style="width:0%"></span></div>
+            <p id="capacityHint" class="small muted">No tasks chosen yet.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="boardView" class="hidden" aria-label="Board">
+        <div id="board" class="board"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="taskModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <p id="taskEyebrow" class="eyebrow">Task</p>
+          <h2 id="taskModalTitle">New task</h2>
+        </div>
+        <button type="button" id="closeModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+
+      <form id="taskForm">
+        <div class="field">
+          <label for="taskTitle">Title</label>
+          <input id="taskTitle" name="title" class="input" maxlength="300" required autocomplete="off" placeholder="What needs doing?">
+        </div>
+        <div class="field">
+          <label for="taskDescription">Notes</label>
+          <textarea id="taskDescription" name="description" class="textarea" maxlength="10000" placeholder="Optional context, links, or next steps"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="taskPriority">Priority</label>
+            <select id="taskPriority" name="priority" class="select">
+              <option value="none">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="taskEstimate">Estimate (minutes)</label>
+            <input id="taskEstimate" name="estimateMinutes" class="input" type="number" min="5" max="1440" step="5" placeholder="30">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="taskDue">Due date</label>
+            <input id="taskDue" name="dueDate" class="input" type="date">
+          </div>
+          <div class="field" id="columnField">
+            <label for="taskColumn">Column</label>
+            <select id="taskColumn" name="columnId" class="select"></select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="deleteTaskButton" class="btn danger spacer hidden">Delete</button>
+          <button type="button" id="cancelModal" class="btn">Cancel</button>
+          <button type="submit" id="saveTaskButton" class="btn primary">Save task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
