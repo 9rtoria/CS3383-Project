@@ -17,7 +17,8 @@ Implemented:
 - Workspace members, invite links, role changes, and member removal
 - Board create/read API
 - Task create / update / move / soft-delete APIs
-- Task detail API with comments, checklist, labels, and dependencies
+- Task detail API with comments, checklist, labels, dependencies, and attachments
+- Attachment upload/download/delete with local storage, MIME allowlist, and 10 MB limit
 - Task start date, all-day due date, and tracked actual minutes
 - Version-based 409 conflict handling
 - Today list with capacity and accept/dismiss actions
@@ -32,7 +33,7 @@ Implemented:
 
 Not implemented yet:
 
-- Task drawer parity (attachments, reminders)
+- Task drawer parity (reminders)
 - Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
 - SSO/MFA/API tokens/Webhooks/Automations
@@ -100,6 +101,9 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/tasks/{id}/comments` | Add a comment |
 | POST | `/api/tasks/{id}/subtasks` | Add a checklist item |
 | PATCH | `/api/subtasks/{id}` | Update a checklist item |
+| POST | `/api/tasks/{id}/attachments` | Upload an attachment |
+| GET | `/api/attachments/{id}` | Download an attachment |
+| DELETE | `/api/attachments/{id}` | Delete an attachment |
 
 ## Guardrails
 

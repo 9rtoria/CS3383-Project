@@ -8,6 +8,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -15,8 +16,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -92,6 +95,19 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.task.labels[0].name").value("smoke"))
             .andReturn();
         JsonNode task = objectMapper.readTree(created.getResponse().getContentAsString()).path("task");
+
+        MockMultipartFile attachment = new MockMultipartFile("file", "note.txt", "text/plain", "hello".getBytes());
+        MvcResult uploaded = mockMvc.perform(multipart("/api/tasks/" + task.path("id").asText() + "/attachments")
+                .file(attachment)
+                .session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.attachment.name").value("note.txt"))
+            .andReturn();
+        String attachmentId = objectMapper.readTree(uploaded.getResponse().getContentAsString())
+            .path("attachment").path("id").asText();
+        mockMvc.perform(get("/api/attachments/" + attachmentId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(content().bytes("hello".getBytes()));
 
         mockMvc.perform(get("/api/boards/" + boardId).session(session))
             .andExpect(status().isOk())

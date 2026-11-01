@@ -438,6 +438,10 @@ public class AppService {
             FROM subtask WHERE task_id = ? ORDER BY position, created_at
             """, taskId));
         task.put("dependencies", dependencyList(taskId));
+        task.put("attachments", jdbc.queryForList("""
+            SELECT id, name, mime_type AS mimeType, size, created_at AS createdAt
+            FROM attachment WHERE task_id = ? AND deleted_at IS NULL ORDER BY created_at DESC
+            """, taskId));
         return linked(Map.of("task", task));
     }
 

@@ -494,6 +494,7 @@
     $("commentList").replaceChildren();
     $("dependencyList").replaceChildren();
     $("dependencySelect").replaceChildren();
+    $("attachmentList").replaceChildren();
     $("subtaskProgress").textContent = "";
     const board = currentBoard();
     const columns = board?.columns ?? [];
@@ -588,6 +589,63 @@
       select.add(new Option(item.title, item.id));
     }
     if (!select.options.length) select.add(new Option("No other tasks", ""));
+
+    const attachments = task.attachments ?? [];
+    const attachmentList = $("attachmentList");
+    attachmentList.replaceChildren();
+    if (!attachments.length) attachmentList.append(element("div", "empty", "No attachments."));
+    for (const attachment of attachments) {
+      const row = element("div", "detail-item");
+      const link = element("a", "grow", attachment.name);
+      link.href = `/api/attachments/${encodeURIComponent(attachment.id)}`;
+      link.download = attachment.name;
+      const size = element("span", "muted small", formatBytes(attachment.size));
+      const remove = element("button", "btn ghost sm", "Remove");
+      remove.type = "button";
+      remove.addEventListener("click", () => deleteAttachment(attachment.id));
+      row.append(link, size, remove);
+      attachmentList.append(row);
+    }
+  }
+
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function uploadAttachment() {
+    const input = $("attachmentInput");
+    const file = input.files?.[0];
+    if (!file || !state.editing) return;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const response = await fetch(`/api/tasks/${encodeURIComponent(state.editing.id)}/attachments`, {
+        method: "POST",
+        body: form,
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || "Upload failed.");
+      }
+      input.value = "";
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function deleteAttachment(id) {
+    if (!state.editing) return;
+    try {
+      await request(`/api/attachments/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   async function addDependency() {
@@ -746,6 +804,7 @@
     $("subtaskAddButton").addEventListener("click", addSubtask);
     $("commentAddButton").addEventListener("click", addComment);
     $("dependencyAddButton").addEventListener("click", addDependency);
+    $("attachmentUploadButton").addEventListener("click", uploadAttachment);
     $("subtaskTitle").addEventListener("keydown", (event) => {
       if (event.key === "Enter") { event.preventDefault(); void addSubtask(); }
     });

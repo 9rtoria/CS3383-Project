@@ -105,6 +105,22 @@ CREATE TABLE IF NOT EXISTS task_label (
     FOREIGN KEY (label_id) REFERENCES label(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS attachment (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    uploader_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    storage_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploader_id) REFERENCES app_user(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachment_task ON attachment(task_id, deleted_at);
+
 CREATE TABLE IF NOT EXISTS task_dependency (
     task_id TEXT NOT NULL,
     depends_on_task_id TEXT NOT NULL,
