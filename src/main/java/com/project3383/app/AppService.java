@@ -1434,8 +1434,75 @@ public class AppService {
         return value.orElse(null);
     }
 
-    public Map<String, Object> moveTask(String userId, String taskId, ApiDtos.TaskMove input) {
+    @Transactional
+    public Map<String, Object> reorderTask(String userId, String taskId, ApiDtos.TaskReorder input) {
         Map<String, Object> current = taskRow(taskId);
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
+        requireTaskBoardVisible(userId, current);
+        String direction = input == null || input.direction() == null ? "" : input.direction();
+        if (!Set.of("up", "down").contains(direction)) {
+            throw ApiException.badRequest("Choose a reorder direction.");
+        }
+        List<Map<String, Object>> columnTasks = jdbc.queryForList("""
+            SELECT id, position FROM task
+            WHERE column_id = ? AND deleted_at IS NULL AND archived_at IS NULL
+            ORDER BY position, created_at
+            """, current.get("columnId"));
+        int index = -1;
+        for (int i = 0; i < columnTasks.size(); i++) {
+            if (taskId.equals(String.valueOf(columnTasks.get(i).get("id")))) {
+                index = i;
+                break;
+            }
+        }
+        int targetIndex = index + ("up".equals(direction) ? -1 : 1);
+        if (index < 0 || targetIndex < 0 || targetIndex >= columnTasks.size()) {
+            Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+            result.put("moved", false);
+            return result;
+        }
+        Map<String, Object> target = columnTasks.get(targetIndex);
+        int currentPosition = number(columnTasks.get(index).get("position"));
+        int targetPosition = number(target.get("position"));
+        String now = Instant.now().toString();
+        if (currentPosition == targetPosition) {
+            currentPosition = targetPosition + ("up".equals(direction) ? -1 : 1);
+            jdbc.update("""
+                UPDATE task SET position = ?, version = version + 1, updated_at = ?
+                WHERE id = ? AND workspace_id = ?
+                """, currentPosition, now, taskId, current.get("workspaceId"));
+        } else {
+            jdbc.update("""
+                UPDATE task SET position = ?, version = version + 1, updated_at = ?
+                WHERE id = ? AND workspace_id = ?
+                """, targetPosition, now, taskId, current.get("workspaceId"));
+            jdbc.update("""
+                UPDATE task SET position = ?, version = version + 1, updated_at = ?
+                WHERE id = ? AND workspace_id = ?
+                """, currentPosition, now, target.get("id"), current.get("workspaceId"));
+        }
+        recordActivity((String) current.get("workspaceId"), taskId, userId, "task.reordered", "task", taskId);
+        List<Map<String, Object>> previous = new ArrayList<>();
+        for (String id : List.of(taskId, String.valueOf(target.get("id")))) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            int oldPosition = id.equals(taskId)
+                ? number(columnTasks.get(index).get("position"))
+                : targetPosition;
+            row.put("taskId", id);
+            row.put("position", oldPosition);
+            previous.add(row);
+        }
+        Map<String, Object> inverse = new LinkedHashMap<>();
+        inverse.put("previous", previous);
+        Map<String, Object> undo = createUndo(userId, (String) current.get("workspaceId"),
+            "task.reorder", "task", taskId, inverse, 60);
+        Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
+        result.put("moved", true);
+        if (undo != null) result.put("undo", undo);
+        return result;
+    }
+
+    public Map<String, Object> moveTask(String userId, String taskId, ApiDtos.TaskMove input) {        Map<String, Object> current = taskRow(taskId);
         requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
         requireTaskBoardVisible(userId, current);
         int version = input.version() == null ? -1 : input.version();

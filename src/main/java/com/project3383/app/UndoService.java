@@ -119,6 +119,17 @@ public class UndoService {
                     }
                 }
             }
+            case "task.reorder" -> {
+                for (Map<String, Object> row : mapList(inverse.get("previous"))) {
+                    String taskId = stringValue(row.get("taskId"));
+                    Object position = row.get("position");
+                    if (taskId == null || position == null) continue;
+                    jdbc.update("""
+                        UPDATE task SET position = ?, version = version + 1
+                        WHERE id = ? AND workspace_id = ?
+                        """, position, taskId, workspaceId);
+                }
+            }
             case "board.delete" -> {
                 jdbc.update("""
                     UPDATE board SET deleted_at = NULL, version = version + 1

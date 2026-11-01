@@ -85,6 +85,11 @@ public final class ApiDtos {
     ) {
     }
 
+    public record TaskReorder(
+        String direction
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type

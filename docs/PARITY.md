@@ -70,6 +70,7 @@ Status key:
 | `/api/tasks/{id}` | DONE | GET/PATCH/DELETE |
 | `/api/tasks/{id}/comments` | DONE | POST; detail returns comments |
 | `/api/tasks/{id}/move` | DONE | |
+| `/api/tasks/{id}/reorder` | DONE | Keyboard order up/down with undo |
 | `/api/tasks/{id}/subtasks` | DONE | POST; detail returns checklist |
 | `/api/today` | DONE | Workspace-scoped GET, per-user selection, accept/dismiss/rebalance/applyPlan, counts |
 | `/api/tokens` | MISSING | |
@@ -159,6 +160,7 @@ Status key:
 | Task completion / reopen | DONE | |
 | Task undo | DONE | Create, complete, move, delete, and board delete with toast actions |
 | Bulk task actions | DONE | Multi-select complete, archive, delete, move, with undo |
+| Command palette / shortcuts | DONE | Ctrl/Cmd+K palette, search tasks, keyboard navigation, shortcut help, single-key toggle, Alt+Arrow move/reorder |
 | Labels | PARTIAL | Task-scoped labels; no label manager |
 | Today / capacity / accept / dismiss | DONE | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies, rebalance/applyPlan |
 | Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; exact visual parity pending |
@@ -212,6 +214,8 @@ Status key:
 - [x] Task activity trail for task, comment, checklist, attachment, Today, and recurrence events
 - [x] Undo for task create/complete/move/delete and board delete
 - [x] Bulk complete/archive/delete/move with multi-select and undo
+- [x] Command palette, keyboard navigation, shortcuts help, and Alt+Arrow card move/reorder
+- [x] Phase 2 board/task scope complete
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -238,6 +242,6 @@ Status key:
 3. Full drawer parity for reminders and label management.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Remaining Phase 2 board/task gaps: command palette.
+6. Phase 2 board/task gaps are closed; proceed to Phase 4.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

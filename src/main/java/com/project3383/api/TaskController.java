@@ -80,6 +80,11 @@ public class TaskController {
         return appService.moveTask(CurrentUser.id(session), id, input);
     }
 
+    @PostMapping("/{id}/reorder")
+    public Map<String, Object> reorder(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.TaskReorder input) {
+        return appService.reorderTask(CurrentUser.id(session), id, input);
+    }
+
     @PostMapping("/{id}/focus")
     public Map<String, Object> focus(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.FocusLog input) {
         return appService.focusTask(CurrentUser.id(session), id, input);

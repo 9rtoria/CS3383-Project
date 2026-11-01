@@ -35,6 +35,18 @@
     selectedTaskIds: new Set(),
     bulkTargetColumn: "",
     bulkBusy: false,
+    paletteOpen: false,
+    paletteQuery: "",
+    paletteResults: [],
+    paletteActive: 0,
+    paletteItems: [],
+    paletteSearchSeq: 0,
+    paletteTimer: null,
+    singleKeyShortcuts: true,
+    gPending: false,
+    gTimer: null,
+    paletteReturnFocus: null,
+    shortcutsReturnFocus: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -1179,6 +1191,16 @@
     card.tabIndex = 0;
     card.addEventListener("click", () => openTaskModal(task));
     card.addEventListener("keydown", (event) => {
+      if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        event.preventDefault();
+        void keyboardMoveTask(task, event.key);
+        return;
+      }
+      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        void keyboardReorderTask(task, event.key);
+        return;
+      }
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         openTaskModal(task);
@@ -2419,8 +2441,10 @@
       "task.completed": "completed the task",
       "task.reopened": "reopened the task",
       "task.moved": "moved the task",
+      "task.reordered": "reordered the task",
       "task.recurred": "created the next occurrence",
       "task.deleted": "deleted the task",
+      "action.undone": "undid an action",
       "comment.created": "commented",
       "subtask.created": "added a checklist item",
       "attachment.created": "attached a file",
@@ -3559,6 +3583,7 @@
     toggleFeature("dayFlow", "Day Flow", "The 24-hour rail, capacity ring, and focus-next card.");
     toggleFeature("smartPlan", "Smart Plan", "Preview a local rules plan, then apply or undo it. No model call.");
     toggleFeature("voice", "Voice capture", "Show the browser speech shortcut. Text capture is always available.");
+    settingsRow(card, "Single-key shortcuts", "C, /, ? and G sequences. Saved on this device.", makeToggle(state.singleKeyShortcuts, "Single-key shortcuts", setSingleKeyShortcuts));
     return section;
   }
 
@@ -3593,7 +3618,392 @@
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function announce(message) {
+    const node = $("liveRegion");
+    if (!node || !message) return;
+    node.textContent = "";
+    window.setTimeout(() => { node.textContent = message; }, 20);
+  }
+
+  function isTypingTarget(target) {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName.toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+  }
+
+  function anyModalOpen() {
+    return [...document.querySelectorAll(".modal-backdrop")].some((node) => !node.classList.contains("hidden"));
+  }
+
+  async function goToView(view) {
+    if (view === "board" && !state.board && state.currentBoardId) await loadBoard(state.currentBoardId);
+    setView(view);
+  }
+
+  async function openTaskById(taskId) {
+    const detail = await request(`/api/tasks/${encodeURIComponent(taskId)}`);
+    const task = detail?.task;
+    if (!task) return;
+    if (task.boardId && task.boardId !== state.currentBoardId) {
+      state.currentBoardId = task.boardId;
+      await loadBoard(task.boardId);
+      setView("board");
+    }
+    openTaskModal(task);
+  }
+
+  function paletteCommands() {
+    const items = [];
+    const navigation = [
+      ["today", "Go to Today", "Your short list", "G T", "◷"],
+      ["upcoming", "Go to Upcoming", "The next two weeks", "G U", "→"],
+      ["calendar", "Go to Calendar", "Month view", "G C", "▦"],
+      ["search", "Search everything", "Titles, notes and labels", "/", "⌕"],
+      ["archive", "Go to Archive", "Completed and put away", "G A", "⌸"],
+      ["insights", "Open Insights", "The longer horizon", "G I", "▤"],
+      ["board", "Go to Board", "Your Kanban board", "G B", "▥"],
+    ];
+    for (const [view, label, hint, shortcut, icon] of navigation) {
+      items.push({
+        id: `go-${view}`, label: t(label), hint: t(hint), group: "Go", icon, shortcut,
+        run: () => goToView(view),
+      });
+    }
+    items.push(
+      { id: "new-task", label: t("Create a new task"), hint: t("Open the full task form"), group: "Create", icon: "+", run: () => openTaskModal(null) },
+      { id: "capture", label: t("Capture a new task"), hint: t("Opens quick capture"), group: "Create", icon: "C", shortcut: "C", run: openCapture },
+      { id: "shortcuts", label: t("Keyboard shortcuts"), hint: t("Learn the whole app"), group: "Create", icon: "?", shortcut: "?", run: openShortcuts },
+      { id: "theme", label: t("Toggle light and dark"), hint: t("Saved in your settings"), group: "Create", icon: "◐", run: () => updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" }) },
+      { id: "settings", label: t("Open settings"), hint: t("Account, team and data"), group: "Create", icon: "⚙", run: () => goToView("settings") },
+    );
+    for (const board of boards().slice(0, 8)) {
+      items.push({
+        id: `board-${board.id}`,
+        label: board.name,
+        hint: board.visibility === "private" ? t("Private board") : t("Shared with workspace"),
+        group: "Boards",
+        icon: "▦",
+        run: async () => {
+          state.currentBoardId = board.id;
+          await loadBoard(board.id);
+          setView("board");
+        },
+      });
+    }
+    const needle = state.paletteQuery.trim().toLowerCase();
+    const commands = items.filter((item) => !needle || `${item.label} ${item.hint} ${item.group}`.toLowerCase().includes(needle));
+    const tasks = needle.length >= 2 ? state.paletteResults.slice(0, 6).map((task) => ({
+      id: `task-${task.id}`,
+      label: task.title,
+      hint: [task.boardName, task.columnName].filter(Boolean).join(" · "),
+      group: "Tasks",
+      icon: "↵",
+      run: () => openTaskById(task.id),
+    })) : [];
+    return [...commands.slice(0, needle ? 6 : 14), ...tasks];
+  }
+
+  function renderPalette() {
+    const container = $("paletteResults");
+    if (!container) return;
+    const items = paletteCommands();
+    state.paletteItems = items;
+    state.paletteActive = Math.max(0, Math.min(state.paletteActive, items.length - 1));
+    container.replaceChildren();
+    if (!items.length) {
+      const empty = element("div", "empty", "");
+      empty.style.border = "0";
+      empty.append(element("h3", "", t("No matches")));
+      empty.append(element("p", "", t("Try a task title, a board name, or “calendar”.")));
+      container.append(empty);
+      return;
+    }
+    const groups = new Map();
+    for (const item of items) {
+      const list = groups.get(item.group) ?? [];
+      list.push(item);
+      groups.set(item.group, list);
+    }
+    for (const [group, groupItems] of groups) {
+      container.append(element("div", "palette-group-label", t(group)));
+      for (const item of groupItems) {
+        const index = items.indexOf(item);
+        const button = element("button", `palette-item${index === state.paletteActive ? " active" : ""}`);
+        button.type = "button";
+        button.id = `palette-${item.id}`;
+        button.setAttribute("role", "option");
+        button.setAttribute("aria-selected", String(index === state.paletteActive));
+        button.append(element("span", "palette-icon", item.icon));
+        const copy = element("span", "palette-item-copy");
+        copy.append(element("span", "palette-item-label", item.label));
+        if (item.hint) copy.append(element("span", "palette-item-hint", item.hint));
+        button.append(copy);
+        if (item.shortcut) button.append(element("span", "palette-shortcut", item.shortcut));
+        button.addEventListener("mouseenter", () => {
+          state.paletteActive = index;
+          updatePaletteActive();
+        });
+        button.addEventListener("click", () => void runPaletteItem(item));
+        container.append(button);
+      }
+    }
+    updatePaletteActive();
+  }
+
+  function updatePaletteActive() {
+    const buttons = [...$("paletteResults").querySelectorAll(".palette-item")];
+    buttons.forEach((button, index) => {
+      const active = index === state.paletteActive;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    const item = state.paletteItems[state.paletteActive];
+    if (item) {
+      $("paletteInput").setAttribute("aria-activedescendant", `palette-${item.id}`);
+      buttons[state.paletteActive]?.scrollIntoView({ block: "nearest" });
+    } else {
+      $("paletteInput").removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function schedulePaletteSearch() {
+    window.clearTimeout(state.paletteTimer);
+    const query = state.paletteQuery.trim();
+    if (query.length < 2) {
+      state.paletteResults = [];
+      renderPalette();
+      return;
+    }
+    state.paletteTimer = window.setTimeout(async () => {
+      const seq = ++state.paletteSearchSeq;
+      try {
+        const result = await request(`/api/search?workspaceId=${encodeURIComponent(workspace()?.id)}&q=${encodeURIComponent(query)}`);
+        if (seq !== state.paletteSearchSeq) return;
+        state.paletteResults = result?.results ?? [];
+        renderPalette();
+      } catch {
+        if (seq !== state.paletteSearchSeq) return;
+        state.paletteResults = [];
+        renderPalette();
+      }
+    }, 180);
+  }
+
+  async function runPaletteItem(item) {
+    closePalette(false);
+    try {
+      await item.run();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function openPalette() {
+    state.paletteReturnFocus = document.activeElement;
+    state.paletteOpen = true;
+    state.paletteQuery = "";
+    state.paletteResults = [];
+    state.paletteActive = 0;
+    state.paletteSearchSeq++;
+    $("paletteInput").value = "";
+    renderPalette();
+    $("paletteModal").classList.remove("hidden");
+    window.setTimeout(() => $("paletteInput").focus(), 20);
+  }
+
+  function closePalette(restoreFocus = true) {
+    state.paletteOpen = false;
+    state.paletteItems = [];
+    window.clearTimeout(state.paletteTimer);
+    if (!restoreFocus && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    $("paletteModal").classList.add("hidden");
+    const previous = state.paletteReturnFocus;
+    state.paletteReturnFocus = null;
+    if (restoreFocus && previous && typeof previous.focus === "function") {
+      window.setTimeout(() => previous.focus(), 20);
+    }
+  }
+
+  const SHORTCUT_ROWS = [
+    ["Capture a task", ["C"]],
+    ["Command palette", ["Ctrl", "/", "⌘", "K"]],
+    ["Search everything", ["/"]],
+    ["Go to Today", ["G", "then", "T"]],
+    ["Go to Upcoming", ["G", "then", "U"]],
+    ["Go to Calendar", ["G", "then", "C"]],
+    ["Go to Archive", ["G", "then", "A"]],
+    ["Go to Insights", ["G", "then", "I"]],
+    ["Go to Search", ["G", "then", "S"]],
+    ["Go to Board", ["G", "then", "B"]],
+    ["New board", ["Shift", "N"]],
+    ["Show shortcuts", ["?"]],
+    ["Close a dialog", ["Esc"]],
+    ["Save quick capture or comment", ["Ctrl", "/", "⌘", "Enter"]],
+    ["Move a focused card", ["Alt", "←", "→"]],
+    ["Reorder a focused card", ["Alt", "↑", "↓"]],
+  ];
+
+  function renderShortcutList() {
+    const list = $("shortcutList");
+    list.replaceChildren();
+    for (const [label, keys] of SHORTCUT_ROWS) {
+      const row = element("div", "shortcut-row");
+      row.append(element("span", "", t(label)));
+      const keyWrap = element("span", "shortcut-keys");
+      for (const key of keys) {
+        if (key === "then") keyWrap.append(element("span", "muted small", t("then")));
+        else keyWrap.append(element("span", "kbd", key));
+      }
+      row.append(keyWrap);
+      list.append(row);
+    }
+    $("singleKeyShortcutsToggle").checked = state.singleKeyShortcuts;
+  }
+
+  function openShortcuts() {
+    state.shortcutsReturnFocus = document.activeElement;
+    renderShortcutList();
+    $("shortcutsModal").classList.remove("hidden");
+  }
+
+  function closeShortcuts() {
+    $("shortcutsModal").classList.add("hidden");
+    const previous = state.shortcutsReturnFocus;
+    state.shortcutsReturnFocus = null;
+    if (previous && typeof previous.focus === "function") window.setTimeout(() => previous.focus(), 20);
+  }
+
+  function setSingleKeyShortcuts(enabled) {
+    state.singleKeyShortcuts = enabled;
+    try {
+      window.localStorage.setItem("drift-single-key-shortcuts", enabled ? "on" : "off");
+    } catch {
+      // Storage is optional.
+    }
+    const toggle = $("singleKeyShortcutsToggle");
+    if (toggle) toggle.checked = enabled;
+    renderSettings();
+  }
+
+  function focusTaskCard(taskId) {
+    window.setTimeout(() => {
+      document.querySelector(`.card[data-task-id="${CSS.escape(taskId)}"]`)?.focus();
+    }, 30);
+  }
+
+  async function keyboardMoveTask(task, direction) {
+    const columns = currentBoard()?.columns ?? [];
+    const index = columns.findIndex((column) => column.id === task.columnId);
+    const target = columns[index + (direction === "ArrowRight" ? 1 : -1)];
+    if (!target) return;
+    try {
+      const result = await requestOrQueue(
+        `/api/tasks/${encodeURIComponent(task.id)}/move`,
+        { method: "PATCH", body: { version: task.version, columnId: target.id } },
+        { kind: "task.move", label: task.title }
+      );
+      if (result?.queued) {
+        showToast(t("Saved on this device — will sync when you reconnect."));
+        return;
+      }
+      await loadBoard(state.currentBoardId);
+      await loadToday();
+      focusTaskCard(task.id);
+      announce(t("Moved {{title}} to {{column}}.", { title: task.title, column: target.name }));
+      showToast(t("Task moved."), undoToastAction(result?.undo, async () => {
+        await loadBoard(state.currentBoardId);
+        await loadToday();
+        focusTaskCard(task.id);
+      }));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function keyboardReorderTask(task, direction) {
+    try {
+      const result = await request(`/api/tasks/${encodeURIComponent(task.id)}/reorder`, {
+        method: "POST",
+        body: { direction: direction === "ArrowUp" ? "up" : "down" },
+      });
+      if (result?.moved === false) return;
+      await loadBoard(state.currentBoardId);
+      focusTaskCard(task.id);
+      announce(t("Reordered {{title}}.", { title: task.title }));
+      showToast(t("Task reordered."), undoToastAction(result?.undo, async () => {
+        await loadBoard(state.currentBoardId);
+        focusTaskCard(task.id);
+      }));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function handleGlobalKeydown(event) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (state.paletteOpen) closePalette();
+      else openPalette();
+      return;
+    }
+    if (event.key === "Escape" && state.paletteOpen) {
+      event.preventDefault();
+      closePalette();
+      return;
+    }
+    if (event.key === "Escape" && !$("shortcutsModal").classList.contains("hidden")) {
+      event.preventDefault();
+      closeShortcuts();
+      return;
+    }
+    if (isTypingTarget(event.target)) return;
+    if (state.paletteOpen || !$("shortcutsModal").classList.contains("hidden")) return;
+    if (anyModalOpen()) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (!state.singleKeyShortcuts) return;
+    if (event.key === "c" || event.key === "C") {
+      event.preventDefault();
+      openCapture();
+      return;
+    }
+    if (event.key === "/") {
+      event.preventDefault();
+      void goToView("search");
+      return;
+    }
+    if (event.key === "?") {
+      event.preventDefault();
+      openShortcuts();
+      return;
+    }
+    if (event.shiftKey && event.key.toLowerCase() === "n") {
+      event.preventDefault();
+      openNewBoardModal();
+      return;
+    }
+    if (event.key.toLowerCase() === "g") {
+      state.gPending = true;
+      window.clearTimeout(state.gTimer);
+      state.gTimer = window.setTimeout(() => { state.gPending = false; }, 1200);
+      return;
+    }
+    if (state.gPending) {
+      const map = { t: "today", u: "upcoming", c: "calendar", a: "archive", s: "search", i: "insights", b: "board" };
+      const view = map[event.key.toLowerCase()];
+      if (view) {
+        event.preventDefault();
+        state.gPending = false;
+        void goToView(view);
+      }
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
+    try {
+      state.singleKeyShortcuts = window.localStorage.getItem("drift-single-key-shortcuts") !== "off";
+    } catch {
+      state.singleKeyShortcuts = true;
+    }
     window.DriftSound?.init();
     updateOfflineBanner();
     window.DriftOffline?.subscribeQueue(updateOfflineBanner);
@@ -3650,6 +4060,44 @@
       });
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
+    $("paletteButton").addEventListener("click", openPalette);
+    $("shortcutsButton").addEventListener("click", openShortcuts);
+    $("paletteModal").addEventListener("click", (event) => {
+      if (event.target === $("paletteModal")) closePalette();
+    });
+    $("paletteInput").addEventListener("input", (event) => {
+      state.paletteQuery = event.target.value;
+      state.paletteActive = 0;
+      renderPalette();
+      schedulePaletteSearch();
+    });
+    $("paletteInput").addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.paletteActive = Math.min(state.paletteItems.length - 1, state.paletteActive + 1);
+        updatePaletteActive();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.paletteActive = Math.max(0, state.paletteActive - 1);
+        updatePaletteActive();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const item = state.paletteItems[state.paletteActive];
+        if (item) void runPaletteItem(item);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        closePalette();
+      }
+    });
+    $("closeShortcuts").addEventListener("click", closeShortcuts);
+    $("shortcutsDone").addEventListener("click", closeShortcuts);
+    $("shortcutsModal").addEventListener("click", (event) => {
+      if (event.target === $("shortcutsModal")) closeShortcuts();
+    });
+    $("singleKeyShortcutsToggle").addEventListener("change", (event) => {
+      setSingleKeyShortcuts(event.target.checked);
+    });
+    window.addEventListener("keydown", handleGlobalKeydown);
     $("captureButton").addEventListener("click", openCapture);
     $("closeCaptureModal").addEventListener("click", closeCapture);
     $("captureModal").addEventListener("click", (event) => {

@@ -59,6 +59,8 @@
         </div>
         <div class="top-actions">
           <span id="dateChip" class="date-chip"></span>
+          <button type="button" id="paletteButton" class="btn ghost sm" title="Command palette (Ctrl/Cmd+K)" aria-label="Command palette">⌘K</button>
+          <button type="button" id="shortcutsButton" class="btn ghost sm" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
           <button type="button" id="captureButton" class="btn">Capture</button>
           <button type="button" id="autoPlanButton" class="btn">Auto-plan</button>
           <button type="button" id="notificationsButton" class="btn">Notifications <span id="notificationCount">0</span></button>
@@ -562,6 +564,49 @@
     </div>
   </div>
 
+  <div id="paletteModal" class="modal-backdrop hidden palette-backdrop" role="dialog" aria-modal="true" aria-labelledby="paletteTitle">
+    <h2 id="paletteTitle" class="sr-only">Command palette</h2>
+    <div class="palette-card">
+      <div class="palette-search">
+        <input id="paletteInput" class="input" placeholder="Search or jump to…" aria-label="Search commands and tasks" autocomplete="off">
+        <span class="kbd">Esc</span>
+      </div>
+      <div id="paletteResults" class="palette-list" role="listbox" aria-label="Results" data-i18n-skip></div>
+      <div class="palette-foot">
+        <span><span class="kbd">↑</span><span class="kbd">↓</span> <span class="palette-foot-label">Navigate</span></span>
+        <span><span class="kbd">↵</span> <span class="palette-foot-label">Open</span></span>
+        <span><span class="kbd">Esc</span> <span class="palette-foot-label">Close</span></span>
+        <span class="palette-brand">Drift command</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="shortcutsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Stay in flow</p>
+          <h2 id="shortcutsTitle">Keyboard shortcuts</h2>
+        </div>
+        <button type="button" id="closeShortcuts" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <div id="shortcutList" class="shortcut-list" data-i18n-skip></div>
+      <label class="settings-row shortcut-toggle">
+        <div class="settings-copy">
+          <strong>Single-key shortcuts</strong>
+          <p class="field-hint">C, /, ? and G sequences. Turn off if they conflict with assistive technology or another tool.</p>
+        </div>
+        <div class="settings-control">
+          <input id="singleKeyShortcutsToggle" type="checkbox" aria-label="Enable single-key shortcuts">
+        </div>
+      </label>
+      <p class="field-hint" style="margin-top:12px">Shortcuts are ignored while typing in a field. Everything also works with a keyboard only.</p>
+      <div class="modal-actions">
+        <button type="button" id="shortcutsDone" class="btn primary">Done</button>
+      </div>
+    </div>
+  </div>
+
   <div id="boardSettingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="boardSettingsTitle">
     <div class="modal" style="max-width:520px">
       <div class="modal-head">
@@ -646,6 +691,7 @@
   </div>
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
   <script src="/i18n.js" defer></script>
   <script src="/sound.js" defer></script>
   <script src="/offline.js" defer></script>

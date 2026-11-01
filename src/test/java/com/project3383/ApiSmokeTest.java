@@ -1075,4 +1075,73 @@ class ApiSmokeTest {
                 ))))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void taskReorderSupportsKeyboardOrderingAndUndo() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+
+        List<String> ids = new ArrayList<>();
+        for (String title : List.of("Order A", "Order B", "Order C")) {
+            MvcResult created = mockMvc.perform(post("/api/tasks")
+                    .session(session)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of(
+                        "workspaceId", workspaceId,
+                        "boardId", boardId,
+                        "columnId", todo,
+                        "title", title
+                    ))))
+                .andExpect(status().isCreated())
+                .andReturn();
+            ids.add(objectMapper.readTree(created.getResponse().getContentAsString())
+                .path("task").path("id").asText());
+        }
+
+        MvcResult moved = mockMvc.perform(post("/api/tasks/" + ids.get(2) + "/reorder")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("direction", "up"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.moved").value(true))
+            .andExpect(jsonPath("$.undo.id").isString())
+            .andReturn();
+        String undoId = objectMapper.readTree(moved.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Order A"))
+            .andExpect(jsonPath("$.board.columns[0].tasks[1].title").value("Order C"))
+            .andExpect(jsonPath("$.board.columns[0].tasks[2].title").value("Order B"));
+        mockMvc.perform(post("/api/undo/" + undoId).session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Order A"))
+            .andExpect(jsonPath("$.board.columns[0].tasks[1].title").value("Order B"))
+            .andExpect(jsonPath("$.board.columns[0].tasks[2].title").value("Order C"));
+
+        mockMvc.perform(post("/api/tasks/" + ids.get(0) + "/reorder")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("direction", "down"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.moved").value(true));
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Order B"))
+            .andExpect(jsonPath("$.board.columns[0].tasks[1].title").value("Order A"));
+
+        mockMvc.perform(post("/api/tasks/" + ids.get(1) + "/reorder")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("direction", "up"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.moved").value(false));
+    }
 }
