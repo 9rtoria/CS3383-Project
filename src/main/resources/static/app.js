@@ -33,6 +33,8 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  const t = (key, vars) => window.DriftI18n?.t(key, vars) ?? key;
+  const translateReason = (reason) => window.DriftI18n?.translateReason(reason, t) ?? reason;
 
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) };
@@ -142,8 +144,8 @@
     const user = state.boot?.user;
     const guest = !user || user.isGuest === 1 || user.isGuest === true;
     $("accountName").textContent = guest
-      ? (user?.name && user.name !== "Guest" ? `${user.name} · Guest` : "Guest workspace")
-      : (user.email || user.name || "Account");
+      ? (user?.name && user.name !== "Guest" ? `${user.name} · ${t("Guest")}` : t("Guest workspace"))
+      : (user.email || user.name || t("Account"));
     $("authButton").classList.toggle("hidden", !guest);
     $("signOutButton").classList.toggle("hidden", guest);
   }
@@ -342,7 +344,7 @@
     const end = new Date(year, month + 1, 0);
     try {
       const result = await request(`/api/calendar?workspaceId=${encodeURIComponent(workspace().id)}&start=${dateKey(start)}&end=${dateKey(end)}`);
-      $("calendarTitle").textContent = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(start);
+      $("calendarTitle").textContent = new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "long", year: "numeric" }).format(start);
       renderCalendar(result.days ?? []);
     } catch (error) {
       showToast(error.message);
@@ -553,35 +555,35 @@
       button.classList.toggle("active", button.dataset.view === view);
     });
     if (view === "board") {
-      $("viewEyebrow").textContent = "Board";
-      $("viewTitle").textContent = currentBoard()?.name ?? "Board";
+      $("viewEyebrow").textContent = t("Board");
+      $("viewTitle").textContent = currentBoard()?.name ?? t("Board");
     } else if (view === "calendar") {
-      $("viewEyebrow").textContent = "Calendar";
-      $("viewTitle").textContent = "Calendar";
+      $("viewEyebrow").textContent = t("Calendar");
+      $("viewTitle").textContent = t("Calendar");
       void loadCalendar();
     } else if (view === "upcoming") {
-      $("viewEyebrow").textContent = "Plan";
-      $("viewTitle").textContent = "Upcoming";
+      $("viewEyebrow").textContent = t("Plan");
+      $("viewTitle").textContent = t("Upcoming");
       void loadUpcoming();
     } else if (view === "archive") {
-      $("viewEyebrow").textContent = "Workspace";
-      $("viewTitle").textContent = "Archive";
+      $("viewEyebrow").textContent = t("Workspace");
+      $("viewTitle").textContent = t("Archive");
       void loadArchive();
     } else if (view === "search") {
-      $("viewEyebrow").textContent = "Search";
-      $("viewTitle").textContent = "Search";
+      $("viewEyebrow").textContent = t("Search");
+      $("viewTitle").textContent = t("Search");
       window.setTimeout(() => $("searchInput").focus(), 20);
     } else if (view === "insights") {
-      $("viewEyebrow").textContent = "Workspace";
-      $("viewTitle").textContent = "Insights";
+      $("viewEyebrow").textContent = t("Workspace");
+      $("viewTitle").textContent = t("Insights");
       void loadInsights();
     } else if (view === "settings") {
-      $("viewEyebrow").textContent = "Account & workspace";
-      $("viewTitle").textContent = "Settings";
+      $("viewEyebrow").textContent = t("Account & workspace");
+      $("viewTitle").textContent = t("Settings");
       if (!state.settings) void loadSettings();
     } else {
-      $("viewEyebrow").textContent = "Plan";
-      $("viewTitle").textContent = "Today";
+      $("viewEyebrow").textContent = t("Plan");
+      $("viewTitle").textContent = t("Today");
       void loadToday();
     }
   }
@@ -672,30 +674,30 @@
     list.replaceChildren();
     const suggestions = state.today?.suggestions ?? [];
     if (!suggestions.length) {
-      list.append(element("div", "empty", "Nothing open. Add a task to begin."));
+      list.append(element("div", "empty", t("Nothing open. Add a task to begin.")));
     }
     for (const task of suggestions.slice(0, 50)) {
       const row = element("div", "today-row");
       const grow = element("div", "grow");
       grow.append(element("h3", "", task.title));
       const bits = [];
-      if (task.reason) bits.push(task.reason);
-      if (task.blocked && task.openDependencies) bits.push(`${task.openDependencies} open dependency`);
+      if (task.reason) bits.push(translateReason(task.reason));
+      if (task.blocked && task.openDependencies) bits.push(`${task.openDependencies} ${t(task.openDependencies === 1 ? "open dependency" : "open dependencies")}`);
       if (task.estimateMinutes) bits.push(`${task.estimateMinutes}m`);
-      if (task.actualMinutes) bits.push(`${task.actualMinutes}m tracked`);
-      if (task.startDate) bits.push(`starts ${task.startDate.slice(0, 10)}`);
-      if (task.dueDate) bits.push(`due ${task.dueDate.slice(0, 10)}`);
+      if (task.actualMinutes) bits.push(`${task.actualMinutes}${t("m tracked")}`);
+      if (task.startDate) bits.push(`${t("starts")} ${task.startDate.slice(0, 10)}`);
+      if (task.dueDate) bits.push(`${t("due")} ${task.dueDate.slice(0, 10)}`);
       grow.append(element("p", "", bits.join(" · ")));
 
       const actions = element("div", "top-actions");
-      const choose = element("button", "btn sm", task.accepted ? "Chosen" : "Choose");
+      const choose = element("button", "btn sm", t(task.accepted ? "Chosen" : "Choose"));
       choose.type = "button";
       choose.disabled = Boolean(task.accepted || task.blocked);
       choose.addEventListener("click", () => todayAction("accept", task.id));
-      const dismiss = element("button", "btn ghost sm", "Dismiss");
+      const dismiss = element("button", "btn ghost sm", t("Dismiss"));
       dismiss.type = "button";
       dismiss.addEventListener("click", () => todayAction("dismiss", task.id));
-      const open = element("button", "btn sm", "Open");
+      const open = element("button", "btn sm", t("Open"));
       open.type = "button";
       open.addEventListener("click", () => openTaskModal(task));
       actions.append(choose, dismiss, open);
@@ -710,9 +712,10 @@
     $("capacityNumber").textContent = `${Math.floor(selected / 60)}h ${selected % 60}m`;
     $("capacityBar").firstElementChild.style.width = `${percent}%`;
     $("capacityHint").textContent = capacity.overbooked
-      ? "This day is over capacity."
-      : `${Math.max(0, total - selected)} minutes still open.`;
+      ? t("This day is over capacity.")
+      : t("{{count}} minutes still open.", { count: Math.max(0, total - selected) });
     $("applyTodayPlanButton").disabled = !suggestions.some((task) => task.selected);
+    $("applyTodayPlanButton").textContent = t("Apply plan");
     renderDayFlow(suggestions);
   }
 
@@ -811,7 +814,7 @@
     if (!blocks.length) {
       const empty = element("div", "day-flow-empty");
       empty.append(element("span", "day-flow-empty-mark", "◷"));
-      empty.append(element("span", "", "Nothing on the rail yet. Choose one task below and watch the day take shape."));
+      empty.append(element("span", "", t("Nothing on the rail yet. Choose one task below and watch the day take shape.")));
       rail.append(empty);
     }
 
@@ -860,7 +863,7 @@
     arc.style.strokeDashoffset = String(circumference * (1 - percent / 100));
     $("dayFlowRing").classList.toggle("over", Boolean(capacity.overbooked));
     $("dayFlowRingValue").textContent = `${Math.round(Number(capacity.percent) || 0)}%`;
-    $("dayFlowRingLabel").textContent = capacity.overbooked ? "over" : "planned";
+    $("dayFlowRingLabel").textContent = t(capacity.overbooked ? "over" : "planned");
 
     const next = blocks.find((block) => block.start + block.duration >= nowMinutes) ?? null;
     const nextNode = $("dayFlowNext");
@@ -869,12 +872,12 @@
       nextNode.append(element("span", "day-flow-next-dot"));
       const copy = element("span");
       copy.append(element("strong", "", next.task.title));
-      copy.append(element("span", "", `${dayFlowClock(next.start)} · ${next.duration}m · ${next.task.accepted ? "chosen" : "suggestion"}`));
+      copy.append(element("span", "", `${dayFlowClock(next.start)} · ${next.duration}m · ${t(next.task.accepted ? "chosen" : "suggestion")}`));
       nextNode.append(copy);
     } else {
       const copy = element("span");
-      copy.append(element("strong", "", blocks.length ? "The rail is behind you." : "The rail is clear."));
-      copy.append(element("span", "", blocks.length ? "Pick one small thing for the rest of the day, or stop here." : "Protect the empty space, or add one small thing."));
+      copy.append(element("strong", "", t(blocks.length ? "The rail is behind you." : "The rail is clear.")));
+      copy.append(element("span", "", t(blocks.length ? "Pick one small thing for the rest of the day, or stop here." : "Protect the empty space, or add one small thing.")));
       nextNode.append(copy);
     }
     const focusNext = $("dayFlowFocusNext");
@@ -904,7 +907,7 @@
         body: { action: "preview", workspaceId: workspace().id },
       });
       if (result.enabled === false || !(result.options ?? []).length) {
-        showToast("Auto-plan is turned off in Settings.");
+        showToast(t("Auto-plan is turned off in Settings."));
         return;
       }
       state.autoPlan = result;
@@ -924,7 +927,7 @@
     const options = state.autoPlan?.options ?? [];
     const selected = options.find((option) => option.id === state.autoPlanSelection) ?? options[0] ?? null;
     if (!options.length) {
-      container.append(element("div", "empty", "Auto-plan is turned off in Settings."));
+      container.append(element("div", "empty", t("Auto-plan is turned off in Settings.")));
     }
     for (const option of options) {
       const panel = element("div", `detail-section auto-plan-option${selected?.id === option.id ? " active" : ""}`);
@@ -932,8 +935,8 @@
       panel.setAttribute("role", "button");
       panel.setAttribute("aria-pressed", String(selected?.id === option.id));
       const head = element("div", "section-head");
-      head.append(element("h3", "", option.label));
-      head.append(element("span", "muted small", `${option.blocks?.length ?? 0} blocks · ${option.scheduledMinutes ?? 0} min`));
+      head.append(element("h3", "", t(option.label)));
+      head.append(element("span", "muted small", `${option.blocks?.length ?? 0} ${t("blocks")} · ${option.scheduledMinutes ?? 0} ${t("min")}`));
       panel.append(head);
       for (const block of (option.blocks ?? []).slice(0, 8)) {
         const row = element("div", "detail-item");
@@ -941,16 +944,16 @@
         panel.append(row);
       }
       if ((option.unscheduled ?? []).length) {
-        panel.append(element("p", "small muted", `${option.unscheduled.length} task(s) could not be placed.`));
+        panel.append(element("p", "small muted", `${option.unscheduled.length} ${t("task(s) could not be placed.")}`));
       }
       if (option.needsEstimate) {
-        panel.append(element("p", "small muted", `${option.needsEstimate} task(s) use the default estimate.`));
+        panel.append(element("p", "small muted", `${option.needsEstimate} ${t("task(s) use the default estimate.")}`));
       }
       if ((option.warnings ?? []).length) {
         panel.append(element("p", "small field-error", option.warnings[0]));
       }
       if (option.overCap) {
-        panel.append(element("p", "small field-error", "This plan exceeds the weekly capacity."));
+        panel.append(element("p", "small field-error", t("This plan exceeds the weekly capacity.")));
       }
       const choose = () => {
         state.autoPlanSelection = option.id;
@@ -966,7 +969,7 @@
       container.append(panel);
     }
     const button = $("applyAutoPlanButton");
-    button.textContent = "Apply this plan";
+    button.textContent = t("Apply this plan");
     button.disabled = !selected || !(selected.blocks ?? []).length;
   }
 
@@ -990,7 +993,7 @@
       const applied = result.appliedBlocks ?? result.applied ?? 0;
       showToast(
         `Auto-plan applied — ${applied} block${applied === 1 ? "" : "s"} scheduled.`,
-        result.undoId ? { label: "Undo", onClick: () => undoAutoPlan(result.undoId) } : null
+        result.undoId ? { label: t("Undo"), onClick: () => undoAutoPlan(result.undoId) } : null
       );
     } catch (error) {
       showToast(error.message);
@@ -1005,7 +1008,7 @@
       state.lastAutoApplyAt = Date.now();
       await loadToday();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
-      showToast("Previous plan restored.");
+      showToast(t("Previous plan restored."));
     } catch (error) {
       showToast(error.message);
     }
@@ -1062,7 +1065,7 @@
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
       showToast(
         `Auto-plan refreshed — ${applied} block${applied === 1 ? "" : "s"} scheduled.`,
-        result.undoId ? { label: "Undo", onClick: () => undoAutoPlan(result.undoId) } : null
+        result.undoId ? { label: t("Undo"), onClick: () => undoAutoPlan(result.undoId) } : null
       );
     } catch {
       // Background planning is best-effort; manual Auto-plan still reports errors.
@@ -1081,7 +1084,7 @@
       $("autoPlanModal").classList.add("hidden");
       state.lastAutoApplyAt = Date.now();
       await loadToday();
-      showToast("Auto-plan cleared.");
+      showToast(t("Auto-plan cleared."));
     } catch (error) {
       showToast(error.message);
     }
@@ -1109,7 +1112,7 @@
       });
       state.lastAutoApplyAt = Date.now();
       await loadToday();
-      showToast("Today rebalanced.");
+      showToast(t("Today rebalanced."));
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -1134,7 +1137,7 @@
       });
       state.lastAutoApplyAt = Date.now();
       await loadToday();
-      showToast("Today plan applied.");
+      showToast(t("Today plan applied."));
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -1206,17 +1209,17 @@
     $("focusActive").classList.toggle("hidden", done);
     $("focusDone").classList.toggle("hidden", !done);
     $("focusModeTitle").textContent = focus.task.title;
-    $("focusTaskMeta").textContent = `${focus.task.boardName || "Task"} · ${focus.task.columnName || "Open"}`;
-    $("focusPhaseLabel").textContent = focus.phase === "ready" ? "Ready when you are" : focus.phase === "running" ? "In focus" : focus.phase === "paused" ? "Paused" : "Complete";
+    $("focusTaskMeta").textContent = `${focus.task.boardName || t("Task")} · ${focus.task.columnName || t("Open")}`;
+    $("focusPhaseLabel").textContent = t(focus.phase === "ready" ? "Ready when you are" : focus.phase === "running" ? "In focus" : focus.phase === "paused" ? "Paused" : "Complete");
     $("focusClock").textContent = focusClock(focus.elapsed);
     $("focusEstimateLabel").textContent = overEstimate
-      ? "past the estimate — still yours"
-      : `of ${focusMinutesLabel(targetMinutes)} estimated`;
-    $("focusPrompt").textContent = focus.phase === "running"
+      ? t("past the estimate — still yours")
+      : `${t("of")} ${focusMinutesLabel(targetMinutes)} ${t("estimated")}`;
+    $("focusPrompt").textContent = t(focus.phase === "running"
       ? "The rest can wait. You only need the next small move."
       : focus.phase === "paused"
         ? "Paused. Take the breath, then decide."
-        : "One task. One timer. No feed, no backlog, no noise.";
+        : "One task. One timer. No feed, no backlog, no noise.");
     $("focusOrb").classList.toggle("breathing", focus.phase === "running");
 
     const circumference = 2 * Math.PI * 112;
@@ -1227,21 +1230,21 @@
 
     const badges = $("focusBadges");
     badges.replaceChildren();
-    if (focus.task.estimateMinutes) badges.append(makeBadge(`${focus.task.estimateMinutes}m estimate`, "slate"));
-    if (focus.task.actualMinutes) badges.append(makeBadge(`${focus.task.actualMinutes}m tracked before`, "accent"));
-    if (focus.task.priority && focus.task.priority !== "none") badges.append(makeBadge(focus.task.priority, "rose"));
+    if (focus.task.estimateMinutes) badges.append(makeBadge(`${focus.task.estimateMinutes}m ${t("estimate")}`, "slate"));
+    if (focus.task.actualMinutes) badges.append(makeBadge(`${focus.task.actualMinutes}${t("m tracked before")}`, "accent"));
+    if (focus.task.priority && focus.task.priority !== "none") badges.append(makeBadge(t(focus.task.priority), "rose"));
     for (const label of (focus.task.labels ?? []).slice(0, 3)) {
       badges.append(makeBadge(label.name, label.color || "slate"));
     }
 
     if (done) {
-      $("focusDoneCopy").textContent = `${focusClock(focus.elapsed)} of attention for ${focus.task.title}. The estimate was ${targetMinutes} minutes; the point was to begin.`;
+      $("focusDoneCopy").textContent = `${focusClock(focus.elapsed)} ${t("of attention for")} ${focus.task.title}. ${t("The estimate was {{minutes}} minutes; the point was to begin.", { minutes: targetMinutes })}`;
       const stats = $("focusDoneStats");
       stats.replaceChildren();
       for (const [value, label] of [
-        [`${actualMinutes}m`, "tracked"],
-        [focusMinutesLabel(targetMinutes), "estimated"],
-        [`${Math.abs(deltaMinutes)}m`, deltaMinutes > 0 ? "over" : deltaMinutes < 0 ? "under" : "on estimate"],
+        [`${actualMinutes}m`, t("tracked")],
+        [focusMinutesLabel(targetMinutes), t("estimated")],
+        [`${Math.abs(deltaMinutes)}m`, t(deltaMinutes > 0 ? "over" : deltaMinutes < 0 ? "under" : "on estimate")],
       ]) {
         const item = element("span");
         item.append(element("strong", "", value), document.createTextNode(` ${label}`));
@@ -1251,10 +1254,10 @@
     }
 
     const running = focus.phase === "running";
-    $("focusToggle").textContent = running ? "Pause" : focus.phase === "paused" ? "Resume focus" : "Begin focus";
+    $("focusToggle").textContent = t(running ? "Pause" : focus.phase === "paused" ? "Resume focus" : "Begin focus");
     $("focusToggle").className = running ? "btn lg" : "btn primary lg";
     $("focusComplete").disabled = focus.busy || focus.elapsed < 1;
-    $("focusComplete").textContent = focus.busy ? "Saving…" : "Complete task";
+    $("focusComplete").textContent = t(focus.busy ? "Saving…" : "Complete task");
     $("focusLogLeave").classList.toggle("hidden", focus.elapsed <= 0);
     $("focusLogLeave").disabled = focus.busy;
     $("focusError").classList.toggle("hidden", !focus.error);
@@ -1323,7 +1326,7 @@
       renderFocus();
       await loadToday();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
-      showToast(`Focus complete — ${minutes}m tracked.`);
+      showToast(t("Focus complete — {{minutes}}m tracked.", { minutes }));
     } catch (error) {
       focus.busy = false;
       focus.error = error.message;
@@ -1486,9 +1489,9 @@
     const day = parsed.dueDate.slice(0, 10);
     const today = localDateKey();
     const name = day === today
-      ? "Today"
+      ? t("Today")
       : day === addDaysToKey(today, 1)
-        ? "Tomorrow"
+        ? t("Tomorrow")
         : new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(new Date(`${day}T12:00:00`));
     if (parsed.dueAllDay) return name;
     const date = new Date(parsed.dueDate);
@@ -1517,7 +1520,7 @@
     }
     const button = $("captureVoiceButton");
     if (button) {
-      button.textContent = "Speak";
+      button.textContent = t("Speak");
       button.classList.remove("listening");
       button.setAttribute("aria-pressed", "false");
     }
@@ -1525,8 +1528,8 @@
     if ($("captureVoiceError")) $("captureVoiceError").classList.add("hidden");
     if ($("captureVoiceHint")) {
       $("captureVoiceHint").textContent = captureVoiceSupported()
-        ? "Uses your browser’s speech service. Edit the words before adding; typing always works too."
-        : "Voice isn’t available in this browser — type instead.";
+        ? t("Uses your browser’s speech service. Edit the words before adding; typing always works too.")
+        : t("Voice isn’t available in this browser — type instead.");
     }
   }
 
@@ -1552,8 +1555,8 @@
     const supported = captureVoiceSupported();
     $("captureVoiceButton").disabled = !supported;
     $("captureVoiceHint").textContent = supported
-      ? "Uses your browser’s speech service. Edit the words before adding; typing always works too."
-      : "Voice isn’t available in this browser — type instead.";
+      ? t("Uses your browser’s speech service. Edit the words before adding; typing always works too.")
+      : t("Voice isn’t available in this browser — type instead.");
     renderCapturePreview();
     $("captureModal").classList.remove("hidden");
     window.setTimeout(() => $("captureInput").focus(), 30);
@@ -1570,12 +1573,12 @@
     const container = $("capturePreview");
     container.replaceChildren();
     if (!text.trim()) {
-      container.append(element("span", "capture-meta", "Plain language works — Drift parses dates, labels and priorities locally."));
+      container.append(element("span", "capture-meta", t("Plain language works — Drift parses dates, labels and priorities locally.")));
       return;
     }
-    if (parsed.title) container.append(makeBadge("New task", "accent"));
+    if (parsed.title) container.append(makeBadge(t("New task"), "accent"));
     if (parsed.dueDate) container.append(makeBadge(captureDueLabel(parsed), "blue"));
-    if (parsed.priority !== "none") container.append(makeBadge(parsed.priority, "rose"));
+    if (parsed.priority !== "none") container.append(makeBadge(t(parsed.priority), "rose"));
     for (const label of parsed.labels) container.append(makeBadge(`#${label}`, "moss"));
     if (parsed.estimateMinutes) container.append(makeBadge(`${parsed.estimateMinutes}m`, "slate"));
   }
@@ -1587,7 +1590,7 @@
     }
     const Constructor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Constructor) {
-      $("captureVoiceError").textContent = "Voice input isn’t available in this browser. The text field is always here.";
+      $("captureVoiceError").textContent = t("Voice input isn’t available in this browser. The text field is always here.");
       $("captureVoiceError").classList.remove("hidden");
       return;
     }
@@ -1610,15 +1613,15 @@
         renderCapturePreview();
       }
       state.captureInterim = interim.trim();
-      $("captureVoiceHint").textContent = state.captureInterim ? `“${state.captureInterim}”` : "Listening… speak now. You can edit the words before adding.";
+      $("captureVoiceHint").textContent = state.captureInterim ? `“${state.captureInterim}”` : t("Listening… speak now. You can edit the words before adding.");
       $("captureHeard").classList.toggle("hidden", !finalText.trim() && !state.captureInterim);
     };
     recognition.onerror = (event) => {
       const message = event.error === "not-allowed" || event.error === "service-not-allowed"
-        ? "Microphone permission was denied. You can still type the task."
+        ? t("Microphone permission was denied. You can still type the task.")
         : event.error === "no-speech"
-          ? "No speech detected. Try again, or type instead."
-          : "Voice input stopped. You can type the task instead.";
+          ? t("No speech detected. Try again, or type instead.")
+          : t("Voice input stopped. You can type the task instead.");
       $("captureVoiceError").textContent = message;
       $("captureVoiceError").classList.remove("hidden");
       stopCaptureVoice();
@@ -1626,24 +1629,24 @@
     recognition.onend = () => {
       state.captureRecognition = null;
       state.captureListening = false;
-      $("captureVoiceButton").textContent = "Speak";
+      $("captureVoiceButton").textContent = t("Speak");
       $("captureVoiceButton").classList.remove("listening");
       $("captureVoiceButton").setAttribute("aria-pressed", "false");
       $("captureHeard").classList.add("hidden");
-      $("captureVoiceHint").textContent = "Uses your browser’s speech service. Edit the words before adding; typing always works too.";
+      $("captureVoiceHint").textContent = t("Uses your browser’s speech service. Edit the words before adding; typing always works too.");
       window.setTimeout(() => $("captureInput").focus(), 30);
     };
     state.captureRecognition = recognition;
     state.captureListening = true;
     $("captureVoiceError").classList.add("hidden");
-    $("captureVoiceButton").textContent = "Stop listening";
+    $("captureVoiceButton").textContent = t("Stop listening");
     $("captureVoiceButton").classList.add("listening");
     $("captureVoiceButton").setAttribute("aria-pressed", "true");
-    $("captureVoiceHint").textContent = "Listening… speak now. You can edit the words before adding.";
+    $("captureVoiceHint").textContent = t("Listening… speak now. You can edit the words before adding.");
     try {
       recognition.start();
     } catch {
-      $("captureVoiceError").textContent = "Voice input could not start. You can type the task instead.";
+      $("captureVoiceError").textContent = t("Voice input could not start. You can type the task instead.");
       $("captureVoiceError").classList.remove("hidden");
       stopCaptureVoice();
     }
@@ -1660,7 +1663,7 @@
     const button = $("captureAddButton");
     state.captureSaving = true;
     button.disabled = true;
-    button.firstChild.textContent = "Adding…";
+    button.firstChild.textContent = t("Adding…");
     try {
       await request("/api/tasks", {
         method: "POST",
@@ -1682,7 +1685,7 @@
       window.DriftSound?.play("capture");
       await loadBoard(state.currentBoardId);
       await loadToday();
-      showToast(`Added to ${board.name}`);
+      showToast(t("Added to {{board}}", { board: board.name }));
       if (settingOn(state.settings?.captureCloseAfterAdd)) {
         closeCapture();
       } else {
@@ -1696,7 +1699,7 @@
     } finally {
       state.captureSaving = false;
       button.disabled = false;
-      button.firstChild.textContent = "Add task ";
+      button.firstChild.textContent = `${t("Add task")} `;
     }
   }
 
@@ -2153,21 +2156,30 @@
     root.dataset.readingSize = settings.readingSize || "default";
     root.dataset.density = settings.density || "comfortable";
     root.dataset.motion = settings.motion || "system";
-    root.lang = settings.locale || "en";
+    window.DriftI18n?.setLocale(settings.locale || "en");
+    window.DriftI18n?.translateSubtree(document.body);
+    const dateChip = $("dateChip");
+    if (dateChip) {
+      dateChip.textContent = new Intl.DateTimeFormat(settings.locale || undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }).format(new Date());
+    }
     $("dayFlowPanel")?.classList.toggle("hidden", settings.features?.dayFlow === false);
     $("autoPlanButton")?.classList.toggle(
       "hidden",
       settings.features?.smartPlan === false || !settingOn(settings.autoPlanEnabled)
     );
     const toggle = $("settingsThemeToggle");
-    if (toggle) toggle.textContent = dark ? "Light" : "Dark";
+    if (toggle) toggle.textContent = t(dark ? "Light" : "Dark");
   }
 
   function setSettingsSaveState(value) {
     const node = $("settingsSaveState");
     if (!node) return;
     node.className = `settings-save-state ${value}`;
-    node.textContent = value === "saving" ? "Saving…" : value === "saved" ? "Saved" : value === "error" ? "Could not save" : "Autosave";
+    node.textContent = value === "saving" ? t("Saving…") : value === "saved" ? t("Saved") : value === "error" ? t("Could not save") : t("Autosave");
   }
 
   function updateSettings(patch) {
@@ -2374,7 +2386,8 @@
     if (!state.settings) return;
     const currentWorkspace = workspace();
     $("settingsWorkspaceName").textContent = currentWorkspace?.name ?? "Workspace";
-    $("settingsWorkspaceRole").textContent = currentWorkspace?.role ?? "Owner";
+    const role = currentWorkspace?.role ?? "OWNER";
+    $("settingsWorkspaceRole").textContent = t(role === "OWNER" ? "Owner" : role === "ADMIN" ? "Admin" : role === "MEMBER" ? "Member" : "Guest");
     const nav = $("settingsNav");
     const container = $("settingsSections");
     nav.replaceChildren();
@@ -2400,6 +2413,8 @@
       nav.append(button);
       container.append(definition.render());
     });
+    window.DriftI18n?.translateSubtree(nav);
+    window.DriftI18n?.translateSubtree(container);
   }
 
   function renderAccountSettings() {
@@ -2413,24 +2428,24 @@
 
     const emailControl = guest
       ? (() => {
-          const button = element("button", "btn sm primary", "Save workspace");
+          const button = element("button", "btn sm primary", t("Save workspace"));
           button.type = "button";
           button.addEventListener("click", openAuthModal);
           return button;
         })()
       : makeBadge(user.email || "No email", "slate");
-    settingsRow(card, "Email", user.email || "No email yet. Save this guest workspace to add one.", emailControl);
+    settingsRow(card, "Email", user.email || t("No email yet. Save this guest workspace to add one."), emailControl);
 
     const timezoneInput = makeTextInput(user.timezone || "Asia/Hong_Kong", "Time zone", () => {}, "Asia/Hong_Kong");
     timezoneInput.style.width = "240px";
-    settingsRow(card, "Time zone", "Used for Today, reminders, digests, and recurrence.", timezoneInput);
+    settingsRow(card, "Time zone", "Used for Today, reminders, digests, and recurrence. Commit by leaving the field.", timezoneInput);
 
     const save = element("button", "btn primary sm", "Save");
     save.type = "button";
     save.addEventListener("click", () => void saveAccount(nameInput, timezoneInput, save));
     const status = element("div", "inline");
     status.append(makeBadge(guest ? "Guest" : "Account", guest ? "amber" : "accent"), save);
-    settingsRow(card, "Account status", `${guest ? "Guest, not yet claimable across devices." : "Verified account."} Two-factor is off.`, status);
+    settingsRow(card, "Account status", `${guest ? t("Guest, not yet claimable across devices.") : t("Verified account.")} ${t("Two-factor is off.")}`, status);
     return section;
   }
 
@@ -2536,9 +2551,9 @@
     }
     settingsRow(card, "Display type", "Editorial is the current serif voice. Modern uses the interface face.", fonts);
 
-    settingsRow(card, "Reading text", "A little more room for long notes and settings copy.", makeSegmented(settings.readingSize, [{ value: "default", label: "Default" }, { value: "large", label: "Large" }], "Reading text", (value) => updateSettings({ readingSize: value })));
+    settingsRow(card, "Reading text", "A little more room for long notes and settings copy. Page zoom still works.", makeSegmented(settings.readingSize, [{ value: "default", label: "Default" }, { value: "large", label: "Large" }], "Reading text", (value) => updateSettings({ readingSize: value })));
     settingsRow(card, "Density", "Compact reduces row height in lists and settings without hiding information.", makeSegmented(settings.density, [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }], "Density", (value) => updateSettings({ density: value })));
-    settingsRow(card, "Motion", "System respects your OS. Reduced keeps state changes instant.", makeSegmented(settings.motion, [{ value: "system", label: "System" }, { value: "reduced", label: "Reduced motion" }, { value: "full", label: "Full motion" }], "Motion", (value) => updateSettings({ motion: value })));
+    settingsRow(card, "Motion", "System respects your OS. Reduced keeps state changes instant. Full is for demos.", makeSegmented(settings.motion, [{ value: "system", label: "System" }, { value: "reduced", label: "Reduced motion" }, { value: "full", label: "Full motion" }], "Motion", (value) => updateSettings({ motion: value })));
     section.append(settingsPreview());
     return section;
   }
@@ -2581,7 +2596,7 @@
     const timezoneInput = makeTextInput(state.boot?.user?.timezone || "Asia/Hong_Kong", "Time zone", () => {}, "Asia/Hong_Kong");
     timezoneInput.style.width = "240px";
     timezoneInput.addEventListener("change", () => void saveTimezone(timezoneInput));
-    settingsRow(card, "Time zone", "Used for Today, reminders, digests, and recurrence.", timezoneInput);
+    settingsRow(card, "Time zone", "Used for Today, reminders, digests, and recurrence. Commit by leaving the field.", timezoneInput);
     settingsRow(card, "Time format", `Example: ${formatHour(17)}`, makeSelect([{ value: "auto", label: "Follow language" }, { value: "12", label: "12-hour" }, { value: "24", label: "24-hour" }], settings.timeFormat, "Time format", (value) => updateSettings({ timeFormat: value })));
     settingsRow(card, "Week starts on", "Calendar and weekly rhythms follow this setting.", makeSelect([{ value: 1, label: "Monday" }, { value: 0, label: "Sunday" }, { value: 6, label: "Saturday" }], settings.weekStartsOn, "Week starts on", (value) => updateSettings({ weekStartsOn: Number(value) })));
     settingsRow(card, "Date preview", "A local date, formatted with your language.", datePreview);
@@ -2838,6 +2853,21 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     window.DriftSound?.init();
+    window.DriftI18n?.subscribe(() => {
+      renderAccount();
+      renderSidebar();
+      if (state.settings) renderSettings();
+      if (state.today) renderToday();
+      if (state.autoPlan) renderAutoPlan();
+      if (state.focus) renderFocus();
+      if (!$("captureModal").classList.contains("hidden")) renderCapturePreview();
+      if (state.view === "calendar") void loadCalendar();
+      if (state.view === "upcoming") void loadUpcoming();
+      if (state.view === "archive") void loadArchive();
+      if (state.view === "search") void runSearch();
+      if (state.view === "insights") void loadInsights();
+      if (state.view) setView(state.view);
+    });
     $("settingsBack").addEventListener("click", () => setView("today"));
     $("settingsThemeToggle").addEventListener("click", () => updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" }));
     window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => {

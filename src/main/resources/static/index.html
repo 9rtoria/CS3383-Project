@@ -87,13 +87,13 @@
             </div>
           </div>
           <div id="dayFlowRailWrap" class="day-flow-rail-wrap">
-            <div id="dayFlowRail" class="day-flow-rail" role="group" aria-label="A 24 hour timeline of today's selected tasks">
+            <div id="dayFlowRail" class="day-flow-rail" data-i18n-skip role="group" aria-label="A 24 hour timeline of today's selected tasks">
               <div id="dayFlowGrid" class="day-flow-grid" aria-hidden></div>
             </div>
             <div id="dayFlowHours" class="day-flow-hours" aria-hidden></div>
           </div>
           <div class="day-flow-foot">
-            <div id="dayFlowNext" class="day-flow-next"></div>
+            <div id="dayFlowNext" class="day-flow-next" data-i18n-skip></div>
             <div class="day-flow-actions">
               <button type="button" id="dayFlowFocusNext" class="btn ghost sm">Focus next</button>
               <button type="button" id="dayFlowRebalance" class="btn soft sm">Rebalance</button>
@@ -110,7 +110,7 @@
               <button type="button" id="applyTodayPlanButton" class="btn sm">Apply plan</button>
             </div>
             <p class="hint">A calm starting point. Choose one thing and make it visible.</p>
-            <div id="todayList" class="today-list"></div>
+            <div id="todayList" class="today-list" data-i18n-skip></div>
           </div>
           <aside class="panel" aria-label="Capacity">
             <h2>Capacity</h2>
@@ -123,7 +123,7 @@
       </section>
 
       <section id="boardView" class="hidden" aria-label="Board">
-        <div id="board" class="board"></div>
+        <div id="board" class="board" data-i18n-skip></div>
       </section>
 
       <section id="calendarView" class="hidden" aria-label="Calendar">
@@ -139,7 +139,7 @@
               <button type="button" id="calendarNext" class="btn sm">Next</button>
             </div>
           </div>
-          <div id="calendarGrid" class="calendar-grid"></div>
+          <div id="calendarGrid" class="calendar-grid" data-i18n-skip></div>
         </div>
       </section>
 
@@ -147,7 +147,7 @@
         <div class="panel">
           <h2>Upcoming</h2>
           <p class="hint">Tasks with due dates in the next 14 days.</p>
-          <div id="upcomingList" class="today-list"></div>
+          <div id="upcomingList" class="today-list" data-i18n-skip></div>
         </div>
       </section>
 
@@ -155,7 +155,7 @@
         <div class="panel">
           <h2>Archive</h2>
           <p class="hint">Completed work, kept for reference.</p>
-          <div id="archiveList" class="today-list"></div>
+          <div id="archiveList" class="today-list" data-i18n-skip></div>
         </div>
       </section>
 
@@ -167,7 +167,7 @@
             <input id="searchInput" class="input" placeholder="Search tasks" aria-label="Search tasks">
             <button type="button" id="searchButton" class="btn primary">Search</button>
           </div>
-          <div id="searchResults" class="detail-list" style="margin-top:16px"></div>
+          <div id="searchResults" class="detail-list" style="margin-top:16px" data-i18n-skip></div>
         </div>
       </section>
 
@@ -221,7 +221,7 @@
         </div>
         <button type="button" id="closeAutoPlanModal" class="btn ghost sm" aria-label="Close">Close</button>
       </div>
-      <div id="autoPlanPreview" class="detail-list"></div>
+      <div id="autoPlanPreview" class="detail-list" data-i18n-skip></div>
       <div class="modal-actions">
         <button type="button" id="clearAutoPlanButton" class="btn spacer">Clear plan</button>
         <button type="button" id="applyAutoPlanButton" class="btn primary">Apply this plan</button>
@@ -238,7 +238,7 @@
         </div>
         <button type="button" id="closeNotificationsModal" class="btn ghost sm" aria-label="Close">Close</button>
       </div>
-      <div id="notificationList" class="detail-list"></div>
+      <div id="notificationList" class="detail-list" data-i18n-skip></div>
       <div class="modal-actions">
         <button type="button" id="markAllReadButton" class="btn">Mark all read</button>
       </div>
@@ -316,7 +316,7 @@
         <span id="captureHeard" class="badge accent hidden">Heard</span>
       </div>
       <p id="captureVoiceError" class="field-error hidden" role="alert"></p>
-      <div id="capturePreview" class="capture-preview" aria-live="polite"></div>
+      <div id="capturePreview" class="capture-preview" aria-live="polite" data-i18n-skip></div>
       <div class="capture-options">
         <label class="field">
           <span class="label">Board</span>
@@ -403,7 +403,7 @@
               <h3>Checklist</h3>
               <span id="subtaskProgress" class="muted small"></span>
             </div>
-            <div id="subtaskList" class="detail-list"></div>
+            <div id="subtaskList" class="detail-list" data-i18n-skip></div>
             <div id="subtaskForm" class="comment-compose">
               <input id="subtaskTitle" class="input" maxlength="300" placeholder="Add a checklist item" aria-label="New checklist item">
               <button type="button" id="subtaskAddButton" class="btn sm">Add</button>
@@ -411,7 +411,7 @@
           </div>
           <div class="detail-section">
             <h3>Blocked by</h3>
-            <div id="dependencyList" class="detail-list"></div>
+            <div id="dependencyList" class="detail-list" data-i18n-skip></div>
             <div class="comment-compose">
               <select id="dependencySelect" class="select" aria-label="Task to wait on"></select>
               <button type="button" id="dependencyAddButton" class="btn sm">Add</button>
@@ -419,7 +419,7 @@
           </div>
           <div class="detail-section">
             <h3>Comments</h3>
-            <div id="commentList" class="detail-list"></div>
+            <div id="commentList" class="detail-list" data-i18n-skip></div>
             <div id="commentForm" class="comment-compose">
               <textarea id="commentBody" class="textarea" maxlength="10000" placeholder="Write a comment" aria-label="New comment"></textarea>
               <button type="button" id="commentAddButton" class="btn sm">Comment</button>
@@ -427,7 +427,7 @@
           </div>
           <div class="detail-section">
             <h3>Attachments</h3>
-            <div id="attachmentList" class="detail-list"></div>
+            <div id="attachmentList" class="detail-list" data-i18n-skip></div>
             <div class="comment-compose">
               <input id="attachmentInput" class="input" type="file" aria-label="Attachment file">
               <button type="button" id="attachmentUploadButton" class="btn sm">Upload</button>
@@ -435,7 +435,7 @@
           </div>
           <div class="detail-section">
             <h3>Reminder</h3>
-            <div id="reminderList" class="detail-list"></div>
+            <div id="reminderList" class="detail-list" data-i18n-skip></div>
             <div class="comment-compose">
               <input id="reminderAt" class="input" type="datetime-local" aria-label="Reminder time">
               <button type="button" id="reminderAddButton" class="btn sm">Add</button>
@@ -479,10 +479,10 @@
         </div>
 
         <div class="focus-task-copy">
-          <div id="focusTaskMeta" class="eyebrow"></div>
-          <h1 id="focusModeTitle"></h1>
+          <div id="focusTaskMeta" class="eyebrow" data-i18n-skip></div>
+          <h1 id="focusModeTitle" data-i18n-skip></h1>
           <p id="focusPrompt">One task. One timer. No feed, no backlog, no noise.</p>
-          <div id="focusBadges" class="focus-meta"></div>
+          <div id="focusBadges" class="focus-meta" data-i18n-skip></div>
         </div>
 
         <div class="focus-controls">
@@ -498,14 +498,15 @@
         <span class="focus-done-mark" aria-hidden>✓</span>
         <div class="eyebrow">Session complete</div>
         <h1>That’s enough.</h1>
-        <p id="focusDoneCopy"></p>
-        <div id="focusDoneStats" class="focus-done-stats"></div>
+        <p id="focusDoneCopy" data-i18n-skip></p>
+        <div id="focusDoneStats" class="focus-done-stats" data-i18n-skip></div>
         <button type="button" id="focusReturn" class="btn primary lg">Return to Today</button>
       </div>
     </div>
   </div>
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <script src="/i18n.js" defer></script>
   <script src="/sound.js" defer></script>
   <script src="/app.js" defer></script>
 </body>

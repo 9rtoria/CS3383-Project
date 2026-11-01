@@ -166,7 +166,7 @@ Status key:
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
 | Offline / PWA | MISSING | |
-| i18n | MISSING | |
+| i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
 | Public board share | MISSING | |
 | Automations / Webhooks | MISSING | |
 | SSO / MFA / API tokens | MISSING | |
@@ -217,6 +217,7 @@ Status key:
 - [x] Focus Mode timer, pause/resume, complete, early leave, and actual-minutes persistence
 - [x] Sound layer, palettes, volume, typing texture, previews, and localStorage persistence
 - [x] Quick capture natural-language parsing, browser voice capture, and text fallback
+- [x] English / Traditional Chinese translation layer with settings-driven locale
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
@@ -226,6 +227,6 @@ Status key:
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. i18n and Offline/PWA.
+6. Offline/PWA.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.
