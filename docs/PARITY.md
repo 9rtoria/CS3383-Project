@@ -19,7 +19,7 @@ Status key:
 
 | Reference path | Project3383 status | Notes |
 |---|---|---|
-| `/api/account` | PARTIAL | Profile display name/timezone update; delete not implemented |
+| `/api/account` | DONE | Profile update; DELETE anonymizes the user, soft-deletes personal workspaces, revokes tokens/sessions, and audits |
 | `/api/archive` | DONE | Completed tasks |
 | `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
 | `/api/attachments/{id}` | DONE | Download/delete |
@@ -80,8 +80,8 @@ Status key:
 | `/api/views` | MISSING | Schema only |
 | `/api/webhooks` | DONE | Admin list/create; Slack, Teams, and generic payloads; signing secret shown once |
 | `/api/webhooks/{id}` | DONE | Enable/disable, URL/events update, delete |
-| `/api/workspaces` | PARTIAL | POST create only; no full list/update/delete |
-| `/api/workspaces/{id}` | MISSING | |
+| `/api/workspaces` | PARTIAL | POST create; no full list/update |
+| `/api/workspaces/{id}` | PARTIAL | DELETE soft-deletes an owner workspace after the only-workspace guard; GET/PATCH policies still missing |
 | `/api/workspaces/{id}/invites` | DONE | Create invite |
 | `/api/workspaces/{id}/members` | DONE | List/change role/remove |
 | `/api/workspaces/{id}/sso` | MISSING | Schema only |
@@ -105,9 +105,9 @@ Status key:
 
 | Model | Project3383 status | Notes |
 |---|---|---|
-| User | DONE | `app_user` |
-| Session | SCHEMA | `auth_session` table; runtime uses HttpSession |
-| Workspace | DONE | |
+| User | DONE | `app_user`; soft delete, anonymized credentials, MFA fields prepared |
+| Session | SCHEMA | `auth_session` table; runtime uses HttpSession, account deletion revokes rows |
+| Workspace | DONE | Soft delete, policies, version; deleted workspaces are excluded from bootstrap and API access |
 | Membership | DONE | |
 | Board | DONE | |
 | Column | DONE | `board_column` |
@@ -181,6 +181,7 @@ Status key:
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
 | Notifications / Reminders | DONE | In-app only |
 | Members / Invites / Roles | DONE | |
+| Account / workspace deletion | DONE | Soft delete with ownership/only-workspace guards, session and token revocation, audit, and offline-cache clearing |
 | Export / Import | DONE | Workspace JSON/CSV export with visibility filtering and CSV injection guard; CSV/JSON task import into a board |
 
 ## 4. Known accepted differences / limitations
@@ -223,6 +224,7 @@ Status key:
 - [x] Admin webhooks (Slack/Teams/generic) with signed async delivery, retries, and audit
 - [x] Automations with task-event triggers, condition matching, four actions, draft preview, notifications, run history, and undo
 - [x] Workspace JSON/CSV export and CSV/JSON task import with audit records
+- [x] Account and workspace deletion with ownership guards, anonymization, access revocation, and audit
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -250,5 +252,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. SSO/MFA, import/export, deletion.
+7. SSO/MFA and workspace policy settings.
 8. Full E2E, screenshots, performance, and final parity sign-off.

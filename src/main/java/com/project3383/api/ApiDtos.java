@@ -147,6 +147,9 @@ public final class ApiDtos {
     ) {
     }
 
+    public record AccountDelete(String confirm) {
+    }
+
     public record ImportRequest(
         String workspaceId,
         String boardId,

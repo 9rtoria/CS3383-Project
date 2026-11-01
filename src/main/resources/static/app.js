@@ -4013,6 +4013,132 @@
     importRow.append(importCopy);
     card.append(importRow);
 
+    const current = workspace();
+    const isOwner = role === "OWNER";
+    const dangerHead = element("div", "section-head");
+    dangerHead.style.marginTop = "26px";
+    const dangerCopy = element("div");
+    dangerCopy.append(element("h3", "section-title", t("Danger zone")));
+    dangerCopy.append(element("p", "section-subtitle", t("These actions are intentionally difficult to reach.")));
+    dangerHead.append(dangerCopy);
+    const dangerCard = element("div", "settings-card");
+    dangerCard.style.borderColor = "color-mix(in srgb, var(--danger) 32%, var(--border))";
+
+    const workspaceRow = element("div", "settings-row");
+    const workspaceCopy = element("div", "settings-copy");
+    workspaceCopy.append(element("strong", "", t("Delete this workspace")));
+    workspaceCopy.append(element("span", "", isOwner
+      ? t("Soft-deletes the workspace, revokes access, and leaves audit records. You must own another workspace.")
+      : t("Only a workspace owner can delete it.")));
+    const workspaceControl = element("div", "settings-control");
+    if (isOwner) {
+      const confirmRow = element("div", "inline");
+      const confirmInput = element("input", "input");
+      confirmInput.style.width = "150px";
+      confirmInput.placeholder = t("Type {{name}}", { name: current?.name ?? "" });
+      const deleteWorkspace = element("button", "btn danger sm", t("Delete"));
+      deleteWorkspace.type = "button";
+      deleteWorkspace.disabled = true;
+      confirmInput.addEventListener("input", () => {
+        deleteWorkspace.disabled = confirmInput.value !== current?.name;
+      });
+      deleteWorkspace.addEventListener("click", async () => {
+        deleteWorkspace.disabled = true;
+        try {
+          await request(`/api/workspaces/${encodeURIComponent(current.id)}`, { method: "DELETE" });
+          window.DriftOffline?.clearCachedAccountData?.();
+          window.location.assign("/");
+        } catch (error) {
+          showToast(error.message);
+          deleteWorkspace.disabled = confirmInput.value !== current?.name;
+        }
+      });
+      confirmRow.append(confirmInput, deleteWorkspace);
+      workspaceControl.append(confirmRow);
+    } else {
+      workspaceControl.append(makeBadge(t("Owner only"), "slate"));
+    }
+    workspaceRow.append(workspaceCopy, workspaceControl);
+    dangerCard.append(workspaceRow);
+
+    const accountRow = element("div", "settings-row");
+    const accountCopy = element("div", "settings-copy");
+    accountCopy.append(element("strong", "", t("Delete my account")));
+    accountCopy.append(element("span", "", t("Soft-deletes your personal workspaces, revokes sessions, and removes credentials. Shared workspace ownership must be transferred first.")));
+    const accountControl = element("div", "settings-control");
+    const deleteAccount = element("button", "btn danger sm", t("Delete account"));
+    deleteAccount.type = "button";
+    accountControl.append(deleteAccount);
+    accountRow.append(accountCopy, accountControl);
+    dangerCard.append(accountRow);
+    section.append(dangerHead, dangerCard);
+
+    const openDeleteAccount = () => {
+      const backdrop = element("div", "modal-backdrop");
+      const modal = element("div", "modal");
+      modal.style.width = "min(480px, 100%)";
+      const head = element("div", "modal-head");
+      const headCopy = element("div");
+      headCopy.append(element("p", "eyebrow", t("This cannot be undone")));
+      headCopy.append(element("h2", "", t("Delete your account?")));
+      const close = element("button", "btn ghost sm", "×");
+      close.type = "button";
+      close.setAttribute("aria-label", t("Close"));
+      head.append(headCopy, close);
+      const copy = element("p");
+      copy.style.cssText = "font-size:12px;color:var(--muted);line-height:1.6";
+      copy.append(document.createTextNode(t("This soft-deletes your personal workspaces, removes your password and sessions. Audit records may remain for retention. Type ")));
+      copy.append(element("strong", "", "DELETE"));
+      copy.append(document.createTextNode(t(" to confirm.")));
+      const field = element("label", "field");
+      field.style.marginTop = "14px";
+      field.append(element("span", "", t("Confirmation")));
+      const input = element("input", "input");
+      input.placeholder = "DELETE";
+      input.autofocus = true;
+      field.append(input);
+      const actions = element("div", "modal-actions");
+      const keep = element("button", "btn ghost", t("Keep account"));
+      keep.type = "button";
+      const forever = element("button", "btn danger", t("Delete forever"));
+      forever.type = "button";
+      forever.disabled = true;
+      actions.append(keep, forever);
+      modal.append(head, copy, field, actions);
+      backdrop.append(modal);
+      document.body.append(backdrop);
+      const closeModal = () => {
+        document.removeEventListener("keydown", onKeydown);
+        backdrop.remove();
+      };
+      const onKeydown = (event) => {
+        if (event.key === "Escape") closeModal();
+      };
+      document.addEventListener("keydown", onKeydown);
+      close.addEventListener("click", closeModal);
+      keep.addEventListener("click", closeModal);
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) closeModal();
+      });
+      input.addEventListener("input", () => {
+        forever.disabled = input.value !== "DELETE";
+      });
+      forever.addEventListener("click", async () => {
+        if (input.value !== "DELETE") return;
+        forever.disabled = true;
+        try {
+          await request("/api/account", { method: "DELETE", body: { confirm: "DELETE" } });
+          window.DriftOffline?.clearCachedAccountData?.();
+          window.location.assign("/");
+        } catch (error) {
+          showToast(error.message);
+          forever.disabled = false;
+        }
+      });
+      input.focus();
+    };
+    deleteAccount.addEventListener("click", openDeleteAccount);
+
     let importContent = "";
     let importFormat = "csv";
     const syncImport = () => {

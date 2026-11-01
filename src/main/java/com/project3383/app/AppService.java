@@ -125,13 +125,87 @@ public class AppService {
         return linked(Map.of("user", user(userId)));
     }
 
+    @Transactional
+    public Map<String, Object> deleteAccount(String userId, ApiDtos.AccountDelete input) {
+        if (input == null || !"DELETE".equals(input.confirm())) {
+            throw ApiException.badRequest("Type DELETE to confirm account deletion.");
+        }
+        Integer exists = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM app_user WHERE id = ? AND deleted_at IS NULL
+            """, Integer.class, userId);
+        if (exists == null || exists == 0) throw ApiException.notFound("Account not found.");
+        List<Map<String, Object>> memberships = jdbc.queryForList("""
+            SELECT m.workspace_id AS workspaceId, m.role, w.type, w.deleted_at AS deletedAt,
+                   (SELECT COUNT(*) FROM membership x WHERE x.workspace_id = m.workspace_id) AS memberCount
+            FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ?
+            """, userId);
+        boolean sharedOwner = memberships.stream().anyMatch(membership ->
+            "OWNER".equals(membership.get("role"))
+                && !"personal".equals(membership.get("type"))
+                && number(membership.get("memberCount")) > 1
+                && membership.get("deletedAt") == null);
+        if (sharedOwner) {
+            throw new ApiException(HttpStatus.CONFLICT, "CONFLICT",
+                "Transfer ownership of your team workspaces before deleting your account.");
+        }
+        String now = Instant.now().toString();
+        for (Map<String, Object> membership : memberships) {
+            if (!"personal".equals(membership.get("type")) || membership.get("deletedAt") != null) continue;
+            jdbc.update("""
+                UPDATE workspace SET deleted_at = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL
+                """, now, membership.get("workspaceId"));
+        }
+        jdbc.update("""
+            UPDATE app_user SET deleted_at = ?, email = NULL, password_hash = NULL,
+                                mfa_secret_enc = NULL, mfa_backup_codes_json = NULL, mfa_enabled = 0
+            WHERE id = ?
+            """, now, userId);
+        jdbc.update("""
+            UPDATE auth_session SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL
+            """, now, userId);
+        jdbc.update("""
+            UPDATE api_token SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL
+            """, now, userId);
+        for (Map<String, Object> membership : memberships) {
+            if ("personal".equals(membership.get("type"))) continue;
+            auditService.record(String.valueOf(membership.get("workspaceId")), userId,
+                "account.deleted", "user", userId, Map.of());
+        }
+        return linked(Map.of("deleted", true));
+    }
+
+    @Transactional
+    public Map<String, Object> deleteWorkspace(String userId, String workspaceId) {
+        String role = roleFor(userId, workspaceId);
+        if (!"OWNER".equals(role)) throw ApiException.forbidden("Only a workspace owner can delete it.");
+        Integer active = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id <> ? AND w.deleted_at IS NULL
+            """, Integer.class, userId, workspaceId);
+        if (active == null || active == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "CONFLICT",
+                "Create another workspace before deleting your only one.");
+        }
+        String now = Instant.now().toString();
+        jdbc.update("""
+            UPDATE workspace SET deleted_at = ?, version = version + 1
+            WHERE id = ? AND deleted_at IS NULL
+            """, now, workspaceId);
+        jdbc.update("""
+            UPDATE api_token SET revoked_at = ? WHERE workspace_id = ? AND revoked_at IS NULL
+            """, now, workspaceId);
+        audit(workspaceId, userId, "workspace.deleted", "workspace", workspaceId, Map.of());
+        return linked(Map.of("deleted", true));
+    }
+
     public AuthResult signin(ApiDtos.Signin input) {
         if (input == null || blank(input.email()) || blank(input.password())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
         }
         Map<String, Object> row = jdbc.queryForList("""
             SELECT id, password_hash AS passwordHash, is_guest AS isGuest
-            FROM app_user WHERE email = ?
+            FROM app_user WHERE email = ? AND deleted_at IS NULL
             """, input.email().trim().toLowerCase()).stream().findFirst()
             .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect."));
         String hash = (String) row.get("passwordHash");
@@ -152,13 +226,14 @@ public class AppService {
         if ("personal".equals(type)) {
             Integer personal = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM workspace w JOIN membership m ON m.workspace_id = w.id
-                WHERE m.user_id = ? AND w.type = 'personal' AND w.created_by = ?
+                WHERE m.user_id = ? AND w.type = 'personal' AND w.created_by = ? AND w.deleted_at IS NULL
                 """, Integer.class, userId, userId);
             if (personal != null && personal > 0) throw ApiException.badRequest("You already have a personal workspace.");
         }
         createStarterWorkspace(userId, input.name().trim(), type);
         Map<String, Object> workspace = jdbc.queryForList("""
-            SELECT id, name, type FROM workspace WHERE created_by = ? ORDER BY created_at DESC LIMIT 1
+            SELECT id, name, type FROM workspace WHERE created_by = ? AND deleted_at IS NULL
+            ORDER BY created_at DESC LIMIT 1
             """, userId).stream().findFirst().orElseThrow();
         audit(String.valueOf(workspace.get("id")), userId, "workspace.created", "workspace",
             String.valueOf(workspace.get("id")), Map.of("name", input.name().trim(), "type", type));
@@ -286,7 +361,7 @@ public class AppService {
     private Map<String, Object> userRow(String userId) {
         return jdbc.queryForList("""
             SELECT id, email, display_name AS name, is_guest AS isGuest
-            FROM app_user WHERE id = ?
+            FROM app_user WHERE id = ? AND deleted_at IS NULL
             """, userId).stream().findFirst()
             .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Session user not found."));
     }
@@ -296,7 +371,7 @@ public class AppService {
         List<Map<String, Object>> memberships = jdbc.queryForList("""
             SELECT w.id, w.name, w.type, m.role
             FROM membership m JOIN workspace w ON w.id = m.workspace_id
-            WHERE m.user_id = ?
+            WHERE m.user_id = ? AND w.deleted_at IS NULL
             ORDER BY m.joined_at
             """, userId);
         List<Map<String, Object>> workspaces = new ArrayList<>();
@@ -548,7 +623,7 @@ public class AppService {
             FROM board b JOIN workspace w ON w.id = b.workspace_id
             WHERE b.share_token = ? AND b.share_enabled = 1
               AND b.deleted_at IS NULL AND b.archived_at IS NULL
-              AND w.public_sharing_enabled = 1
+              AND w.public_sharing_enabled = 1 AND w.deleted_at IS NULL
             """, token).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("This shared board is no longer available."));
         List<Map<String, Object>> columns = jdbc.queryForList("""
@@ -1961,7 +2036,8 @@ public class AppService {
     private void requireMembership(String userId, String workspaceId) {
         requireTokenWorkspace(workspaceId);
         Integer count = jdbc.queryForObject("""
-            SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
+            SELECT COUNT(*) FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Workspace not found.");
     }
@@ -2048,7 +2124,8 @@ public class AppService {
 
     private String roleFor(String userId, String workspaceId) {
         return jdbc.queryForList("""
-            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
             """, userId, workspaceId).stream().findFirst()
             .map(row -> row.get("role").toString())
             .orElseThrow(() -> ApiException.notFound("Workspace not found."));

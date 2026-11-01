@@ -51,6 +51,7 @@ Implemented:
 - Admin webhooks for Slack, Microsoft Teams, and generic JSON with HMAC signing, async delivery, retries, and delivery status
 - Admin automations for task created/moved/completed events with priority, label, column, and notify actions, draft impact previews, run history, notifications, and 60-second undo
 - Workspace JSON/CSV export and CSV/JSON task import with private-board filtering and CSV formula-injection protection
+- Account and workspace deletion with ownership guards, credential anonymization, session/token revocation, audit, and local-cache clearing
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -61,7 +62,6 @@ Not implemented yet:
 
 - Full Insights and visual parity
 - SSO/MFA
-- Account/workspace deletion
 - Full accessibility, E2E, performance, and final parity sign-off
 
 The current Phase 0 parity matrix is at:
@@ -111,7 +111,9 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | DELETE | `/api/auth/signout` | Invalidate the session |
 | GET | `/api/health` | Health check |
 | GET | `/api/bootstrap` | User/workspace/board bootstrap |
+| DELETE | `/api/account` | Anonymize and soft-delete the current account |
 | POST | `/api/workspaces` | Create a personal/team workspace |
+| DELETE | `/api/workspaces/{id}` | Soft-delete an owner workspace |
 | GET | `/api/workspaces/{id}/members` | List workspace members |
 | POST | `/api/workspaces/{id}/invites` | Create an invite link |
 | PATCH | `/api/workspaces/{id}/members/{userId}` | Change a member role |

@@ -52,6 +52,23 @@
     saveQueue(listQueuedWrites().map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
+  function clearCachedAccountData() {
+    try {
+      const keys = [];
+      for (let index = 0; index < window.localStorage.length; index++) {
+        const key = window.localStorage.key(index);
+        if (key && (key === QUEUE_KEY || key === BOOTSTRAP_KEY || key === SETTINGS_KEY
+          || key.startsWith(BOARD_PREFIX) || key.startsWith(TODAY_PREFIX))) {
+          keys.push(key);
+        }
+      }
+      for (const key of keys) window.localStorage.removeItem(key);
+    } catch {
+      // Storage can be unavailable in private windows.
+    }
+    notify();
+  }
+
   function clearQueuedWrites() {
     try {
       window.localStorage.removeItem(QUEUE_KEY);
@@ -210,6 +227,7 @@
     removeQueuedWrite,
     updateQueuedWrite,
     clearQueuedWrites,
+    clearCachedAccountData,
     subscribeQueue,
     cacheBootstrap,
     readCachedBootstrap,

@@ -46,7 +46,8 @@ public class AuditService {
 
     public Map<String, Object> list(String userId, String workspaceId, int limit, String cursor) {
         String role = jdbc.queryForList("""
-            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
             """, userId, workspaceId).stream().findFirst()
             .map(row -> String.valueOf(row.get("role")))
             .orElseThrow(() -> ApiException.notFound("Workspace not found."));

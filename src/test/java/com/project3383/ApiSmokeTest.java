@@ -1541,15 +1541,15 @@ class ApiSmokeTest {
 
         Map<String, Object> csvTask = jdbc.queryForMap("""
             SELECT priority, due_date AS dueDate, due_all_day AS dueAllDay, estimate_minutes AS estimateMinutes
-            FROM task WHERE title = 'CSV import'
-            """);
+            FROM task WHERE title = 'CSV import' AND workspace_id = ?
+            """, workspaceId);
         if (!"high".equals(csvTask.get("priority")) || !"2026-12-20".equals(csvTask.get("dueDate"))
             || !Integer.valueOf(1).equals(csvTask.get("dueAllDay"))) {
             throw new AssertionError("CSV import did not preserve priority or due date.");
         }
         Map<String, Object> jsonTask = jdbc.queryForMap("""
-            SELECT priority, due_date AS dueDate FROM task WHERE title = 'JSON import'
-            """);
+            SELECT priority, due_date AS dueDate FROM task WHERE title = 'JSON import' AND workspace_id = ?
+            """, workspaceId);
         if (!"urgent".equals(jsonTask.get("priority")) || !"2026-12-31".equals(jsonTask.get("dueDate"))) {
             throw new AssertionError("JSON import did not preserve priority or due date.");
         }
@@ -1569,6 +1569,139 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.events[?(@.action == 'workspace.exported')]").isNotEmpty())
             .andExpect(jsonPath("$.events[?(@.action == 'workspace.imported')]").isNotEmpty());
+    }
+
+    @Test
+    void workspaceDeletionRequiresAnotherWorkspaceAndRevokesAccess() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        String firstWorkspaceId = boot.path("workspaces").get(0).path("id").asText();
+
+        MvcResult second = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "Second team", "type", "team"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode secondWorkspace = objectMapper.readTree(second.getResponse().getContentAsString())
+            .path("workspace");
+        String secondWorkspaceId = secondWorkspace.path("id").asText();
+        JsonNode refreshed = objectMapper.readTree(mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode secondBoard = null;
+        for (JsonNode workspace : refreshed.path("workspaces")) {
+            if (secondWorkspaceId.equals(workspace.path("id").asText())) {
+                secondBoard = workspace.path("boards").get(0);
+            }
+        }
+        if (secondBoard == null) throw new AssertionError("Second workspace board was missing.");
+        String secondBoardId = secondBoard.path("id").asText();
+
+        MvcResult share = mockMvc.perform(post("/api/boards/" + secondBoardId + "/share")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("enabled", true))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String shareToken = objectMapper.readTree(share.getResponse().getContentAsString())
+            .path("token").asText();
+
+        mockMvc.perform(delete("/api/workspaces/" + secondWorkspaceId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deleted").value(true));
+        mockMvc.perform(get("/api/share/" + shareToken))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/workspaces/" + firstWorkspaceId).session(session))
+            .andExpect(status().isConflict());
+
+        MvcResult third = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "Third team", "type", "team"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String thirdWorkspaceId = objectMapper.readTree(third.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+        mockMvc.perform(delete("/api/workspaces/" + firstWorkspaceId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deleted").value(true));
+        mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspaces[?(@.id == '" + firstWorkspaceId + "')]").isEmpty())
+            .andExpect(jsonPath("$.workspaces[?(@.id == '" + thirdWorkspaceId + "')]").isNotEmpty());
+        mockMvc.perform(get("/api/tasks").session(session).param("workspaceId", firstWorkspaceId))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void accountDeletionSoftDeletesUserAndInvalidatesSession() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        String userId = boot.path("user").path("id").asText();
+        String workspaceId = boot.path("workspaces").get(0).path("id").asText();
+
+        mockMvc.perform(delete("/api/account")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("confirm", "NOPE"))))
+            .andExpect(status().isBadRequest());
+        mockMvc.perform(delete("/api/account")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("confirm", "DELETE"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deleted").value(true));
+        mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isUnauthorized());
+
+        Map<String, Object> user = jdbc.queryForMap("""
+            SELECT email, password_hash AS passwordHash, deleted_at AS deletedAt
+            FROM app_user WHERE id = ?
+            """, userId);
+        if (user.get("deletedAt") == null || user.get("email") != null || user.get("passwordHash") != null) {
+            throw new AssertionError("Account deletion did not anonymize and soft-delete the user.");
+        }
+        Map<String, Object> workspace = jdbc.queryForMap("""
+            SELECT deleted_at AS deletedAt FROM workspace WHERE id = ?
+            """, workspaceId);
+        if (workspace.get("deletedAt") == null) {
+            throw new AssertionError("Account deletion did not soft-delete personal workspaces.");
+        }
+
+        MvcResult freshGuest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        String freshUserId = objectMapper.readTree(freshGuest.getResponse().getContentAsString())
+            .path("user").path("id").asText();
+        if (userId.equals(freshUserId)) throw new AssertionError("A fresh guest should use a new account.");
+    }
+
+    @Test
+    void accountDeletionBlocksSharedTeamOwner() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        MvcResult team = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "Shared team", "type", "team"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String workspaceId = objectMapper.readTree(team.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+        String memberId = java.util.UUID.randomUUID().toString();
+        jdbc.update("""
+            INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
+            VALUES (?, ?, 'Team member', NULL, 1, 'UTC', ?)
+            """, memberId, "member-" + memberId + "@example.com", Instant.now().toString());
+        jdbc.update("""
+            INSERT INTO membership (user_id, workspace_id, role, joined_at) VALUES (?, ?, 'MEMBER', ?)
+            """, memberId, workspaceId, Instant.now().toString());
+
+        mockMvc.perform(delete("/api/account")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("confirm", "DELETE"))))
+            .andExpect(status().isConflict());
     }
 
     @Test

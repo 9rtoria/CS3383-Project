@@ -5,8 +5,14 @@ CREATE TABLE IF NOT EXISTS app_user (
     password_hash TEXT,
     is_guest INTEGER NOT NULL DEFAULT 1,
     timezone TEXT NOT NULL DEFAULT 'Asia/Hong_Kong',
+    deleted_at TEXT,
+    mfa_enabled INTEGER NOT NULL DEFAULT 0,
+    mfa_secret_enc TEXT,
+    mfa_backup_codes_json TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_app_user_deleted ON app_user(deleted_at);
 
 CREATE TABLE IF NOT EXISTS workspace (
     id TEXT PRIMARY KEY,
