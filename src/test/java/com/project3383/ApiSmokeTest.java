@@ -219,6 +219,37 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.suggestions[?(@.title == 'Smoke task')]").isEmpty());
 
+        mockMvc.perform(post("/api/today")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "applyPlan",
+                    "workspaceId", workspaceId,
+                    "taskIds", java.util.List.of(task.path("id").asText())
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.suggestions[?(@.title == 'Smoke task' && @.accepted == true)]").isNotEmpty());
+
+        mockMvc.perform(post("/api/today")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "rebalance",
+                    "workspaceId", workspaceId
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.counts.selected").isNumber());
+
+        mockMvc.perform(post("/api/today")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "applyPlan",
+                    "workspaceId", workspaceId,
+                    "taskIds", java.util.List.of(otherId)
+                ))))
+            .andExpect(status().isBadRequest());
+
         mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/complete").session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.completed").value(1));

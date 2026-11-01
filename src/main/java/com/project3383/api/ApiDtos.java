@@ -44,7 +44,8 @@ public final class ApiDtos {
     public record TodayAction(
         String action,
         String taskId,
-        String workspaceId
+        String workspaceId,
+        java.util.List<String> taskIds
     ) {
     }
 

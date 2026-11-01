@@ -31,7 +31,7 @@ Implemented:
   - Sign out
 - JUnit/MockMvc smoke test for guest / task / move / Today
 - Reminders, in-app notifications, and background delivery
-- Workspace-scoped, per-user Today selection with capacity, reasons, and blocked-dependency state
+- Workspace-scoped, per-user Today selection with capacity, reasons, blocked-dependency state, rebalance, and applyPlan
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility

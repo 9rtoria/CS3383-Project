@@ -718,6 +718,7 @@
     $("capacityHint").textContent = capacity.overbooked
       ? "This day is over capacity."
       : `${Math.max(0, total - selected)} minutes still open.`;
+    $("applyTodayPlanButton").disabled = !suggestions.some((task) => task.accepted);
   }
 
   function minutesLabel(minutes) {
@@ -926,6 +927,49 @@
       await loadToday();
     } catch (error) {
       showToast(error.message);
+    }
+  }
+
+  async function rebalanceToday() {
+    const button = $("rebalanceTodayButton");
+    button.disabled = true;
+    try {
+      await request("/api/today", {
+        method: "POST",
+        body: { action: "rebalance", workspaceId: workspace().id },
+      });
+      state.lastAutoApplyAt = Date.now();
+      await loadToday();
+      showToast("Today rebalanced.");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function applyTodayPlan() {
+    const taskIds = (state.today?.suggestions ?? [])
+      .filter((task) => task.accepted && !task.blocked)
+      .map((task) => task.id);
+    if (!taskIds.length) {
+      showToast("Choose at least one task for today first.");
+      return;
+    }
+    const button = $("applyTodayPlanButton");
+    button.disabled = true;
+    try {
+      await request("/api/today", {
+        method: "POST",
+        body: { action: "applyPlan", workspaceId: workspace().id, taskIds },
+      });
+      state.lastAutoApplyAt = Date.now();
+      await loadToday();
+      showToast("Today plan applied.");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
     }
   }
 
@@ -1993,6 +2037,8 @@
       });
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
+    $("rebalanceTodayButton").addEventListener("click", rebalanceToday);
+    $("applyTodayPlanButton").addEventListener("click", applyTodayPlan);
     $("newBoardButton").addEventListener("click", createBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);
     $("autoPlanButton").addEventListener("click", openAutoPlan);

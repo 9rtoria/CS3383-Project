@@ -549,7 +549,8 @@ public class AppService {
             LEFT JOIN today_selection s
               ON s.task_id = t.id AND s.user_id = ? AND s.date = ?
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
-              AND b.workspace_id = t.workspace_id AND d.task_id IS NULL
+              AND b.workspace_id = t.workspace_id
+              AND (d.task_id IS NULL OR s.task_id IS NOT NULL)
             ORDER BY selectedFlag DESC,
                      CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1
                                      WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
@@ -629,18 +630,27 @@ public class AppService {
     }
 
     public Map<String, Object> todayAction(String userId, ApiDtos.TodayAction input) {
-        if (input == null || blank(input.taskId()) || input.action() == null) {
-            throw ApiException.badRequest("A task and action are required.");
+        if (input == null || input.action() == null) {
+            throw ApiException.badRequest("A Today action is required.");
         }
-        Map<String, Object> task = taskRow(input.taskId());
-        String workspaceId = blank(input.workspaceId()) ? (String) task.get("workspaceId") : input.workspaceId();
+        String workspaceId;
+        Map<String, Object> task = null;
+        if (!blank(input.taskId())) {
+            task = taskRow(input.taskId());
+            workspaceId = blank(input.workspaceId()) ? (String) task.get("workspaceId") : input.workspaceId();
+            if (!workspaceId.equals(task.get("workspaceId"))) {
+                throw ApiException.notFound("Task not found.");
+            }
+        } else {
+            if (blank(input.workspaceId())) throw ApiException.badRequest("Choose a workspace.");
+            workspaceId = input.workspaceId();
+        }
         requireMinimumRole(userId, workspaceId, "MEMBER");
-        if (!workspaceId.equals(task.get("workspaceId"))) {
-            throw ApiException.notFound("Task not found.");
-        }
         String today = todayForUser(userId);
         String now = Instant.now().toString();
+
         if ("accept".equals(input.action())) {
+            if (task == null) throw ApiException.badRequest("A task is required.");
             if (number(task.get("completed")) == 1) {
                 throw ApiException.badRequest("A completed task cannot be added to today's plan.");
             }
@@ -656,6 +666,7 @@ public class AppService {
             jdbc.update("DELETE FROM today_dismissal WHERE user_id = ? AND task_id = ? AND date = ?",
                 userId, input.taskId(), today);
         } else if ("dismiss".equals(input.action())) {
+            if (task == null) throw ApiException.badRequest("A task is required.");
             jdbc.update("""
                 DELETE FROM today_selection WHERE user_id = ? AND task_id = ? AND date = ?
                 """, userId, input.taskId(), today);
@@ -671,10 +682,95 @@ public class AppService {
                 WHERE user_id = ? AND workspace_id = ? AND task_id = ? AND date = ?
                   AND source = 'auto' AND locked = 0
                 """, userId, workspaceId, input.taskId(), today);
+        } else if ("rebalance".equals(input.action())) {
+            jdbc.update("""
+                DELETE FROM today_selection WHERE user_id = ? AND workspace_id = ? AND date = ?
+                """, userId, workspaceId, today);
+            jdbc.update("""
+                DELETE FROM plan_block
+                WHERE user_id = ? AND workspace_id = ? AND date = ?
+                  AND source = 'auto' AND locked = 0
+                """, userId, workspaceId, today);
+            Map<String, Object> payload = today(userId, workspaceId);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> capacity = (Map<String, Object>) payload.get("capacity");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> suggestions = (List<Map<String, Object>>) payload.get("suggestions");
+            int total = capacity == null ? 300 : number(capacity.get("totalMinutes"));
+            int used = 0;
+            List<String> selected = new ArrayList<>();
+            for (Map<String, Object> suggestion : suggestions) {
+                if (Boolean.TRUE.equals(suggestion.get("blocked"))) continue;
+                int estimate = suggestion.get("estimateMinutes") == null ? 30 : number(suggestion.get("estimateMinutes"));
+                if (used + Math.max(0, estimate) > total) continue;
+                selected.add(String.valueOf(suggestion.get("id")));
+                used += Math.max(0, estimate);
+            }
+            replaceTodaySelection(userId, workspaceId, today, selected);
+        } else if ("applyPlan".equals(input.action())) {
+            List<String> requested = input.taskIds() == null ? List.of() : input.taskIds();
+            List<String> taskIds = requested.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .limit(50)
+                .toList();
+            for (String taskId : taskIds) {
+                Map<String, Object> selected = taskRow(taskId);
+                if (!workspaceId.equals(selected.get("workspaceId"))) {
+                    throw ApiException.notFound("Task not found.");
+                }
+                if (number(selected.get("completed")) == 1) {
+                    throw ApiException.badRequest("A completed task cannot be added to today's plan.");
+                }
+                if (selected.get("archivedAt") != null) {
+                    throw ApiException.badRequest("An archived task cannot be added to today's plan.");
+                }
+                if (openDependencyCount(taskId) > 0) {
+                    throw ApiException.badRequest("Finish the work this task is waiting on first.");
+                }
+            }
+            jdbc.update("""
+                DELETE FROM plan_block
+                WHERE user_id = ? AND workspace_id = ? AND date = ?
+                  AND source = 'auto' AND locked = 0
+                """, userId, workspaceId, today);
+            replaceTodaySelection(userId, workspaceId, today, taskIds);
         } else {
             throw ApiException.badRequest("Unknown Today action.");
         }
         return today(userId, workspaceId);
+    }
+
+    private void replaceTodaySelection(String userId, String workspaceId, String date, List<String> taskIds) {
+        jdbc.update("""
+            DELETE FROM today_selection WHERE user_id = ? AND workspace_id = ? AND date = ?
+            """, userId, workspaceId, date);
+        jdbc.update("""
+            UPDATE task SET focus_date = NULL, version = version + 1
+            WHERE workspace_id = ? AND focus_date = ? AND deleted_at IS NULL
+            """, workspaceId, date);
+        String now = Instant.now().toString();
+        for (String taskId : taskIds) {
+            jdbc.update("""
+                INSERT OR IGNORE INTO today_selection (user_id, workspace_id, task_id, date, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """, userId, workspaceId, taskId, date, now);
+            jdbc.update("""
+                UPDATE task SET focus_date = ?, version = version + 1
+                WHERE id = ? AND deleted_at IS NULL
+                """, date, taskId);
+        }
+    }
+
+    private int openDependencyCount(String taskId) {
+        Integer count = jdbc.queryForObject("""
+            SELECT COUNT(*)
+            FROM task_dependency td
+            JOIN task dep ON dep.id = td.depends_on_task_id
+            JOIN board_column c ON c.id = dep.column_id
+            WHERE td.task_id = ? AND dep.deleted_at IS NULL AND dep.archived_at IS NULL AND c.is_done = 0
+            """, Integer.class, taskId);
+        return count == null ? 0 : count;
     }
 
     private String resolveWorkspace(String userId, String workspaceId) {

@@ -70,7 +70,7 @@ Status key:
 | `/api/tasks/{id}/comments` | DONE | POST; detail returns comments |
 | `/api/tasks/{id}/move` | DONE | |
 | `/api/tasks/{id}/subtasks` | DONE | POST; detail returns checklist |
-| `/api/today` | PARTIAL | Workspace-scoped GET, per-user accept/dismiss, counts; no rebalance/applyPlan actions |
+| `/api/today` | DONE | Workspace-scoped GET, per-user selection, accept/dismiss/rebalance/applyPlan, counts |
 | `/api/tokens` | MISSING | |
 | `/api/tokens/{id}` | MISSING | |
 | `/api/undo/{id}` | PARTIAL | Auto-plan apply undo; task/bulk/automation undo not implemented |
@@ -155,7 +155,7 @@ Status key:
 | Attachments | DONE | |
 | Task completion / reopen | DONE | |
 | Labels | PARTIAL | Task-scoped labels; no label manager |
-| Today / capacity / accept / dismiss | PARTIAL | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies; rebalance/applyPlan still missing |
+| Today / capacity / accept / dismiss | DONE | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies, rebalance/applyPlan |
 | Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
 | Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
 | Calendar / ICS | DONE | Month calendar and ICS download |
@@ -178,7 +178,7 @@ Status key:
 - Full token-based CSRF remains hardening; cookie mutations are protected by Origin validation.
 - SQLite schema is managed by Flyway versioned migrations.
 - `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is still mirrored for API compatibility but is no longer the source of truth.
-- Today does not yet implement the reference `rebalance` and `applyPlan` actions.
+- Today rebalance/applyPlan are implemented; exact reference ranking and visual parity still need comparison.
 - Auto-plan is settings-aware, mode-aware, refreshable, delegated-cleanup capable, and undoable; safe/delegated recomputation is an approximation of the reference and exact UI parity is still pending.
 - UI is functionally close but not pixel-parity with ProjectA2.
 - No live SMTP, OAuth/SSO, or production deployment verification.
@@ -209,12 +209,13 @@ Status key:
 - [x] Account profile update + personal Settings UI (appearance, language, planning, auto-plan, focus, notifications, features)
 - [x] Auto-plan consumes capacity/workday/lunch/rest/week/deep-work/estimate settings and supports undo
 - [x] Auto-plan safe/full/delegated modes, refresh, task-change invalidation, and stale cleanup
+- [x] Today rebalance and applyPlan actions
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
 
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
-2. Remaining workspace/security/audit/data settings; Today rebalance/applyPlan.
+2. Remaining workspace/security/audit/data settings.
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
