@@ -32,6 +32,11 @@ public class AppController {
         return appService.board(CurrentUser.id(session), id);
     }
 
+    @PostMapping("/boards")
+    public Map<String, Object> createBoard(HttpSession session, @RequestBody ApiDtos.BoardCreate input) {
+        return appService.createBoard(CurrentUser.id(session), input);
+    }
+
     @GetMapping("/today")
     public Map<String, Object> today(HttpSession session) {
         return appService.today(CurrentUser.id(session));

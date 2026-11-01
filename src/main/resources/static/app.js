@@ -156,6 +156,25 @@
     $("authModal").classList.add("hidden");
   }
 
+  async function createBoard() {
+    const name = window.prompt("Board name");
+    if (!name || !name.trim()) return;
+    try {
+      const result = await request("/api/boards", {
+        method: "POST",
+        body: { workspaceId: workspace().id, name: name.trim() },
+      });
+      state.boot = await request("/api/bootstrap");
+      state.currentBoardId = result.board.id;
+      renderSidebar();
+      await loadBoard(result.board.id);
+      setView("board");
+      showToast("Board created.");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   function renderSidebar() {
     const list = $("boardList");
     list.replaceChildren();
@@ -525,6 +544,7 @@
       });
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
+    $("newBoardButton").addEventListener("click", createBoard);
     $("closeModal").addEventListener("click", closeModal);
     $("cancelModal").addEventListener("click", closeModal);
     $("taskForm").addEventListener("submit", saveTask);

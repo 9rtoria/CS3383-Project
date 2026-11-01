@@ -158,6 +158,31 @@ public class AppService {
         ));
     }
 
+    @Transactional
+    public Map<String, Object> createBoard(String userId, ApiDtos.BoardCreate input) {
+        if (input == null || blank(input.workspaceId()) || blank(input.name())) {
+            throw ApiException.badRequest("Workspace and board name are required.");
+        }
+        requireMembership(userId, input.workspaceId());
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM board WHERE workspace_id = ?", Integer.class, input.workspaceId());
+        if (count != null && count >= 20) throw ApiException.badRequest("This workspace already has the maximum number of boards.");
+        int position = jdbc.queryForObject("""
+            SELECT COALESCE(MAX(position), -1) + 1 FROM board WHERE workspace_id = ?
+            """, Integer.class, input.workspaceId());
+        String boardId = id();
+        String now = Instant.now().toString();
+        jdbc.update("""
+            INSERT INTO board (id, workspace_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)
+            """, boardId, input.workspaceId(), input.name().trim(), position, now);
+        String[] columns = {"To do", "In progress", "Done"};
+        for (int i = 0; i < columns.length; i++) {
+            jdbc.update("""
+                INSERT INTO board_column (id, board_id, name, position, is_done) VALUES (?, ?, ?, ?, ?)
+                """, id(), boardId, columns[i], i, i == columns.length - 1 ? 1 : 0);
+        }
+        return linked(Map.of("board", boardRow(boardId)));
+    }
+
     public Map<String, Object> board(String userId, String boardId) {
         Map<String, Object> board = boardRow(boardId);
         requireMembership(userId, (String) board.get("workspaceId"));

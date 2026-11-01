@@ -13,9 +13,10 @@ Implemented:
 - Guest session creation (`POST /api/auth/guest`)
 - Email/password sign-up, sign-in, guest claim, and sign-out
 - Bootstrap payload with workspace, board, and columns
-- Board read API
+- Board create/read API
 - Task create / update / move / soft-delete APIs
 - Task detail API with comments and checklist items
+- Task start date, all-day due date, and tracked actual minutes
 - Version-based 409 conflict handling
 - Today list with capacity and accept/dismiss actions
 - Plain HTML/CSS/JS UI:
@@ -80,6 +81,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | DELETE | `/api/auth/signout` | Invalidate the session |
 | GET | `/api/health` | Health check |
 | GET | `/api/bootstrap` | User/workspace/board bootstrap |
+| POST | `/api/boards` | Create a board and its starter columns |
 | GET | `/api/boards/{id}` | Board with columns and tasks |
 | GET | `/api/today` | Open-task list with capacity |
 | POST | `/api/today` | Accept or dismiss a task for today |

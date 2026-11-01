@@ -45,6 +45,12 @@ public final class ApiDtos {
     ) {
     }
 
+    public record BoardCreate(
+        String workspaceId,
+        String name
+    ) {
+    }
+
     public record Signup(
         String name,
         String email,
