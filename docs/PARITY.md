@@ -163,7 +163,7 @@ Status key:
 | Calendar / ICS | DONE | Month calendar and ICS download |
 | Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
 | Insights | PARTIAL | Basic counts; full reference views missing |
-| Settings / Voice / Sound | PARTIAL | Personal Settings UI done; Voice/Sound surfaces missing |
+| Settings / Voice / Sound | PARTIAL | Personal Settings UI + Sound Lab done; Voice surfaces missing |
 | Offline / PWA | MISSING | |
 | i18n | MISSING | |
 | Public board share | MISSING | |
@@ -214,6 +214,7 @@ Status key:
 - [x] Today rebalance and applyPlan actions
 - [x] Day Flow 24-hour rail, chosen/suggested blocks, drag-to-Later, and Rebalance
 - [x] Focus Mode timer, pause/resume, complete, early leave, and actual-minutes persistence
+- [x] Sound layer, palettes, volume, typing texture, previews, and localStorage persistence
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
@@ -223,6 +224,6 @@ Status key:
 3. Task recurrence/assignee and full drawer parity.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Voice, i18n, Offline/PWA, sound layer.
+6. Voice capture, i18n, Offline/PWA.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

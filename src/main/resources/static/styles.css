@@ -709,8 +709,29 @@ body[data-view="settings"] .main { padding: 0; }
 .settings-inline-controls .field .label { color: var(--muted); font-size: 9.5px; font-weight: 600; }
 .settings-quiet-hours .settings-control { display: flex; align-items: center; gap: 8px; }
 
-.settings-preview-block { margin-top: 8px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--accent-softer); }
-.settings-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.sound-palettes { display: flex; flex-wrap: wrap; gap: 8px; }
+.sound-palette {
+  width: 160px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: left;
+}
+.sound-palette:hover { border-color: var(--border-strong); }
+.sound-palette.active { border-color: var(--accent); background: var(--accent-softer); box-shadow: var(--ring); color: var(--text-soft); }
+.sound-palette-name { display: block; margin-bottom: 3px; color: var(--text); font-size: 12px; font-weight: 650; }
+.sound-palette-dots { display: flex; gap: 3px; margin-top: 7px; }
+.sound-palette-dots i { display: block; width: 12px; height: 3px; border-radius: 3px; background: var(--border-strong); }
+.sound-palette.active .sound-palette-dots i { background: var(--accent); }
+.sound-volume { gap: 8px; }
+.sound-volume input[type="range"] { width: 150px; accent-color: var(--accent); }
+.sound-previews { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+
+.settings-preview-block { margin-top: 8px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--accent-softer); }.settings-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .settings-preview-head strong { display: block; margin-top: 3px; font-size: 12px; }
 .settings-live-preview { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .settings-preview-copy h3 { margin: 4px 0 3px; font-family: var(--font-display); font-size: 23px; font-weight: 550; letter-spacing: -0.4px; }

@@ -620,6 +620,7 @@
             body: { version: task.version, columnId: column.id },
           });
           await loadBoard(state.currentBoardId);
+          window.DriftSound?.play("move");
         } catch (error) {
           showToast(error.message);
         }
@@ -1270,6 +1271,7 @@
     focus.phase = "running";
     window.clearInterval(state.focusTimer);
     state.focusTimer = window.setInterval(focusTick, 250);
+    window.DriftSound?.play("focus");
     renderFocus();
   }
 
@@ -1282,6 +1284,7 @@
     focus.phase = "paused";
     window.clearInterval(state.focusTimer);
     state.focusTimer = null;
+    window.DriftSound?.play("tap");
     renderFocus();
   }
 
@@ -1312,6 +1315,7 @@
       focus.task = result.task;
       focus.phase = "done";
       focus.busy = false;
+      window.DriftSound?.play("complete");
       renderFocus();
       await loadToday();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
@@ -1357,6 +1361,7 @@
     state.focusTimer = null;
     state.focus = null;
     $("focusMode").classList.add("hidden");
+    window.DriftSound?.play("tap");
     await loadToday();
     if (state.currentBoardId) await loadBoard(state.currentBoardId);
   }
@@ -1680,6 +1685,7 @@
       closeModal();
       await loadBoard(state.currentBoardId);
       await loadToday();
+      window.DriftSound?.play("capture");
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -1696,6 +1702,7 @@
       closeModal();
       await loadBoard(state.currentBoardId);
       await loadToday();
+      window.DriftSound?.play(completed ? "complete" : "tap");
     } catch (error) {
       showToast(error.message);
     }
@@ -2045,6 +2052,7 @@
       { id: "planning", label: "Planning", render: renderPlanningSettings },
       { id: "auto-plan", label: "Auto-plan", render: renderAutoPlanSettings },
       { id: "focus", label: "Focus & capture", render: renderFocusSettings },
+      { id: "sound", label: "Sound", render: renderSoundSettings },
       { id: "notifications", label: "Notifications", render: renderNotificationSettings },
       { id: "features", label: "Features", render: renderFeatureSettings },
     ];
@@ -2339,6 +2347,88 @@
     return section;
   }
 
+  function renderSoundSettings() {
+    const sound = window.DriftSound;
+    const prefs = sound?.getPrefs() ?? { enabled: true, volume: 0.32, palette: "hybrid", typing: false };
+    const { section, card } = createSettingsSection("sound", "Sound", "Quiet feedback for captures, completions, moves, and reminders. Generated locally; nothing is downloaded.", "sound");
+    const update = (patch) => {
+      const next = sound?.setPrefs(patch) ?? { ...prefs, ...patch };
+      Object.assign(prefs, next);
+    };
+
+    settingsRow(card, "Interface sounds", "Quiet feedback for captures, completions, moves, and reminders.", makeToggle(prefs.enabled, "Interface sounds", (next) => {
+      update({ enabled: next });
+      if (next) sound?.play("tap");
+    }));
+
+    const palettes = element("div", "sound-palettes");
+    for (const [id, name, description] of [
+      ["wood", "Paper & wood", "Dry, short, close to the desk."],
+      ["glass", "Felt & glass", "Warm, airy, a little more melodic."],
+      ["hybrid", "Hybrid", "A paper transient with a soft tone."],
+    ]) {
+      const button = element("button", `sound-palette${prefs.palette === id ? " active" : ""}`);
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(prefs.palette === id));
+      button.append(element("span", "sound-palette-name", name), element("span", "", description));
+      const dots = element("span", "sound-palette-dots");
+      dots.append(element("i"), element("i"), element("i"));
+      button.append(dots);
+      button.addEventListener("click", () => {
+        update({ palette: id, enabled: true });
+        palettes.querySelectorAll(".sound-palette").forEach((node) => {
+          node.classList.toggle("active", node === button);
+          node.setAttribute("aria-pressed", String(node === button));
+        });
+        sound?.play("complete");
+      });
+      palettes.append(button);
+    }
+    settingsRow(card, "Sound character", "Try each palette on your speakers and headphones.", palettes);
+
+    const volumeWrap = element("div", "inline sound-volume");
+    const volume = element("input", "");
+    volume.type = "range";
+    volume.min = "0";
+    volume.max = "100";
+    volume.step = "1";
+    volume.value = String(Math.round(prefs.volume * 100));
+    volume.setAttribute("aria-label", "Sound volume");
+    const volumeValue = element("strong", "settings-range-value", `${Math.round(prefs.volume * 100)}%`);
+    volume.addEventListener("input", () => {
+      volumeValue.textContent = `${volume.value}%`;
+      update({ volume: Number(volume.value) / 100 });
+    });
+    volume.addEventListener("change", () => sound?.play("tap"));
+    volumeWrap.append(volume, volumeValue);
+    settingsRow(card, "Volume", "Deliberately low by default.", volumeWrap);
+
+    settingsRow(card, "Typing texture", "A very quiet tick while writing in a field. Off by default.", makeToggle(prefs.typing, "Typing texture", (next) => {
+      update({ typing: next });
+      if (next) sound?.play("key");
+    }));
+
+    const previews = element("div", "sound-previews");
+    for (const [name, label] of [
+      ["capture", "Capture"],
+      ["complete", "Complete"],
+      ["reminder", "Reminder"],
+      ["move", "Move"],
+      ["error", "Error"],
+      ["focus", "Focus"],
+    ]) {
+      const button = element("button", "btn ghost sm", label);
+      button.type = "button";
+      button.addEventListener("click", () => {
+        if (!prefs.enabled) update({ enabled: true });
+        sound?.play(name);
+      });
+      previews.append(button);
+    }
+    settingsRow(card, "Preview", "Listen before you choose.", previews);
+    return section;
+  }
+
   function renderNotificationSettings() {
     const settings = state.settings;
     const notifications = { ...DEFAULT_NOTIFICATIONS, ...settings.notifications };
@@ -2405,12 +2495,15 @@
     } else if (section === "features") {
       state.settings.features = { ...DEFAULT_FEATURES };
       updateSettings({ featuresJson: JSON.stringify(DEFAULT_FEATURES) });
+    } else if (section === "sound") {
+      window.DriftSound?.setPrefs(window.DriftSound.DEFAULT_PREFS);
     }
     renderSettings();
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    window.DriftSound?.init();
     $("settingsBack").addEventListener("click", () => setView("today"));
     $("settingsThemeToggle").addEventListener("click", () => updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" }));
     window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
