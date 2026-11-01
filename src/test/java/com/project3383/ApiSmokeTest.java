@@ -1915,6 +1915,226 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.code").value("MFA_REQUIRED"));
     }
 
+    @Test
+    void magicLinkCreatesAccountSignsInAndRejectsReplay() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        String email = "magic-" + System.nanoTime() + "@example.com";
+
+        MvcResult requested = mockMvc.perform(post("/api/auth/magic")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("email", email, "next", "/"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sent").value(true))
+            .andExpect(jsonPath("$.message").value("If that email can receive mail, a one-time link is on its way."))
+            .andExpect(jsonPath("$.devUrl").isNotEmpty())
+            .andReturn();
+        String devUrl = objectMapper.readTree(requested.getResponse().getContentAsString())
+            .path("devUrl").asText();
+        java.net.URI uri = java.net.URI.create(devUrl);
+        String pathAndQuery = uri.getRawPath() + "?" + uri.getRawQuery();
+
+        MvcResult verified = mockMvc.perform(get(pathAndQuery).session(session))
+            .andExpect(status().isFound())
+            .andReturn();
+        String location = verified.getResponse().getRedirectedUrl();
+        if (location == null || !location.endsWith("/")) {
+            throw new AssertionError("Magic sign-in did not redirect to the app: " + location);
+        }
+        MockHttpSession signedIn = (MockHttpSession) verified.getRequest().getSession(false);
+        mockMvc.perform(get("/api/bootstrap").session(signedIn))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email))
+            .andExpect(jsonPath("$.user.isGuest").value(0))
+            .andExpect(jsonPath("$.workspaces[0].boards[0].name").value("My tasks"));
+
+        Integer used = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM magic_link_token WHERE email = ? AND used_at IS NOT NULL
+            """, Integer.class, email);
+        if (used == null || used != 1) throw new AssertionError("Magic token was not consumed.");
+        Integer queued = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM email_message WHERE recipient = ? AND kind = 'magic' AND status = 'queued'
+            """, Integer.class, email);
+        if (queued == null || queued != 1) throw new AssertionError("Magic-link email was not queued.");
+
+        MvcResult replay = mockMvc.perform(get(pathAndQuery).session(signedIn))
+            .andExpect(status().isFound())
+            .andReturn();
+        if (!String.valueOf(replay.getResponse().getRedirectedUrl()).contains("/auth?error=magic_state")) {
+            throw new AssertionError("A reused magic link was not rejected.");
+        }
+        MvcResult crossBrowser = mockMvc.perform(get(pathAndQuery).session(new MockHttpSession()))
+            .andExpect(status().isFound())
+            .andReturn();
+        if (!String.valueOf(crossBrowser.getResponse().getRedirectedUrl()).contains("/auth?error=magic_state")) {
+            throw new AssertionError("A magic link in another browser was not rejected.");
+        }
+    }
+
+    @Test
+    void magicLinkForMfaAccountRequiresSecondFactor() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        String email = "magic-mfa-" + System.nanoTime() + "@example.com";
+        mockMvc.perform(post("/api/auth/signup")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "Magic MFA",
+                    "email", email,
+                    "password", "Password123"
+                ))))
+            .andExpect(status().isOk());
+        MvcResult setup = mockMvc.perform(post("/api/security/mfa")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("action", "setup"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String secret = objectMapper.readTree(setup.getResponse().getContentAsString()).path("secret").asText();
+        String code = totp(secret);
+        mockMvc.perform(post("/api/security/mfa")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "enable", "secret", secret, "code", code))))
+            .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/auth/signout").session(session)).andExpect(status().isOk());
+
+        MockHttpSession magicSession = new MockHttpSession();
+        MvcResult requested = mockMvc.perform(post("/api/auth/magic")
+                .session(magicSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("email", email, "next", "/"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        java.net.URI devUrl = java.net.URI.create(objectMapper.readTree(
+            requested.getResponse().getContentAsString()).path("devUrl").asText());
+
+        MvcResult verified = mockMvc.perform(get(devUrl.getRawPath() + "?" + devUrl.getRawQuery())
+                .session(magicSession))
+            .andExpect(status().isFound())
+            .andReturn();
+        String location = verified.getResponse().getRedirectedUrl();
+        if (location == null || !location.contains("/auth?mfa=1&challenge=")) {
+            throw new AssertionError("MFA-enabled magic sign-in skipped the challenge: " + location);
+        }
+        String challenge = null;
+        for (String part : java.net.URI.create(location).getRawQuery().split("&")) {
+            if (part.startsWith("challenge=")) {
+                challenge = java.net.URLDecoder.decode(part.substring("challenge=".length()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            }
+        }
+        if (challenge == null) throw new AssertionError("MFA challenge was missing from the redirect.");
+
+        MvcResult mfaVerified = mockMvc.perform(post("/api/auth/mfa/challenge")
+                .session(magicSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("challenge", challenge, "code", code))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email))
+            .andReturn();
+        MockHttpSession verifiedSession = (MockHttpSession) mfaVerified.getRequest().getSession(false);
+        mockMvc.perform(get("/api/bootstrap").session(verifiedSession))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email));
+    }
+
+    @Test
+    void searchFiltersCoverLabelsStatusAndArchivedRestore() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+
+        MvcResult alpha = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Filter alpha",
+                    "description", "A focused search target",
+                    "priority", "high",
+                    "labels", List.of("Focus")
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String alphaId = objectMapper.readTree(alpha.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+
+        MvcResult beta = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Filter beta",
+                    "priority", "low"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String betaId = objectMapper.readTree(beta.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+        mockMvc.perform(post("/api/tasks/" + betaId + "/complete").session(session))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/search")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("q", "Filter")
+                .param("status", "open")
+                .param("priority", "high")
+                .param("boardId", boardId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.results[0].title").value("Filter alpha"))
+            .andExpect(jsonPath("$.results[0].labels[0].name").value("Focus"));
+
+        mockMvc.perform(get("/api/search")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("q", "Filter")
+                .param("label", "Focus"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.results[?(@.id == '" + alphaId + "')]").isNotEmpty());
+
+        mockMvc.perform(get("/api/search")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("status", "done")
+                .param("q", ""))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.results[?(@.id == '" + betaId + "')]").isNotEmpty())
+            .andExpect(jsonPath("$.results[?(@.id == '" + alphaId + "')]").isEmpty());
+
+        jdbc.update("UPDATE task SET archived_at = ? WHERE id = ?", Instant.now().toString(), alphaId);
+        mockMvc.perform(get("/api/search")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("status", "archived"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.results[?(@.id == '" + alphaId + "')]").isNotEmpty());
+        mockMvc.perform(get("/api/archive").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tasks[?(@.id == '" + alphaId + "')].archivedAt").isNotEmpty());
+
+        mockMvc.perform(post("/api/tasks/" + alphaId + "/restore").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.archivedAt").value(nullValue()));
+        mockMvc.perform(get("/api/tasks/" + alphaId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.archivedAt").value(nullValue()));
+    }
+
     private String totp(String secret) {
         try {
             int buffer = 0;

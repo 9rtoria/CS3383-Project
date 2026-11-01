@@ -100,6 +100,11 @@ public class TaskController {
         return appService.completeTask(CurrentUser.id(session), id, false);
     }
 
+    @PostMapping("/{id}/restore")
+    public Map<String, Object> restore(HttpSession session, @PathVariable String id) {
+        return appService.restoreTask(CurrentUser.id(session), id);
+    }
+
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(HttpSession session, @PathVariable String id) {
         return appService.deleteTask(CurrentUser.id(session), id);

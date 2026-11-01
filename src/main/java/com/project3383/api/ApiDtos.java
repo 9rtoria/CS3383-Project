@@ -175,6 +175,7 @@ public final class ApiDtos {
     }
 
     public record WorkspaceUpdate(
+        String name,
         Integer retentionDays,
         Integer auditRetentionDays,
         Boolean requireMfa,
@@ -215,6 +216,12 @@ public final class ApiDtos {
         String email,
         String password,
         String totp
+    ) {
+    }
+
+    public record MagicRequest(
+        String email,
+        String next
     ) {
     }
 

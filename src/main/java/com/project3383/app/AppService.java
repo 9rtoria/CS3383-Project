@@ -229,6 +229,10 @@ public class AppService {
         if (input.version() != null && input.version() != currentVersion) {
             throw ApiException.conflict("These settings changed elsewhere.", currentVersion);
         }
+        String name = input.name() == null ? String.valueOf(workspace.get("name")) : input.name().trim();
+        if (name.isEmpty() || name.length() > 80) {
+            throw ApiException.badRequest("Workspace name must be between 1 and 80 characters.");
+        }
         int retentionDays = input.retentionDays() == null
             ? number(workspace.get("retentionDays")) : input.retentionDays();
         int auditRetentionDays = input.auditRetentionDays() == null
@@ -250,14 +254,15 @@ public class AppService {
         boolean publicSharingEnabled = input.publicSharingEnabled() == null
             ? number(workspace.get("publicSharingEnabled")) == 1 : input.publicSharingEnabled();
         jdbc.update("""
-            UPDATE workspace SET retention_days = ?, audit_retention_days = ?, require_mfa = ?,
+            UPDATE workspace SET name = ?, retention_days = ?, audit_retention_days = ?, require_mfa = ?,
                                  ai_enabled = ?, automations_enabled = ?, attachments_enabled = ?,
                                  public_sharing_enabled = ?, version = version + 1
             WHERE id = ? AND version = ?
-            """, retentionDays, auditRetentionDays, requireMfa ? 1 : 0, aiEnabled ? 1 : 0,
+            """, name, retentionDays, auditRetentionDays, requireMfa ? 1 : 0, aiEnabled ? 1 : 0,
             automationsEnabled ? 1 : 0, attachmentsEnabled ? 1 : 0, publicSharingEnabled ? 1 : 0,
             workspaceId, currentVersion);
         List<String> fields = new ArrayList<>();
+        if (input.name() != null) fields.add("name");
         if (input.retentionDays() != null) fields.add("retentionDays");
         if (input.auditRetentionDays() != null) fields.add("auditRetentionDays");
         if (input.requireMfa() != null) fields.add("requireMfa");
@@ -316,6 +321,106 @@ public class AppService {
     public AuthResult verifyMfaChallenge(String challenge, String code) {
         String userId = mfaService.verifyChallenge(challenge, code);
         return new AuthResult(userId, bootstrap(userId), false, null, true);
+    }
+
+    @Transactional
+    public MagicLink requestMagicLink(String email, String ip, String next, String state, String baseUrl) {
+        String normalized = email == null ? "" : email.trim().toLowerCase();
+        if (normalized.isEmpty() || !normalized.contains("@") || normalized.length() > 254) {
+            throw ApiException.badRequest("Enter a valid email address.");
+        }
+        String token = randomToken();
+        String now = Instant.now().toString();
+        String expiresAt = Instant.now().plusSeconds(15 * 60).toString();
+        jdbc.update("""
+            INSERT INTO magic_link_token (id, token_hash, email, purpose, expires_at, used_at, ip_hash, created_at)
+            VALUES (?, ?, ?, 'login', ?, NULL, ?, ?)
+            """, id(), sha256(token), normalized, expiresAt,
+            sha256(ip == null ? "local" : ip).substring(0, 32), now);
+        String safeNext = safeNext(next);
+        String link = baseUrl + "/api/auth/magic/verify?token=" + urlEncode(token)
+            + "&state=" + urlEncode(state == null ? "" : state)
+            + "&next=" + urlEncode(safeNext);
+        String body = "Open this one-time link to sign in to Drift. It expires in 15 minutes.\n\n" + link
+            + "\n\nIf you did not ask to sign in, you can ignore this email.";
+        jdbc.update("""
+            INSERT INTO email_message (id, user_id, recipient, subject, body, kind, status, sent_at, error, created_at)
+            VALUES (?, NULL, ?, 'Your Drift sign-in link', ?, 'magic', 'queued', NULL, NULL, ?)
+            """, id(), normalized, body, now);
+        return new MagicLink(token, link);
+    }
+
+    @Transactional
+    public MagicLogin loginWithMagicToken(String token) {
+        if (blank(token)) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN", "This sign-in link is incomplete.");
+        }
+        Map<String, Object> record = jdbc.queryForList("""
+            SELECT id, email, used_at AS usedAt, expires_at AS expiresAt
+            FROM magic_link_token WHERE token_hash = ?
+            """, sha256(token)).stream().findFirst()
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                "This sign-in link is invalid or has already been used."));
+        String now = Instant.now().toString();
+        if (record.get("usedAt") != null || Instant.parse(String.valueOf(record.get("expiresAt"))).isBefore(Instant.now())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                "This sign-in link is invalid or has expired.");
+        }
+        int claimed = jdbc.update("""
+            UPDATE magic_link_token SET used_at = ?
+            WHERE id = ? AND used_at IS NULL AND expires_at > ?
+            """, now, record.get("id"), now);
+        if (claimed != 1) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                "This sign-in link is invalid or has already been used.");
+        }
+        String email = String.valueOf(record.get("email"));
+        Map<String, Object> existing = jdbc.queryForList("""
+            SELECT id, mfa_enabled AS mfaEnabled, deleted_at AS deletedAt
+            FROM app_user WHERE lower(email) = ?
+            """, email).stream().findFirst().orElse(null);
+        String userId;
+        boolean mfaEnabled;
+        if (existing != null) {
+            if (existing.get("deletedAt") != null) {
+                throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_TOKEN", "That account is no longer available.");
+            }
+            userId = String.valueOf(existing.get("id"));
+            mfaEnabled = number(existing.get("mfaEnabled")) == 1;
+        } else {
+            userId = id();
+            String displayName = email.substring(0, email.indexOf('@'));
+            jdbc.update("""
+                INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
+                VALUES (?, ?, ?, NULL, 0, 'Asia/Hong_Kong', ?)
+                """, userId, email, displayName, now);
+            createStarterWorkspace(userId, displayName + "'s workspace");
+            mfaEnabled = false;
+        }
+        String challenge = mfaEnabled ? mfaService.createChallenge(userId) : null;
+        return new MagicLogin(userId, email, challenge);
+    }
+
+    @Transactional
+    public Map<String, Object> completeMagicLogin(String userId) {
+        return bootstrap(userId);
+    }
+
+    private String safeNext(String value) {
+        if (value == null || value.isBlank()) return "/";
+        String next = value.trim();
+        if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
+        return next;
+    }
+
+    private String urlEncode(String value) {
+        return java.net.URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
+    }
+
+    public record MagicLink(String token, String devUrl) {
+    }
+
+    public record MagicLogin(String userId, String email, String mfaChallenge) {
     }
 
     public record AuthResult(String userId, Map<String, Object> bootstrap, boolean mfaRequired,
@@ -848,8 +953,12 @@ public class AppService {
         requireMembership(userId, workspaceId);
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
         List<Map<String, Object>> tasks = jdbc.queryForList("""
-            SELECT t.id, t.title, t.priority, t.due_date AS dueDate,
-                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName
+            SELECT t.id, t.title, t.description, t.priority, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
+                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName,
+                   c.is_done AS completed, t.archived_at AS archivedAt,
+                   CASE WHEN c.is_done = 1 THEN t.updated_at ELSE NULL END AS completedAt,
+                   t.updated_at AS updatedAt
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
@@ -858,6 +967,10 @@ public class AppService {
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
             ORDER BY t.updated_at DESC LIMIT 500
             """, workspaceId, userId, canSeePrivate);
+        for (Map<String, Object> task : tasks) {
+            task.put("completed", number(task.get("completed")));
+            task.put("labels", labelsForTask(String.valueOf(task.get("id"))));
+        }
         return linked(Map.of("tasks", tasks));
     }
 
@@ -868,9 +981,11 @@ public class AppService {
         String start = LocalDate.now().toString();
         String end = LocalDate.now().plusDays(range).toString();
         List<Map<String, Object>> tasks = jdbc.queryForList("""
-            SELECT t.id, t.title, t.priority, t.due_date AS dueDate,
-                   substr(t.due_date, 1, 10) AS date,
-                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName
+            SELECT t.id, t.title, t.priority, t.due_date AS dueDate, t.due_all_day AS dueAllDay,
+                   t.estimate_minutes AS estimateMinutes, substr(t.due_date, 1, 10) AS date,
+                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName,
+                   (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id) AS subtaskCount,
+                   (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id AND s.completed = 1) AS subtaskDone
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
@@ -882,6 +997,8 @@ public class AppService {
             """, workspaceId, userId, canSeePrivate, start, end);
         Map<String, List<Map<String, Object>>> byDate = new HashMap<>();
         for (Map<String, Object> task : tasks) {
+            task.put("labels", labelsForTask(String.valueOf(task.get("id"))));
+            task.put("completed", 0);
             byDate.computeIfAbsent((String) task.get("date"), key -> new ArrayList<>()).add(task);
         }
         List<Map<String, Object>> groups = new ArrayList<>();
@@ -928,27 +1045,91 @@ public class AppService {
         return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replaceAll("\\r?\\n", "\\n");
     }
 
-    public Map<String, Object> search(String userId, String workspaceId, String query) {
+    public Map<String, Object> search(String userId, String workspaceId, String query, String status,
+                                      String priority, String boardId, String label,
+                                      String dateFrom, String dateTo) {
         requireMembership(userId, workspaceId);
-        String term = query == null ? "" : query.trim().toLowerCase();
-        if (term.isEmpty()) return linked(Map.of("results", List.of()));
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
-        String like = "%" + term + "%";
-        List<Map<String, Object>> results = jdbc.queryForList("""
+        String term = query == null ? "" : query.trim().toLowerCase();
+        String normalizedStatus = status == null ? "all" : status.trim().toLowerCase();
+        StringBuilder sql = new StringBuilder("""
             SELECT t.id, t.title, t.description, t.priority, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay, t.archived_at AS archivedAt,
+                   CASE WHEN c.is_done = 1 THEN t.updated_at ELSE NULL END AS completedAt,
                    t.board_id AS boardId, b.name AS boardName, c.name AS columnName,
-                   c.is_done AS completed
+                   c.is_done AS isDone, t.assignee_id AS assigneeId, u.display_name AS assigneeName,
+                   (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id) AS subtaskCount,
+                   (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id AND s.completed = 1) AS subtaskDone
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id
-            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+            LEFT JOIN app_user u ON u.id = t.assignee_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL
               AND b.workspace_id = t.workspace_id
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-              AND (lower(t.title) LIKE ? OR lower(t.description) LIKE ?)
-            ORDER BY c.is_done, t.updated_at DESC
-            LIMIT 50
-            """, workspaceId, userId, canSeePrivate, like, like);
-        return linked(Map.of("results", results));
+            """);
+        List<Object> args = new ArrayList<>(List.of(workspaceId, userId, canSeePrivate));
+        if ("archived".equals(normalizedStatus)) {
+            sql.append(" AND t.archived_at IS NOT NULL");
+        } else {
+            sql.append(" AND t.archived_at IS NULL");
+            if ("open".equals(normalizedStatus)) {
+                sql.append(" AND c.is_done = 0");
+            } else if ("done".equals(normalizedStatus)) {
+                sql.append(" AND c.is_done = 1");
+            } else if ("overdue".equals(normalizedStatus)) {
+                sql.append(" AND c.is_done = 0 AND t.due_date IS NOT NULL AND substr(t.due_date, 1, 10) < ?");
+                args.add(LocalDate.now().toString());
+            }
+        }
+        if (priority != null && !priority.isBlank()) {
+            sql.append(" AND t.priority = ?");
+            args.add(priority.trim().toLowerCase());
+        }
+        if (boardId != null && !boardId.isBlank()) {
+            sql.append(" AND t.board_id = ?");
+            args.add(boardId.trim());
+        }
+        if (label != null && !label.isBlank()) {
+            sql.append("""
+                 AND EXISTS (SELECT 1 FROM task_label tl JOIN label l ON l.id = tl.label_id
+                             WHERE tl.task_id = t.id AND lower(l.name) = lower(?))
+                """);
+            args.add(label.trim());
+        }
+        if (dateFrom != null && !dateFrom.isBlank()) {
+            sql.append(" AND t.due_date IS NOT NULL AND substr(t.due_date, 1, 10) >= ?");
+            args.add(dateFrom.trim());
+        }
+        if (dateTo != null && !dateTo.isBlank()) {
+            sql.append(" AND t.due_date IS NOT NULL AND substr(t.due_date, 1, 10) <= ?");
+            args.add(dateTo.trim());
+        }
+        if (!term.isEmpty()) {
+            String[] tokens = term.split("\\s+");
+            int used = 0;
+            for (String token : tokens) {
+                if (token.isBlank()) continue;
+                if (used >= 8) break;
+                String like = "%" + token + "%";
+                sql.append("""
+                     AND (lower(t.title) LIKE ? OR lower(t.description) LIKE ?
+                          OR EXISTS (SELECT 1 FROM task_label tl JOIN label l ON l.id = tl.label_id
+                                     WHERE tl.task_id = t.id AND lower(l.name) LIKE ?))
+                    """);
+                args.add(like);
+                args.add(like);
+                args.add(like);
+                used++;
+            }
+        }
+        sql.append(" ORDER BY c.is_done, t.updated_at DESC LIMIT 50");
+        List<Map<String, Object>> results = jdbc.queryForList(sql.toString(), args.toArray());
+        for (Map<String, Object> task : results) {
+            task.put("completed", number(task.get("isDone")));
+            task.put("labels", labelsForTask(String.valueOf(task.get("id"))));
+        }
+        return linked(Map.of("results", results, "total", results.size(), "query", term));
     }
 
     public Map<String, Object> insights(String userId, String workspaceId) {
@@ -1488,9 +1669,13 @@ public class AppService {
         requireMembership(userId, workspaceId);
         int canSeePrivate = roleRank(roleFor(userId, workspaceId)) >= roleRank("ADMIN") ? 1 : 0;
         return linked(Map.of("tasks", jdbc.queryForList("""
-            SELECT t.id, t.title, c.is_done AS completed, t.board_id AS boardId
+            SELECT t.id, t.title, t.description, t.priority, t.start_date AS startDate,
+                   t.due_date AS dueDate, t.estimate_minutes AS estimateMinutes,
+                   c.is_done AS completed, t.board_id AS boardId, b.name AS boardName,
+                   c.name AS columnName, t.assignee_id AS assigneeId, u.display_name AS assigneeName
             FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
+            LEFT JOIN app_user u ON u.id = t.assignee_id
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND b.workspace_id = t.workspace_id
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
             ORDER BY t.title
@@ -1980,20 +2165,41 @@ public class AppService {
         return result;
     }
 
+    public Map<String, Object> restoreTask(String userId, String taskId) {
+        Map<String, Object> current = taskRow(taskId);
+        requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
+        requireTaskBoardVisible(userId, current);
+        if (current.get("archivedAt") == null) {
+            throw ApiException.badRequest("This task is not archived.");
+        }
+        String now = Instant.now().toString();
+        jdbc.update("""
+            UPDATE task SET archived_at = NULL, version = version + 1, updated_at = ?
+            WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL
+            """, now, taskId, current.get("workspaceId"));
+        recordActivity((String) current.get("workspaceId"), taskId, userId, "task.restored", "task", taskId);
+        audit((String) current.get("workspaceId"), userId, "task.restored", "task", taskId, Map.of());
+        return linked(Map.of("task", task(userId, taskId)));
+    }
+
     private List<Map<String, Object>> boards(String userId, String workspaceId) {
         String role = roleFor(userId, workspaceId);
         boolean canSeePrivate = roleRank(role) >= roleRank("ADMIN");
         List<Map<String, Object>> boards = canSeePrivate
             ? jdbc.queryForList("""
                 SELECT b.id, b.name, b.description, b.color, b.visibility, b.version,
-                       b.share_enabled AS shareEnabled, b.archived_at AS archivedAt
+                       b.share_enabled AS shareEnabled, b.archived_at AS archivedAt,
+                       (SELECT COUNT(*) FROM task t WHERE t.board_id = b.id
+                          AND t.deleted_at IS NULL AND t.archived_at IS NULL) AS taskCount
                 FROM board b
                 WHERE b.workspace_id = ? AND b.deleted_at IS NULL AND b.archived_at IS NULL
                 ORDER BY b.position, b.created_at
                 """, workspaceId)
             : jdbc.queryForList("""
                 SELECT b.id, b.name, b.description, b.color, b.visibility, b.version,
-                       b.share_enabled AS shareEnabled, b.archived_at AS archivedAt
+                       b.share_enabled AS shareEnabled, b.archived_at AS archivedAt,
+                       (SELECT COUNT(*) FROM task t WHERE t.board_id = b.id
+                          AND t.deleted_at IS NULL AND t.archived_at IS NULL) AS taskCount
                 FROM board b
                 WHERE b.workspace_id = ? AND b.deleted_at IS NULL AND b.archived_at IS NULL
                   AND (b.visibility = 'workspace' OR b.created_by = ?)
@@ -2020,7 +2226,10 @@ public class AppService {
                    t.assignee_id AS assigneeId, t.recurrence_rule AS recurrenceRule,
                    t.recurrence_ends_at AS recurrenceEndsAt,
                    u.display_name AS assigneeName, u.email AS assigneeEmail,
-                   c.is_done AS completed
+                   c.is_done AS completed,
+                   (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id) AS subtaskCount,
+                   (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id AND s.completed = 1) AS subtaskDone,
+                   (SELECT COUNT(*) FROM task_comment tc WHERE tc.task_id = t.id) AS commentCount
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id

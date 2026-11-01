@@ -10,61 +10,96 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-calendar-up" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M8 3v4M16 3v4M3.5 9.5h17M12 17v-4M9.5 15l2.5-2.5 2.5 2.5"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M8 3v4M16 3v4M3.5 9.5h17"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.7" cy="10.7" r="6.2"/><path d="M15.4 15.4 21 21"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/></symbol>
+    <symbol id="i-insights" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.4"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h7M15 7h5M4 17h3M11 17h9M8 4v6M15 14v6"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M8 3v4M16 3v4M8 17v4M16 17v4M3 8h4M17 8h4M3 16h4M17 16h4"/><rect x="8" y="8" width="8" height="8" rx="1.4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9.5a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 19h4"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.3 2.3 0 1 1 3.8 1.8c-.9.7-1.6 1.2-1.6 2.5M12 17h.01"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zM17 9a4 4 0 0 1 0 6M19.5 6.5a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></symbol>
+    <symbol id="i-capture" viewBox="0 0 24 24"><path d="m12 3 1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7L12 3zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 9.5 5 5 5-5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M20 15a3 3 0 0 1-3 3H8l-4 3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-swirl" viewBox="0 0 24 24"><path d="M18.5 9.5A7 7 0 0 0 6 7.2 7 7 0 0 0 8.4 19a5.2 5.2 0 0 0 5.2-9.1 3 3 0 0 0-3.4 4.7"/></symbol>
+  </svg>
   <div class="app-shell">
     <aside class="sidebar" aria-label="Workspace navigation">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">D</div>
-        <div>
+      <div class="brand-row">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#i-swirl"/></svg></span>
           <strong>Drift</strong>
-          <small>Project3383</small>
         </div>
+        <button type="button" id="newWorkspaceButton" class="icon-btn quiet" title="New workspace" aria-label="New workspace"><svg class="icon"><use href="#i-plus"/></svg></button>
+        <button type="button" id="membersButton" class="icon-btn quiet" title="Members" aria-label="Members"><svg class="icon"><use href="#i-user"/></svg></button>
+      </div>
+
+      <div class="workspace-switch">
+        <span id="workspaceInitial" class="workspace-avatar" aria-hidden="true">N</span>
+        <select id="workspaceSelect" aria-label="Workspace"></select>
+        <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
       </div>
 
       <nav class="nav" aria-label="Views">
-        <button type="button" data-view="today" class="active">Today</button>
-        <button type="button" data-view="board">Board</button>
-        <button type="button" data-view="calendar">Calendar</button>
-        <button type="button" data-view="upcoming">Upcoming</button>
-        <button type="button" data-view="archive">Archive</button>
-        <button type="button" data-view="search">Search</button>
-        <button type="button" data-view="insights">Insights</button>
-        <button type="button" data-view="settings">Settings</button>
+        <button type="button" data-view="today" class="active"><svg class="icon nav-icon"><use href="#i-sun"/></svg><span>Today</span></button>
+        <button type="button" data-view="upcoming"><svg class="icon nav-icon"><use href="#i-calendar-up"/></svg><span>Upcoming</span></button>
+        <button type="button" data-view="calendar"><svg class="icon nav-icon"><use href="#i-calendar"/></svg><span>Calendar</span></button>
+        <button type="button" data-view="search"><svg class="icon nav-icon"><use href="#i-search"/></svg><span>Search</span></button>
+        <button type="button" data-view="archive"><svg class="icon nav-icon"><use href="#i-archive"/></svg><span>Archive</span></button>
+        <button type="button" data-view="insights"><svg class="icon nav-icon"><use href="#i-insights"/></svg><span>Insights</span></button>
       </nav>
 
-      <div>
-        <div class="side-label">Workspace</div>
-        <select id="workspaceSelect" class="select" aria-label="Workspace" style="margin-bottom:6px"></select>
-        <button type="button" id="newWorkspaceButton" class="btn ghost sm" style="margin-bottom:10px;padding-left:0">+ New team</button>
-        <button type="button" id="membersButton" class="btn ghost sm" style="margin-bottom:10px;padding-left:0">Members</button>
-        <div class="side-label">Boards</div>
+      <div class="boards-section">
+        <div class="side-label boards-label">Boards <button type="button" id="newBoardButton" class="icon-btn quiet tiny" title="New board" aria-label="New board"><svg class="icon"><use href="#i-plus"/></svg></button></div>
         <div id="boardList" class="board-list"></div>
-        <button type="button" id="newBoardButton" class="btn ghost sm" style="margin-top:6px;padding-left:0">+ New board</button>
       </div>
 
       <div class="sidebar-footer">
-        <div class="small muted">Local SQLite · Spring Boot</div>
-        <div id="accountName" class="small" style="margin-top:6px">Guest</div>
-        <div class="inline" style="display:flex;gap:6px;margin-top:6px">
-          <button type="button" id="authButton" class="btn ghost sm" style="padding-left:0">Sign in</button>
-          <button type="button" id="signOutButton" class="btn ghost sm hidden" style="padding-left:0">Sign out</button>
+        <div class="account-card">
+          <span id="accountAvatar" class="account-avatar" aria-hidden="true">G</span>
+          <div class="account-copy">
+            <strong id="accountName">Guest workspace</strong>
+            <span id="accountEmail">Local session</span>
+          </div>
+          <button type="button" class="icon-btn quiet" data-view="settings" title="Settings" aria-label="Settings"><svg class="icon"><use href="#i-settings"/></svg></button>
+        </div>
+        <div class="account-links">
+          <button type="button" id="authButton" class="link-btn">Sign in</button>
+          <button type="button" id="signOutButton" class="link-btn hidden">Sign out</button>
         </div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <p id="viewEyebrow" class="eyebrow">Plan</p>
-          <h1 id="viewTitle">Today</h1>
+        <div class="topbar-context">
+          <span id="topbarWorkspace" class="topbar-workspace">Workspace</span>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <strong id="topbarView">Today</strong>
         </div>
         <div class="top-actions">
-          <span id="dateChip" class="date-chip"></span>
-          <button type="button" id="paletteButton" class="btn ghost sm" title="Command palette (Ctrl/Cmd+K)" aria-label="Command palette">⌘K</button>
-          <button type="button" id="shortcutsButton" class="btn ghost sm" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
-          <button type="button" id="captureButton" class="btn">Capture</button>
-          <button type="button" id="autoPlanButton" class="btn">Auto-plan</button>
-          <button type="button" id="notificationsButton" class="btn">Notifications <span id="notificationCount">0</span></button>
-          <button type="button" id="newTaskButton" class="btn primary">New task</button>
+          <span id="dateChip" class="date-chip hidden"></span>
+          <button type="button" id="captureButton" class="btn soft sm capture-top"><svg class="icon"><use href="#i-capture"/></svg><span>Capture</span><kbd>C</kbd></button>
+          <button type="button" id="paletteButton" class="icon-btn" title="Command palette (Ctrl/Cmd+K)" aria-label="Command palette"><svg class="icon"><use href="#i-command"/></svg></button>
+          <button type="button" id="searchTopButton" class="icon-btn" title="Search" aria-label="Search"><svg class="icon"><use href="#i-search"/></svg></button>
+          <button type="button" id="notificationsButton" class="icon-btn notification-btn" title="Notifications" aria-label="Notifications"><svg class="icon"><use href="#i-bell"/></svg><span id="notificationCount" class="notification-dot zero">0</span></button>
+          <button type="button" id="shortcutsButton" class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><svg class="icon"><use href="#i-help"/></svg></button>
+          <button type="button" id="soundTopButton" class="icon-btn" title="Sound" aria-label="Sound"><svg class="icon"><use href="#i-volume"/></svg></button>
+          <button type="button" id="themeTopButton" class="icon-btn" title="Toggle theme" aria-label="Toggle theme"><svg class="icon"><use href="#i-moon"/></svg></button>
+          <button type="button" id="autoPlanButton" class="hidden"></button>
+          <button type="button" id="newTaskButton" class="hidden"></button>
+          <p id="viewEyebrow" class="hidden">Plan</p>
+          <h1 id="viewTitle" class="hidden">Today</h1>
         </div>
       </header>
 
@@ -75,6 +110,54 @@
       </div>
 
       <section id="todayView">
+        <section class="today-hero">
+          <div class="hero-copy">
+            <p class="hero-date" id="todayDateLabel">Sunday, November 1</p>
+            <h1 class="hero-title" id="todayGreeting">Good evening.</h1>
+            <p class="hero-sub">Your day is open. Pick one meaningful thing, or capture whatever is on your mind.</p>
+            <div class="hero-actions">
+              <button type="button" id="todayCaptureButton" class="btn primary"><svg class="icon"><use href="#i-capture"/></svg><span>Capture a task</span></button>
+              <button type="button" id="todayMonthButton" class="btn"><svg class="icon"><use href="#i-calendar"/></svg><span>See the month</span></button>
+            </div>
+          </div>
+          <div class="capacity-card">
+            <div class="capacity-eyebrow">Today's capacity</div>
+            <div class="capacity-line">
+              <strong id="capacityNumber">0m</strong>
+              <span class="capacity-of">of <span id="capacityTotal">300</span> min</span>
+              <span id="capacityBadge" class="badge moss">Open</span>
+            </div>
+            <div id="capacityBar" class="capacity-bar"><span style="width:0%"></span></div>
+            <div class="capacity-stats">
+              <span id="capacitySuggested">0 suggested</span>
+              <span id="capacityHint">No tasks chosen yet.</span>
+            </div>
+            <div class="capacity-actions">
+              <button type="button" id="smartPlanButton" class="btn soft sm">Smart Plan</button>
+              <button type="button" id="capacityRebalanceButton" class="btn ghost sm">Rebalance</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="auto-plan-card" id="todayPlanCard">
+          <div class="auto-plan-card-head">
+            <div>
+              <p class="eyebrow">Auto-plan · suggest only</p>
+              <h2>A plan that respects your limits</h2>
+              <p id="todayPlanStats">0 blocks today · 0h 0m planned</p>
+            </div>
+            <div class="auto-plan-card-actions">
+              <button type="button" id="todayPlanRefresh" class="btn ghost sm">Refresh</button>
+              <button type="button" id="todayPlanReview" class="btn soft sm">Review plans</button>
+              <button type="button" id="todayPlanClear" class="btn ghost sm">Clear plan</button>
+            </div>
+          </div>
+          <div class="auto-plan-progress">
+            <span class="auto-plan-limit badge moss">Within weekly limit</span>
+            <div id="todayPlanWeek" class="auto-plan-week"></div>
+          </div>
+        </section>
+
         <div id="dayFlowPanel" class="panel day-flow-panel" style="margin-bottom:16px">
           <div class="day-flow-head">
             <div>
@@ -115,39 +198,70 @@
           </div>
         </div>
         <div class="today-grid">
-          <div class="panel">
+          <div class="panel today-work-panel">
             <div class="section-head">
-              <h2>Today’s work</h2>
+              <div>
+                <h2>A short list, not a backlog</h2>
+                <p class="hint">Ordered by what needs you first. Keep it honest.</p>
+              </div>
               <button type="button" id="applyTodayPlanButton" class="btn sm">Apply plan</button>
             </div>
-            <p class="hint">A calm starting point. Choose one thing and make it visible.</p>
             <div id="todayList" class="today-list" data-i18n-skip></div>
           </div>
-          <aside class="panel" aria-label="Capacity">
-            <h2>Capacity</h2>
-            <p class="hint">Estimated work against your day.</p>
-            <div id="capacityNumber" class="capacity-number">0m</div>
-            <div id="capacityBar" class="capacity-bar"><span style="width:0%"></span></div>
-            <p id="capacityHint" class="small muted">No tasks chosen yet.</p>
+          <aside class="panel today-glance" aria-label="At a glance">
+            <div class="section-head">
+              <div>
+                <h2>At a glance</h2>
+                <p class="hint">A small read on the days ahead.</p>
+              </div>
+            </div>
+            <div class="glance-row"><span>Open tasks</span><strong id="glanceOpen">0</strong></div>
+            <div class="glance-row"><span>Due today</span><strong id="glanceDue">0</strong></div>
+            <div class="glance-row"><span>Chosen today</span><strong id="glanceChosen">0</strong></div>
+            <button type="button" id="glanceInsightsButton" class="glance-link">Next 14 days <span aria-hidden="true">→</span></button>
           </aside>
         </div>
       </section>
 
       <section id="boardView" class="hidden" aria-label="Board">
         <div class="board-header">
-          <div class="grow">
-            <span id="boardVisibility" class="badge slate">Shared with workspace</span>
-            <h2 id="boardTitle" class="page-title">Board</h2>
-            <p id="boardDescription" class="muted small"></p>
+          <div class="board-heading">
+            <p class="eyebrow" id="boardEyebrow">Workspace · Shared with workspace</p>
+            <h1 id="boardTitle" class="page-title">Board</h1>
+            <p class="board-sub"><span id="boardDescription"></span><span id="boardMeta" class="muted small"></span></p>
+            <span id="boardVisibility" class="hidden">Shared with workspace</span>
           </div>
           <div class="board-header-actions">
-            <span id="boardMeta" class="muted small"></span>
-            <button type="button" id="boardSettingsButton" class="btn sm">Board settings</button>
-            <button type="button" id="boardShareButton" class="btn ghost sm">Share link</button>
-            <button type="button" id="boardDuplicateButton" class="btn ghost sm">Duplicate</button>
-            <button type="button" id="boardArchiveButton" class="btn ghost sm">Archive</button>
-            <button type="button" id="boardDeleteButton" class="btn danger sm">Delete</button>
+            <div class="view-switch" role="group" aria-label="Board layout">
+              <button type="button" id="boardViewButton" class="active"><svg class="icon"><use href="#i-board"/></svg><span>Board</span></button>
+              <button type="button" id="listViewButton"><svg class="icon"><use href="#i-list"/></svg><span>List</span></button>
+            </div>
+            <button type="button" id="boardNewTaskButton" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg><span>New task</span></button>
+            <button type="button" id="boardMoreButton" class="icon-btn" aria-label="Board actions" aria-expanded="false">⋯</button>
+            <div id="boardMoreMenu" class="board-more-menu hidden">
+              <button type="button" id="boardSettingsButton" class="menu-item">Board settings</button>
+              <button type="button" id="boardShareButton" class="menu-item">Share link</button>
+              <button type="button" id="boardDuplicateButton" class="menu-item">Duplicate</button>
+              <button type="button" id="boardArchiveButton" class="menu-item">Archive</button>
+              <button type="button" id="boardDeleteButton" class="menu-item danger">Delete</button>
+            </div>
           </div>
+        </div>
+        <div class="board-toolbar">
+          <label class="board-search"><svg class="icon"><use href="#i-search"/></svg><input id="boardFilterInput" type="search" placeholder="Filter this board…"></label>
+          <select id="boardPriorityFilter" class="select" aria-label="Filter by priority">
+            <option value="">All priorities</option>
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="none">None</option>
+          </select>
+          <select id="boardAssigneeFilter" class="select" aria-label="Filter by assignee">
+            <option value="">Everyone</option>
+          </select>
+          <span id="boardTaskCount" class="board-task-count"></span>
+          <button type="button" id="boardAddTaskButton" class="icon-btn" aria-label="Add task"><svg class="icon"><use href="#i-plus"/></svg></button>
         </div>
         <div id="bulkToolbar" class="bulk-toolbar hidden">
           <strong id="bulkCount" class="bulk-count">0 selected</strong>
@@ -164,56 +278,155 @@
       </section>
 
       <section id="calendarView" class="hidden" aria-label="Calendar">
-        <div class="panel">
-          <div class="section-head">
-            <div>
-              <h2 id="calendarTitle">Calendar</h2>
-              <p class="hint">Tasks and scheduled blocks by due date.</p>
-            </div>
-            <div class="top-actions">
-              <a id="calendarIcsLink" class="btn sm" href="/api/calendar/ics">Download ICS</a>
-              <button type="button" id="calendarPrev" class="btn sm">Previous</button>
-              <button type="button" id="calendarNext" class="btn sm">Next</button>
-            </div>
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Time, at a glance</p>
+            <h1 class="page-title">Calendar</h1>
+            <p class="page-sub">Dates are commitments; everything else can stay flexible.</p>
           </div>
-          <div id="calendarGrid" class="calendar-grid" data-i18n-skip></div>
+          <div class="page-actions">
+            <a id="calendarIcsLink" class="btn sm" href="/api/calendar/ics">Download ICS</a>
+            <button type="button" id="calendarTodayButton" class="btn sm">Today</button>
+            <button type="button" id="calendarNewTaskButton" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg><span>New task</span></button>
+          </div>
+        </div>
+        <div class="calendar-layout">
+          <div class="calendar-panel">
+            <div class="calendar-head">
+              <div class="calendar-month-nav">
+                <button type="button" id="calendarPrev" class="icon-btn" aria-label="Previous month">‹</button>
+                <button type="button" id="calendarNext" class="icon-btn" aria-label="Next month">›</button>
+                <h2 id="calendarTitle">Calendar</h2>
+              </div>
+              <span id="calendarDatedCount" class="badge slate">0 dated</span>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div id="calendarGrid" class="calendar-grid" data-i18n-skip></div>
+          </div>
+          <aside class="calendar-side">
+            <div class="calendar-side-card">
+              <h3>Pick a day</h3>
+              <p>Select a date to read it without the grid.</p>
+            </div>
+            <div class="calendar-side-card">
+              <h3>Dated tasks</h3>
+              <p id="calendarDatedHint">Tasks with a due date stay in their board, where they belong.</p>
+            </div>
+            <div class="calendar-side-card quote">
+              <blockquote>“A calendar is a promise to your future self.”</blockquote>
+              <small>Keep promises small enough to keep.</small>
+            </div>
+          </aside>
         </div>
       </section>
 
       <section id="upcomingView" class="hidden" aria-label="Upcoming">
-        <div class="panel">
-          <h2>Upcoming</h2>
-          <p class="hint">Tasks with due dates in the next 14 days.</p>
-          <div id="upcomingList" class="today-list" data-i18n-skip></div>
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Planning horizon</p>
+            <h1 class="page-title">Upcoming</h1>
+            <p class="page-sub">A gentle look forward. Nothing here is on fire yet — that’s the point.</p>
+          </div>
+          <div class="page-actions">
+            <div class="view-switch" role="group" aria-label="Upcoming range">
+              <button type="button" data-upcoming-range="7">7 days</button>
+              <button type="button" data-upcoming-range="14" class="active">14 days</button>
+              <button type="button" data-upcoming-range="30">30 days</button>
+            </div>
+            <button type="button" id="upcomingNewTaskButton" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg><span>New task</span></button>
+          </div>
         </div>
+        <div id="upcomingList" class="upcoming-list" data-i18n-skip></div>
+        <p id="upcomingFoot" class="upcoming-foot"></p>
       </section>
 
       <section id="archiveView" class="hidden" aria-label="Archive">
-        <div class="panel">
-          <h2>Archive</h2>
-          <p class="hint">Completed work, kept for reference.</p>
-          <div id="archiveList" class="today-list" data-i18n-skip></div>
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Out of the way, not gone</p>
+            <h1 class="page-title">Archive</h1>
+            <p class="page-sub">Completed and archived work. Restore anything you still need; the rest can stay quiet.</p>
+          </div>
+        </div>
+        <div class="archive-section">
+          <h2>Archived tasks</h2>
+          <p id="archiveArchivedMeta">0 tasks put away explicitly.</p>
+          <div id="archiveArchivedList" class="archive-list" data-i18n-skip></div>
+        </div>
+        <div class="archive-section">
+          <h2>Completed</h2>
+          <p id="archiveCompletedMeta">0 finished tasks. Reopen one if it wasn’t really done.</p>
+          <div id="archiveList" class="archive-list" data-i18n-skip></div>
         </div>
       </section>
 
       <section id="searchView" class="hidden" aria-label="Search">
-        <div class="panel">
-          <h2>Search</h2>
-          <p class="hint">Search task titles and notes in the current workspace.</p>
-          <div class="comment-compose">
-            <input id="searchInput" class="input" placeholder="Search tasks" aria-label="Search tasks">
-            <button type="button" id="searchButton" class="btn primary">Search</button>
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Find anything</p>
+            <h1 class="page-title">Search</h1>
+            <p class="page-sub">Full-text across every board you can see. Press <kbd class="inline-kbd">/</kbd> anywhere to come back here.</p>
           </div>
-          <div id="searchResults" class="detail-list" style="margin-top:16px" data-i18n-skip></div>
+        </div>
+        <div class="search-shell">
+          <label class="search-field">
+            <svg class="icon"><use href="#i-search"/></svg>
+            <input id="searchInput" type="search" placeholder="Search titles, descriptions and labels…" aria-label="Search tasks">
+            <kbd class="inline-kbd">/</kbd>
+          </label>
+          <div class="search-filters">
+            <div class="filter-chips" id="searchStatusChips" role="group" aria-label="Filter by status">
+              <button type="button" data-search-status="all" class="active">Everything</button>
+              <button type="button" data-search-status="open">Open</button>
+              <button type="button" data-search-status="done">Done</button>
+              <button type="button" data-search-status="overdue">Overdue</button>
+            </div>
+            <select id="searchPriorityFilter" class="select" aria-label="Filter by priority">
+              <option value="">Any priority</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="none">None</option>
+            </select>
+            <select id="searchBoardFilter" class="select" aria-label="Filter by board">
+              <option value="">Any board</option>
+            </select>
+          </div>
+          <div class="search-results-head">
+            <span id="searchMeta">0 results</span>
+            <span id="searchStatusHint">all statuses</span>
+          </div>
+          <div id="searchResults" class="search-results" data-i18n-skip></div>
         </div>
       </section>
 
       <section id="insightsView" class="hidden" aria-label="Insights">
-        <div class="panel">
-          <h2>Insights</h2>
-          <p class="hint">A quick view of the current workspace.</p>
-          <div id="insightsGrid" class="insight-grid"></div>
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">Planning depth, on demand</p>
+            <h1 class="page-title">Insights</h1>
+            <p class="page-sub">A longer horizon and a kinder read on load. No scores, no guilt.</p>
+          </div>
+          <div class="page-actions">
+            <div class="view-switch" role="group" aria-label="Insights view">
+              <button type="button" id="insightsTimelineButton" class="active"><svg class="icon"><use href="#i-calendar"/></svg><span>Timeline</span></button>
+              <button type="button" id="insightsWorkloadButton"><svg class="icon"><use href="#i-user"/></svg><span>Workload</span></button>
+            </div>
+            <button type="button" id="insightsNewTaskButton" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg><span>New task</span></button>
+          </div>
         </div>
+        <div class="insights-toolbar">
+          <span id="insightsMeta">0 dated tasks</span>
+          <div class="view-switch" role="group" aria-label="Date range">
+            <button type="button" data-range="14">14 days</button>
+            <button type="button" data-range="30" class="active">30 days</button>
+            <button type="button" data-range="60">60 days</button>
+          </div>
+        </div>
+        <div id="insightsGrid" class="insights-content"></div>
       </section>
 
       <section id="settingsView" class="hidden" aria-label="Settings">
@@ -227,7 +440,7 @@
                 <span id="settingsWorkspaceRole">Owner</span>
               </div>
             </div>
-            <p class="side-label">You</p>
+            <label class="settings-search"><svg class="icon"><use href="#i-search"/></svg><input id="settingsSearch" type="search" placeholder="Search settings" aria-label="Search settings"></label>
             <nav id="settingsNav" class="settings-nav-list"></nav>
           </aside>
           <div class="settings-content">
@@ -248,6 +461,14 @@
       </section>
     </main>
   </div>
+
+  <nav class="mobile-nav" aria-label="Mobile navigation">
+    <button type="button" data-view="today" class="mobile-nav-item active"><svg class="icon"><use href="#i-sun"/></svg><span>Today</span></button>
+    <button type="button" data-view="upcoming" class="mobile-nav-item"><svg class="icon"><use href="#i-calendar-up"/></svg><span>Upcoming</span></button>
+    <button type="button" data-view="board" class="mobile-nav-item"><svg class="icon"><use href="#i-board"/></svg><span>Board</span></button>
+    <button type="button" data-view="search" class="mobile-nav-item"><svg class="icon"><use href="#i-search"/></svg><span>Search</span></button>
+    <button type="button" data-view="settings" class="mobile-nav-item"><svg class="icon"><use href="#i-settings"/></svg><span>Settings</span></button>
+  </nav>
 
   <div id="autoPlanModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="autoPlanTitle">
     <div class="modal" style="max-width:640px">
@@ -374,21 +595,21 @@
   </div>
 
   <div id="taskModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
-    <div class="modal">
+    <div class="modal task-drawer">
       <div class="modal-head">
         <div>
           <p id="taskEyebrow" class="eyebrow">Task</p>
-          <h2 id="taskModalTitle">New task</h2>
+          <h2 id="taskModalTitle" class="sr-only">New task</h2>
         </div>
-        <button type="button" id="closeModal" class="btn ghost sm" aria-label="Close">Close</button>
+        <button type="button" id="closeModal" class="btn ghost sm" aria-label="Close">×</button>
       </div>
 
-      <form id="taskForm">
-        <div class="field">
+      <form id="taskForm" class="task-form">
+        <div class="field task-title-field">
           <label for="taskTitle">Title</label>
           <input id="taskTitle" name="title" class="input" maxlength="300" required autocomplete="off" placeholder="What needs doing?">
         </div>
-        <div class="field">
+        <div class="field task-notes-field">
           <label for="taskDescription">Notes</label>
           <textarea id="taskDescription" name="description" class="textarea" maxlength="10000" placeholder="Optional context, links, or next steps"></textarea>
         </div>

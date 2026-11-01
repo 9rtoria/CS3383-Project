@@ -20,13 +20,13 @@ Status key:
 | Reference path | Project3383 status | Notes |
 |---|---|---|
 | `/api/account` | DONE | Profile update; DELETE anonymizes the user, soft-deletes personal workspaces, revokes tokens/sessions, and audits |
-| `/api/archive` | DONE | Completed tasks |
+| `/api/archive` | DONE | Completed and explicitly archived tasks with timestamps, labels, board, and account for reopen/restore |
 | `/api/attachments` | PARTIAL | Upload is `/api/tasks/{id}/attachments`; no top-level list/upload |
 | `/api/attachments/{id}` | DONE | Download/delete |
 | `/api/audit` | DONE | Admin audit feed with cursor pagination and retention purge |
 | `/api/auth/guest` | DONE | Guest session |
-| `/api/auth/magic` | MISSING | Email magic link not implemented |
-| `/api/auth/magic/verify` | MISSING | |
+| `/api/auth/magic` | DONE | Session-bound state, SHA-256 token, 15-minute expiry, queued email with development link |
+| `/api/auth/magic/verify` | DONE | One-time atomic consumption, state match, account creation, MFA handoff, safe redirect |
 | `/api/auth/mfa/challenge` | DONE | In-memory 5-minute challenge; TOTP or one-time backup code |
 | `/api/auth/oauth/{provider}` | MISSING | |
 | `/api/auth/oauth/{provider}/callback` | MISSING | |
@@ -60,7 +60,7 @@ Status key:
 | `/api/metrics` | MISSING | |
 | `/api/notifications` | DONE | GET + mark read/read-all |
 | `/api/openapi` | MISSING | |
-| `/api/search` | PARTIAL | SQL LIKE search, not FTS |
+| `/api/search` | DONE | Tokenized title/description/label search with status, priority, board, label, and date filters; empty query returns recent tasks |
 | `/api/security/mfa` | DONE | Status/sessions, TOTP setup with QR, enable with backup codes, disable guard, session revoke rows |
 | `/api/settings` | PARTIAL | GET/PATCH personal preferences; settings UI ported |
 | `/api/share/{token}` | DONE | Public read-only board payload and `/share/{token}` page |
@@ -93,6 +93,7 @@ Status key:
 | `GET /api/tasks?workspaceId=...` | DONE | Dependency picker |
 | `POST /api/tasks/{id}/complete` | DONE | Move to Done |
 | `POST /api/tasks/{id}/reopen` | DONE | Move to first open column |
+| `POST /api/tasks/{id}/restore` | DONE | Clear `archived_at` with activity and audit |
 | `POST /api/tasks/{id}/dependencies` | DONE | Cycle check |
 | `DELETE /api/tasks/{id}/dependencies/{dependsOnTaskId}` | DONE | |
 | `POST /api/tasks/{id}/reminders` | DONE | In-app reminder |
@@ -129,7 +130,7 @@ Status key:
 | PlanBlock | DONE | Auto-plan |
 | TodayDismissal | DONE | |
 | TodaySelection | DONE | Rewrite-specific per-user selection table; reference uses shared `Task.focusDate` |
-| MagicLinkToken | SCHEMA | |
+| MagicLinkToken | DONE | Hashed one-time token, purpose, 15-minute expiry, IP hash, consumption timestamp |
 | Invite | DONE | |
 | OidcConfig | DONE | Issuer, client ID/secret, domains, enable/enforce, encrypted secret, audit |
 | ApiToken | DONE | Bearer auth, workspace scope, expiry, revocation, audit |
@@ -148,10 +149,10 @@ Status key:
 
 | Area | Status | Notes |
 |---|---|---|
-| Auth / guest / signup / signin | DONE | |
+| Auth / guest / signup / signin / magic link | DONE | Dedicated `/auth` split layout with password, signup, magic-link, guest-claim, and MFA states |
 | App shell / workspace switcher | DONE | |
 | Board / columns / task CRUD | DONE | Board settings, duplicate, archive, soft delete, visibility |
-| Task archive | PARTIAL | `archived_at` added; delegated stale cleanup + Archive view; no manual archive action/API |
+| Task archive | DONE | Bulk archive, dedicated Archive view for archived and completed work, reopen, restore, activity, and audit |
 | Task drawer fields | PARTIAL | Assignee and recurrence implemented; reminder display and full label management still partial |
 | Task comments / checklist | DONE | |
 | Task activity feed | DONE | Task detail activity trail with actors and relative times |
@@ -167,8 +168,8 @@ Status key:
 | Focus Mode | DONE | Full-screen timer, ring, pause/resume, complete, early leave, actual-minutes persistence |
 | Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
 | Calendar / ICS | DONE | Month calendar and ICS download |
-| Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
-| Insights | PARTIAL | Basic counts; full reference views missing |
+| Search / Archive / Upcoming | DONE | Redesigned horizon view with ranges and dated rows; archive split into archived/completed with reopen/restore; search field with status, priority, and board filters |
+| Insights | DONE | Timeline Gantt with 14/30/60-day ranges and a workload view with counts and estimated load |
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
 | Offline / PWA | PARTIAL | Service worker, manifest, cached bootstrap/board/today/settings, offline queue, retry/discard, sync banner; no idempotent replay/conflict resolution |
@@ -230,6 +231,9 @@ Status key:
 - [x] TOTP MFA with QR setup, encrypted secrets, one-time backup codes, sign-in challenge, disable guard, and audit-ready fields
 - [x] Versioned workspace policies with MFA access guard and attachment-policy enforcement
 - [x] Organization SSO via OIDC discovery/callback with encrypted client secret and MFA handoff
+- [x] Magic-link sign-in with session-bound state, one-time tokens, account creation, and MFA handoff, plus the dedicated `/auth` page
+- [x] Redesigned Upcoming horizon, Archive (archived/completed with reopen/restore), and Search (status/priority/board filters) views
+- [x] Timeline and workload Insights views, redesigned Today, Board, Calendar, task drawer, and grouped Settings navigation
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -252,10 +256,8 @@ Status key:
 ## 6. Next work after Phase 0/1
 
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
-2. Remaining workspace/security/audit/data settings.
-3. Full drawer parity for reminders and label management.
-4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
-5. Calendar, Search, Insights.
-6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. Live-provider SSO verification and deployment hardening.
-8. Full E2E, screenshots, performance, and final parity sign-off.
+2. Remaining drawer parity for a label manager and reminder editing.
+3. Auto-plan exact safe/delegated recompute and scheduled retention cleanup.
+4. OAuth provider sign-in (GitHub/Google/Apple) if required by the reference scope.
+5. Live-provider SSO verification and deployment hardening.
+6. Full E2E, screenshots, performance, and final parity sign-off.

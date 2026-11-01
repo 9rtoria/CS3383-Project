@@ -12,6 +12,7 @@ Implemented:
 - SQLite schema with Flyway versioned migrations
 - Guest session creation (`POST /api/auth/guest`)
 - Email/password sign-up, sign-in, guest claim, and sign-out
+- Passwordless magic-link sign-in and a dedicated `/auth` page with password, signup, magic-link, and MFA modes
 - Bootstrap payload with workspace, board, and columns
 - Workspace create/switch, including a new team workspace
 - Workspace members, invite links, role changes, and member removal
@@ -56,15 +57,17 @@ Implemented:
 - Versioned workspace policies for required MFA, automations, attachments, public sharing, archived-task retention, and audit retention, with MFA and attachment enforcement
 - Organization SSO through OIDC discovery/callback with encrypted client secrets, domain allowlists, guest account linking, and MFA handoff
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
-- Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
+- Calendar month view, tokenized task search with status/priority/board filters, timeline and workload Insights, and redesigned Upcoming/Archive views with reopen and restore
+- ICS download plus a Settings calendar feed row
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
 - Settings storage/API (`/api/settings` GET/PATCH) and account profile update (`/api/account` PATCH)
 - Origin-based CSRF protection for cookie-authenticated mutations
 
 Not implemented yet:
 
-- Full Insights and visual parity
 - Full accessibility, E2E, performance, and final parity sign-off
+- OAuth provider sign-in and live external SSO verification
+- Label manager and reminder editing in the task drawer
 
 The current Phase 0 parity matrix is at:
 
@@ -110,6 +113,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/auth/guest` | Create/resume a guest session |
 | POST | `/api/auth/signup` | Create an account or claim the current guest |
 | POST | `/api/auth/signin` | Sign in with email/password |
+| POST | `/api/auth/magic` | Email a one-time sign-in link and return the development link |
+| GET | `/api/auth/magic/verify` | Consume a magic link and start a session or MFA challenge |
 | DELETE | `/api/auth/signout` | Invalidate the session |
 | POST | `/api/auth/mfa/challenge` | Complete a sign-in challenge with TOTP or a backup code |
 | GET | `/api/auth/sso/{workspaceId}` | Start organization OIDC sign-in |
@@ -164,7 +169,11 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | PATCH | `/api/tasks/{id}/move` | Move a task to another column |
 | POST | `/api/tasks/{id}/complete` | Move a task to the Done column |
 | POST | `/api/tasks/{id}/reopen` | Move a task back to the first open column |
+| POST | `/api/tasks/{id}/restore` | Restore an archived task |
 | DELETE | `/api/tasks/{id}` | Soft-delete a task |
+| GET | `/api/search` | Tokenized title/description/label search with status, priority, board, label, and date filters |
+| GET | `/api/upcoming` | Due-date groups for a 1–60 day horizon |
+| GET | `/api/archive` | Archived and completed tasks with timestamps |
 | POST | `/api/tasks/{id}/comments` | Add a comment |
 | POST | `/api/tasks/{id}/subtasks` | Add a checklist item |
 | PATCH | `/api/subtasks/{id}` | Update a checklist item |

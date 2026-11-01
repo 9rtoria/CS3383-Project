@@ -1,7 +1,7 @@
 /* Project3383 service worker: network-first navigation, cache-first static
  * assets. Authenticated API responses are never cached. Offline writes live
  * in localStorage and are replayed by the browser app. */
-const VERSION = "project3383-v1";
+const VERSION = "project3383-v2";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const PRECACHE = [
@@ -14,6 +14,8 @@ const PRECACHE = [
   "/app.js",
   "/share.html",
   "/share.js",
+  "/auth.html",
+  "/auth.js",
   "/manifest.webmanifest",
   "/icon.svg",
   "/icon-maskable.svg",

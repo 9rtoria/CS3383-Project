@@ -102,9 +102,16 @@ public class AppController {
     public Map<String, Object> search(
         HttpSession session,
         @RequestParam String workspaceId,
-        @RequestParam(defaultValue = "") String q
+        @RequestParam(defaultValue = "") String q,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) String priority,
+        @RequestParam(required = false) String boardId,
+        @RequestParam(required = false) String label,
+        @RequestParam(required = false) String dateFrom,
+        @RequestParam(required = false) String dateTo
     ) {
-        return appService.search(CurrentUser.id(session), workspaceId, q);
+        return appService.search(CurrentUser.id(session), workspaceId, q, status,
+            priority, boardId, label, dateFrom, dateTo);
     }
 
     @GetMapping("/insights")

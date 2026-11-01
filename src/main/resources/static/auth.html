@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Drift</title>
+  <meta name="description" content="Save your Drift workspace to an account, or sign in with email and a one-time link.">
+  <meta name="theme-color" content="#2f6b56">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="auth-body">
+  <main class="auth-page" id="main">
+    <aside class="auth-aside" aria-label="About Drift">
+      <a class="brand auth-brand" href="/" aria-label="Drift home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h12a5 5 0 0 1 0 10H9"/><circle cx="5" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
+        </span>
+        <strong>Drift</strong>
+      </a>
+
+      <div class="auth-aside-copy">
+        <p class="auth-quote">A calm place for the work that matters. No setup ceremony. No clutter.</p>
+        <footer>Capture in seconds. Plan by capacity. Keep the keyboard if you like.</footer>
+      </div>
+
+      <div class="auth-benefits">
+        <span><svg class="auth-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> Your guest board stays with you</span>
+        <span><svg class="auth-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> Full-text search and offline capture</span>
+        <span><svg class="auth-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> Export and delete your data anytime</span>
+      </div>
+    </aside>
+
+    <section class="auth-main">
+      <div class="auth-card">
+        <a class="btn ghost sm auth-back" href="/">
+          <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+          Back to the app
+        </a>
+
+        <div id="authGuestBanner" class="auth-guest-banner hidden">
+          <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7L12 3z"/></svg>
+          <span>You started as a guest. Claiming is optional — your work is already saved in this session.</span>
+        </div>
+
+        <h1 class="auth-title" id="authTitle">Welcome back</h1>
+        <p class="auth-sub" id="authSubtitle">Sign in to pick up where you left off.</p>
+        <div id="authError" class="auth-error hidden" role="alert"></div>
+
+        <form id="signinForm" class="form-grid auth-form">
+          <label class="field">
+            <span>Email</span>
+            <input class="input" type="email" autocomplete="email" required placeholder="you@example.com" data-auth-email>
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input class="input" type="password" autocomplete="current-password" required placeholder="Your password" data-auth-password>
+            <span class="field-hint"><button type="button" class="linkish" data-toggle-password>Show password</button></span>
+          </label>
+          <button class="btn primary block" type="submit">
+            <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            Sign in
+          </button>
+          <div class="auth-divider">or</div>
+          <button class="oauth-button" type="button" data-mode="magic">
+            <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
+            Email me a magic link
+          </button>
+          <p class="field-hint auth-center">New to Drift? <button type="button" class="linkish" data-mode="signup">Create an account</button></p>
+        </form>
+
+        <form id="signupForm" class="form-grid auth-form hidden">
+          <label class="field">
+            <span>Your name</span>
+            <input class="input" autocomplete="name" required placeholder="What should we call you?" data-auth-name>
+          </label>
+          <label class="field">
+            <span>Email</span>
+            <input class="input" type="email" autocomplete="email" required placeholder="you@example.com" data-auth-email>
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input class="input" type="password" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters" data-auth-password>
+            <span class="field-hint">Use 8+ characters. <button type="button" class="linkish" data-toggle-password>Show</button></span>
+          </label>
+          <button class="btn primary block" type="submit" id="signupSubmit">
+            <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            Create account
+          </button>
+          <p class="field-hint auth-center">Already have an account? <button type="button" class="linkish" data-mode="signin">Sign in</button></p>
+        </form>
+
+        <form id="magicForm" class="form-grid auth-form hidden">
+          <label class="field">
+            <span>Email</span>
+            <input class="input" type="email" autocomplete="email" required placeholder="you@example.com" data-auth-email>
+          </label>
+          <button class="btn primary block" type="submit">
+            <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
+            Email me a sign-in link
+          </button>
+          <p class="field-hint auth-center">We will email a one-time link. No password to remember.</p>
+        </form>
+
+        <div id="magicSent" class="auth-sent hidden">
+          <div class="settings-card auth-sent-card">
+            <div class="inline auth-sent-head">
+              <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
+              <strong>Check your inbox</strong>
+            </div>
+            <p class="field-hint" id="magicSentCopy">If that email can receive mail, a one-time link is on its way. It expires in 15 minutes.</p>
+            <div id="authDevLink" class="dev-link hidden"></div>
+          </div>
+          <button class="btn ghost block auth-sent-reset" type="button" id="magicReset">Use another email</button>
+        </div>
+
+        <form id="mfaForm" class="form-grid auth-form hidden">
+          <label class="field">
+            <span>Verification code</span>
+            <input class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="20" placeholder="123456 or backup code" data-auth-code>
+          </label>
+          <button class="btn primary block" type="submit">
+            <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+            Verify and sign in
+          </button>
+          <button type="button" class="btn ghost block" id="mfaReset">Use a different account</button>
+        </form>
+
+        <div class="auth-tabs" id="authTabs">
+          <button type="button" data-mode="signin" id="tabSignin"><svg class="auth-tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="3"/><path d="m10.5 13 9-9M16 4l3 3M14 6l2 2"/></svg> Password</button>
+          <button type="button" data-mode="signup">Create account</button>
+          <button type="button" data-mode="magic">Magic link</button>
+        </div>
+        <p class="auth-footer-note">By continuing you agree to use Drift responsibly. Your data stays in this workspace until you export or delete it. <a href="/api/health">Status</a></p>
+      </div>
+    </section>
+  </main>
+  <script src="/auth.js"></script>
+</body>
+</html>
