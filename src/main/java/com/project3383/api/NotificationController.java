@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,6 +25,13 @@ public class NotificationController {
     @GetMapping
     public Map<String, Object> list(HttpSession session) {
         return notificationService.list(CurrentUser.id(session));
+    }
+
+    @PatchMapping
+    public Map<String, Object> mark(HttpSession session, @RequestBody ApiDtos.NotificationUpdate input) {
+        ApiDtos.NotificationUpdate safe = input == null
+            ? new ApiDtos.NotificationUpdate(false, false, null) : input;
+        return notificationService.mark(CurrentUser.id(session), safe.all(), safe.read(), safe.id());
     }
 
     @PatchMapping("/{id}/read")

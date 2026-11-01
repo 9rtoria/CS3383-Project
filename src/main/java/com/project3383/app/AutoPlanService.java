@@ -87,7 +87,6 @@ public class AutoPlanService {
             .findFirst()
             .orElseThrow(() -> ApiException.badRequest("Unknown Auto-plan option."));
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> proposedBlocks = (List<Map<String, Object>>) option.get("blocks");
         PlanContext context = context(userId, workspaceId);
         String start = context.today;
         String end = context.dates.get(context.dates.size() - 1);
@@ -100,6 +99,18 @@ public class AutoPlanService {
               AND date BETWEEN ? AND ?
             ORDER BY date, start_minute
             """, userId, workspaceId, start, end);
+        Set<String> existingAutoTasks = previousBlocks.stream()
+            .map(block -> String.valueOf(block.get("taskId")))
+            .collect(java.util.stream.Collectors.toSet());
+        List<Map<String, Object>> proposedBlocks = (List<Map<String, Object>>) option.get("blocks");
+        if (safe) {
+            // Safe mode must account for the auto blocks that are already on the
+            // calendar. Recompute with them treated as fixed and excluded from
+            // candidates, then only apply the genuinely new blocks.
+            Map<String, Object> safeOption = option(selected, optionLabel(selected),
+                context(userId, workspaceId, true, existingAutoTasks), selected);
+            proposedBlocks = (List<Map<String, Object>>) safeOption.get("blocks");
+        }
         List<String> previousSelections = jdbc.queryForList("""
             SELECT task_id FROM today_selection
             WHERE user_id = ? AND workspace_id = ? AND date = ?
@@ -116,9 +127,6 @@ public class AutoPlanService {
                 SELECT task_id AS taskId, date, start_minute AS startMinute, minutes
                 FROM plan_block WHERE user_id = ? AND workspace_id = ? AND date BETWEEN ? AND ?
                 """, userId, workspaceId, start, end);
-            Set<String> existingAutoTasks = previousBlocks.stream()
-                .map(block -> String.valueOf(block.get("taskId")))
-                .collect(java.util.stream.Collectors.toSet());
             blocks = proposedBlocks.stream()
                 .filter(block -> !existingAutoTasks.contains(String.valueOf(block.get("taskId"))))
                 .filter(block -> existing.stream().noneMatch(item -> overlaps(block, item)))
@@ -356,6 +364,14 @@ public class AutoPlanService {
             """, userId, workspaceId, start, end);
     }
 
+    private String optionLabel(String id) {
+        return switch (id) {
+            case "focus" -> "Focus first";
+            case "light" -> "Light day";
+            default -> "Balanced";
+        };
+    }
+
     private Map<String, Object> option(String id, String label, PlanContext context, String variant) {
         List<PlanTask> ordered = new ArrayList<>(context.tasks);
         ordered.sort(Comparator
@@ -364,6 +380,11 @@ public class AutoPlanService {
         Map<String, Integer> plannedByDate = new HashMap<>();
         Map<String, Integer> afterMinuteByDate = new HashMap<>();
         Map<String, MutableWeek> weeks = buildWeeks(context);
+        for (BusyBlock block : context.existingBlocks) {
+            if (context.dates.contains(block.date)) {
+                plannedByDate.merge(block.date, Math.max(0, block.end - block.start), Integer::sum);
+            }
+        }
         List<Map<String, Object>> blocks = new ArrayList<>();
         List<Map<String, Object>> unscheduled = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
@@ -402,21 +423,24 @@ public class AutoPlanService {
                     String weekKey = weekStartOf(date, context.weekStartsOn);
                     MutableWeek week = weeks.get(weekKey);
                     if (week != null && "stop".equals(context.capBehavior)
-                        && week.plannedMinutes + chunk > week.capMinutes) {
+                        && week.actualMinutes + week.plannedMinutes + chunk > week.capMinutes) {
                         failedReason = "Weekly capacity reached";
                         continue;
                     }
                     int dayStart = context.workdayStart * 60;
                     int dayEnd = context.workdayEnd * 60;
                     if (date.equals(context.today)) {
-                        dayStart = Math.max(dayStart, roundUpToFive(context.nowMinute));
+                        dayStart = Math.max(dayStart, context.nowMinute);
                     }
-                    if (dayStart >= dayEnd) {
-                        failedReason = "Workday has ended";
+                    int dueEnd = task.dueDate != null && task.dueDate.equals(date)
+                        && !task.dueAllDay && task.dueMinute != null
+                        ? Math.min(dayEnd, task.dueMinute) : dayEnd;
+                    if (dayStart >= dueEnd) {
+                        failedReason = date.equals(context.today) ? "Due time has passed" : "Workday has ended";
                         continue;
                     }
                     int after = afterMinuteByDate.getOrDefault(date, dayStart);
-                    List<int[]> free = freeIntervals(dayStart, dayEnd, busyForDate(date, context));
+                    List<int[]> free = freeIntervals(dayStart, dueEnd, busyForDate(date, context));
                     int[] chosen = null;
                     int startMinute = -1;
                     for (int[] interval : free) {
@@ -462,11 +486,12 @@ public class AutoPlanService {
         for (Map.Entry<String, MutableWeek> entry : weeks.entrySet().stream()
             .sorted(Map.Entry.comparingByKey()).toList()) {
             MutableWeek week = entry.getValue();
-            boolean over = week.plannedMinutes > week.capMinutes;
+            int used = week.actualMinutes + week.plannedMinutes;
+            boolean over = used > week.capMinutes;
             overCap = overCap || over;
             if (over) {
                 warnings.add("Week of " + entry.getKey() + " exceeds the weekly capacity by "
-                    + (week.plannedMinutes - week.capMinutes) + " minutes.");
+                    + (used - week.capMinutes) + " minutes.");
             }
             weekRows.add(linked(Map.of(
                 "weekStart", entry.getKey(),
@@ -475,6 +500,14 @@ public class AutoPlanService {
                 "capMinutes", week.capMinutes,
                 "over", over
             )));
+        }
+        if (needsEstimate > 0) {
+            warnings.add(needsEstimate + (needsEstimate == 1 ? " task" : " tasks")
+                + " used the default estimate.");
+        }
+        if (!unscheduled.isEmpty()) {
+            warnings.add(unscheduled.size() + (unscheduled.size() == 1 ? " task" : " tasks")
+                + " could not be placed within the horizon.");
         }
         int scheduledMinutes = blocks.stream().mapToInt(block -> number(block.get("minutes"))).sum();
         return linked(Map.of(
@@ -491,6 +524,11 @@ public class AutoPlanService {
     }
 
     private PlanContext context(String userId, String workspaceId) {
+        return context(userId, workspaceId, false, Set.of());
+    }
+
+    private PlanContext context(String userId, String workspaceId, boolean preserveAutoBlocks,
+                                Set<String> excludedTaskIds) {
         Map<String, Object> settings = loadSettings(userId);
         ZoneId zone = timezone(userId);
         LocalDate todayDate = LocalDate.now(zone);
@@ -503,16 +541,23 @@ public class AutoPlanService {
         String rangeEnd = dates.get(dates.size() - 1);
         List<BusyBlock> fixedBlocks = new ArrayList<>();
         for (Map<String, Object> row : jdbc.queryForList("""
-            SELECT pb.date, pb.start_minute AS startMinute, pb.minutes
+            SELECT pb.date, pb.start_minute AS startMinute, pb.minutes, pb.source, pb.locked
             FROM plan_block pb JOIN task t ON t.id = pb.task_id
             WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date BETWEEN ? AND ?
-              AND (pb.locked = 1 OR pb.source = 'manual')
               AND t.deleted_at IS NULL AND t.archived_at IS NULL
             """, userId, workspaceId, rangeStart, rangeEnd)) {
+            String date = String.valueOf(row.get("date"));
+            int startMinute = number(row.get("startMinute"));
+            boolean auto = "auto".equals(String.valueOf(row.get("source")));
+            boolean fixed = number(row.get("locked")) == 1 || !auto
+                || (preserveAutoBlocks && auto)
+                || date.compareTo(today) < 0
+                || (date.equals(today) && startMinute < currentMinute(zone));
+            if (!fixed) continue;
             fixedBlocks.add(new BusyBlock(
-                String.valueOf(row.get("date")),
-                number(row.get("startMinute")),
-                number(row.get("startMinute")) + number(row.get("minutes"))
+                date,
+                startMinute,
+                startMinute + number(row.get("minutes"))
             ));
         }
         Set<String> dismissedToday = new HashSet<>(jdbc.queryForList("""
@@ -521,8 +566,11 @@ public class AutoPlanService {
         Set<String> selectedToday = new HashSet<>(jdbc.queryForList("""
             SELECT task_id FROM today_selection WHERE user_id = ? AND workspace_id = ? AND date = ?
             """, String.class, userId, workspaceId, today));
+        Map<String, Integer> actualMinutesByWeek = actualMinutesByWeek(userId, workspaceId, zone,
+            rangeStart, rangeEnd, settingInt(settings, "week_starts_on", 1));
         List<PlanTask> tasks = jdbc.queryForList("""
             SELECT t.id, t.title, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay,
                    t.estimate_minutes AS estimateMinutes, t.actual_minutes AS actualMinutes,
                    (SELECT COUNT(*)
                     FROM task_dependency td
@@ -535,17 +583,21 @@ public class AutoPlanService {
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-            """, workspaceId, userId, canSeePrivate(userId, workspaceId)).stream().map(row -> new PlanTask(
-            String.valueOf(row.get("id")),
-            String.valueOf(row.get("title")),
-            row.get("priority") == null ? "none" : String.valueOf(row.get("priority")),
-            datePart(row.get("startDate")),
-            datePart(row.get("dueDate")),
-            row.get("estimateMinutes") == null ? null : number(row.get("estimateMinutes")),
-            row.get("actualMinutes") == null ? null : number(row.get("actualMinutes")),
-            number(row.get("openDependencies")),
-            selectedToday.contains(String.valueOf(row.get("id")))
-        )).toList();
+            """, workspaceId, userId, canSeePrivate(userId, workspaceId)).stream()
+            .filter(row -> !excludedTaskIds.contains(String.valueOf(row.get("id"))))
+            .map(row -> new PlanTask(
+                String.valueOf(row.get("id")),
+                String.valueOf(row.get("title")),
+                row.get("priority") == null ? "none" : String.valueOf(row.get("priority")),
+                datePart(row.get("startDate")),
+                datePart(row.get("dueDate")),
+                dueMinute(row.get("dueDate"), number(row.get("dueAllDay")) == 1),
+                number(row.get("dueAllDay")) == 1,
+                row.get("estimateMinutes") == null ? null : number(row.get("estimateMinutes")),
+                row.get("actualMinutes") == null ? null : number(row.get("actualMinutes")),
+                number(row.get("openDependencies")),
+                selectedToday.contains(String.valueOf(row.get("id")))
+            )).toList();
         int workdayStart = Math.max(0, Math.min(23, settingInt(settings, "workday_start", 9)));
         int workdayEnd = Math.max(1, Math.min(24, settingInt(settings, "workday_end", 18)));
         if (workdayEnd <= workdayStart) workdayEnd = Math.min(24, workdayStart + 1);
@@ -575,15 +627,58 @@ public class AutoPlanService {
             dismissedToday,
             selectedToday,
             tasks,
-            fixedBlocks
+            fixedBlocks,
+            actualMinutesByWeek
         );
+    }
+
+    private Map<String, Integer> actualMinutesByWeek(String userId, String workspaceId, ZoneId zone,
+                                                     String weekStart, String endDate, int weekStartsOn) {
+        Map<String, Integer> actual = new HashMap<>();
+        String start = LocalDate.parse(weekStart).atStartOfDay(zone).toInstant().toString();
+        String end = LocalDate.parse(endDate).plusDays(1).atStartOfDay(zone).toInstant()
+            .minusNanos(1).toString();
+        for (Map<String, Object> row : jdbc.queryForList("""
+            SELECT t.updated_at AS completedAt, t.actual_minutes AS actualMinutes
+            FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.deleted_at IS NULL
+              AND c.is_done = 1 AND t.actual_minutes IS NOT NULL
+              AND t.updated_at BETWEEN ? AND ?
+              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
+            """, workspaceId, start, end, userId, canSeePrivate(userId, workspaceId))) {
+            Object actualMinutes = row.get("actualMinutes");
+            if (!(actualMinutes instanceof Number number) || number.intValue() <= 0) continue;
+            try {
+                String date = Instant.parse(String.valueOf(row.get("completedAt")))
+                    .atZone(zone).toLocalDate().toString();
+                actual.merge(weekStartOf(date, weekStartsOn), number.intValue(), Integer::sum);
+            } catch (Exception ignored) {
+                // A malformed timestamp should not break planning.
+            }
+        }
+        return actual;
+    }
+
+    private Integer dueMinute(Object dueDate, boolean dueAllDay) {
+        if (dueAllDay || dueDate == null) return null;
+        String text = String.valueOf(dueDate);
+        int marker = text.indexOf('T');
+        if (marker < 0 || text.length() < marker + 6) return null;
+        try {
+            return Integer.parseInt(text.substring(marker + 1, marker + 3)) * 60
+                + Integer.parseInt(text.substring(marker + 4, marker + 6));
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     private Map<String, MutableWeek> buildWeeks(PlanContext context) {
         Map<String, MutableWeek> weeks = new LinkedHashMap<>();
         for (String date : context.dates) {
             String key = weekStartOf(date, context.weekStartsOn);
-            weeks.computeIfAbsent(key, ignored -> new MutableWeek(context.weeklyMinutes));
+            weeks.computeIfAbsent(key, ignored -> new MutableWeek(
+                context.actualMinutesByWeek.getOrDefault(key, 0), context.weeklyMinutes));
         }
         for (BusyBlock block : context.existingBlocks) {
             String key = weekStartOf(block.date, context.weekStartsOn);
@@ -815,6 +910,8 @@ public class AutoPlanService {
         String priority,
         String startDate,
         String dueDate,
+        Integer dueMinute,
+        boolean dueAllDay,
         Integer estimate,
         Integer actual,
         int openDependencies,
@@ -826,11 +923,12 @@ public class AutoPlanService {
     }
 
     private static final class MutableWeek {
-        private int actualMinutes;
+        private final int actualMinutes;
         private int plannedMinutes;
         private final int capMinutes;
 
-        private MutableWeek(int capMinutes) {
+        private MutableWeek(int actualMinutes, int capMinutes) {
+            this.actualMinutes = actualMinutes;
             this.capMinutes = capMinutes;
         }
     }
@@ -858,7 +956,8 @@ public class AutoPlanService {
         Set<String> dismissedToday,
         Set<String> selectedToday,
         List<PlanTask> tasks,
-        List<BusyBlock> existingBlocks
+        List<BusyBlock> existingBlocks,
+        Map<String, Integer> actualMinutesByWeek
     ) {
     }
 }

@@ -120,6 +120,9 @@ public class OAuthController {
                 Object guestId = existing == null ? null : existing.getAttribute(AuthInterceptor.SESSION_USER);
                 String guest = guestId == null ? null : guestId.toString();
                 userId = appService.ensureOAuthUser(guest, profile.email(), profile.name());
+                if (guest != null && !guest.equals(userId)) {
+                    appService.mergeGuestWorkspace(guest, userId);
+                }
                 jdbc.update("""
                     INSERT OR IGNORE INTO oauth_account (id, user_id, provider, provider_account_id, created_at)
                     VALUES (?, ?, ?, ?, ?)

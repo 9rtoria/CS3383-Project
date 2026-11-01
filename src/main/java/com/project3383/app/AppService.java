@@ -26,6 +26,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,10 +45,12 @@ public class AppService {
     private final AutomationService automationService;
     private final MfaService mfaService;
     private final MfaGuard mfaGuard;
+    private final NotificationService notificationService;
 
     public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper,
                       AuditService auditService, WebhookService webhookService,
-                      AutomationService automationService, MfaService mfaService, MfaGuard mfaGuard) {
+                      AutomationService automationService, MfaService mfaService, MfaGuard mfaGuard,
+                      NotificationService notificationService) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
@@ -56,6 +59,7 @@ public class AppService {
         this.automationService = automationService;
         this.mfaService = mfaService;
         this.mfaGuard = mfaGuard;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -516,6 +520,39 @@ public class AppService {
     }
 
     @Transactional
+    public void mergeGuestWorkspace(String guestUserId, String targetUserId) {
+        if (guestUserId == null || targetUserId == null || guestUserId.equals(targetUserId)) return;
+        List<Map<String, Object>> guest = jdbc.queryForList("""
+            SELECT id, is_guest AS isGuest FROM app_user WHERE id = ? AND deleted_at IS NULL
+            """, guestUserId);
+        if (guest.isEmpty() || number(guest.get(0).get("isGuest")) == 0) return;
+        String personalWorkspace = jdbc.queryForList("""
+            SELECT w.id FROM workspace w JOIN membership m ON m.workspace_id = w.id
+            WHERE m.user_id = ? AND w.type = 'personal' AND w.deleted_at IS NULL
+            ORDER BY w.created_at LIMIT 1
+            """, String.class, guestUserId).stream().findFirst().orElse(null);
+        if (personalWorkspace == null) {
+            jdbc.update("DELETE FROM membership WHERE user_id = ?", guestUserId);
+            jdbc.update("UPDATE app_user SET deleted_at = ? WHERE id = ?", Instant.now().toString(), guestUserId);
+            jdbc.update("DELETE FROM auth_session WHERE user_id = ?", guestUserId);
+            return;
+        }
+        String now = Instant.now().toString();
+        jdbc.update("""
+            INSERT INTO membership (user_id, workspace_id, role, joined_at)
+            VALUES (?, ?, 'OWNER', ?)
+            ON CONFLICT(user_id, workspace_id) DO UPDATE SET role = 'OWNER'
+            """, targetUserId, personalWorkspace, now);
+        jdbc.update("""
+            UPDATE workspace SET name = 'Imported personal'
+            WHERE id = ? AND lower(name) NOT LIKE '%imported%'
+            """, personalWorkspace);
+        jdbc.update("DELETE FROM membership WHERE user_id = ?", guestUserId);
+        jdbc.update("UPDATE app_user SET deleted_at = ? WHERE id = ?", Instant.now().toString(), guestUserId);
+        jdbc.update("DELETE FROM auth_session WHERE user_id = ?", guestUserId);
+    }
+
+    @Transactional
     public String ensureOAuthUser(String guestUserId, String email, String name) {
         String normalized = email == null || email.isBlank() ? null : email.trim().toLowerCase();
         if (normalized != null) {
@@ -604,11 +641,15 @@ public class AppService {
 
     public Map<String, Object> views(String userId, String workspaceId) {
         requireMembership(userId, workspaceId);
-        return linked(Map.of("views", jdbc.queryForList("""
+        List<Map<String, Object>> views = jdbc.queryForList("""
             SELECT id, name, type, filters_json AS filtersJson, is_favorite AS isFavorite,
                    created_at AS createdAt, updated_at AS updatedAt
             FROM view WHERE user_id = ? AND workspace_id = ? ORDER BY created_at
-            """, userId, workspaceId)));
+            """, userId, workspaceId);
+        for (Map<String, Object> view : views) {
+            view.put("isFavorite", number(view.get("isFavorite")) == 1);
+        }
+        return linked(Map.of("views", views));
     }
 
     @Transactional
@@ -639,6 +680,7 @@ public class AppService {
                    created_at AS createdAt, updated_at AS updatedAt
             FROM view WHERE user_id = ? AND workspace_id = ? AND name = ?
             """, userId, input.workspaceId(), name).stream().findFirst().orElseThrow();
+        view.put("isFavorite", number(view.get("isFavorite")) == 1);
         return linked(Map.of("view", view));
     }
 
@@ -744,6 +786,11 @@ public class AppService {
 
     private String truncate(String value, int max) {
         if (value == null) return null;
+        return value.length() <= max ? value : value.substring(0, max);
+    }
+
+    private String clip(String value, int max) {
+        if (value == null) return "";
         return value.length() <= max ? value : value.substring(0, max);
     }
 
@@ -2112,6 +2159,17 @@ public class AppService {
             normalizeRecurrence(input.recurrenceRule()), normalizeRecurrenceEnds(input.recurrenceEndsAt()),
             position, userId, now, now);
         replaceTaskLabels(taskId, workspaceId, input.labels());
+        if (input.reminderOffsetMinutes() != null) {
+            setReminderOffset(userId, taskId, input.dueDate(), input.reminderOffsetMinutes());
+        }
+        Map<String, Object> createdTask = taskRow(taskId);
+        Object createdAssignee = createdTask.get("assigneeId");
+        if (createdAssignee != null && !userId.equals(String.valueOf(createdAssignee))) {
+            notificationService.notify(String.valueOf(createdAssignee), workspaceId, taskId, "task.assigned",
+                "Assigned: " + input.title().trim(),
+                String.valueOf(userRow(userId).get("name")) + " assigned you a task.",
+                "/?task=" + taskId);
+        }
         recordActivity(workspaceId, taskId, userId, "task.created", "task", taskId);
         audit(workspaceId, userId, "task.created", "task", taskId, Map.of("title", input.title().trim()));
         webhookService.dispatch(workspaceId, "task.created",
@@ -2221,6 +2279,17 @@ public class AppService {
         webhookService.dispatch((String) task.get("workspaceId"), "comment.created",
             Map.of("taskId", taskId, "title", String.valueOf(task.get("title")),
                 "preview", input.body().trim().length() > 160 ? input.body().trim().substring(0, 160) : input.body().trim()));
+        Set<String> recipients = new HashSet<>();
+        if (task.get("assigneeId") != null) recipients.add(String.valueOf(task.get("assigneeId")));
+        if (task.get("createdById") != null) recipients.add(String.valueOf(task.get("createdById")));
+        recipients.remove(userId);
+        for (String recipient : recipients) {
+            notificationService.notify(recipient, String.valueOf(task.get("workspaceId")), taskId,
+                "comment.mention", "New comment on " + task.get("title"),
+                String.valueOf(userRow(userId).get("name")) + ": "
+                    + clip(input.body().trim(), 140),
+                "/?task=" + taskId);
+        }
         return linked(Map.of("comment", jdbc.queryForList("""
             SELECT c.id, c.body, c.created_at AS createdAt, c.author_id AS authorId,
                    u.display_name AS authorName
@@ -2482,21 +2551,7 @@ public class AppService {
         if (input.labels() != null) replaceTaskLabels(taskId, workspaceId, input.labels());
         if (input.dependencyIds() != null) replaceTaskDependencies(userId, taskId, workspaceId, input.dependencyIds());
         if (input.reminderOffsetMinutes() != null) {
-            Integer offset = jsonInteger(input.reminderOffsetMinutes());
-            jdbc.update("DELETE FROM reminder WHERE task_id = ? AND user_id = ? AND sent_at IS NULL", taskId, userId);
-            if (offset != null && dueDate != null) {
-                ZoneId zone = ZoneId.of(zoneForUser(userId));
-                LocalDateTime due = parseLocalDateTime(dueDate, zone);
-                if (due != null) {
-                    Instant remindAt = due.atZone(zone).toInstant().minusSeconds(offset * 60L);
-                    if (remindAt.isAfter(Instant.now())) {
-                        jdbc.update("""
-                            INSERT INTO reminder (id, task_id, user_id, remind_at, channel, created_at)
-                            VALUES (?, ?, ?, ?, 'in_app', ?)
-                            """, id(), taskId, userId, remindAt.toString(), Instant.now().toString());
-                    }
-                }
-            }
+            setReminderOffset(userId, taskId, dueDate, jsonInteger(input.reminderOffsetMinutes()));
         }
         String nextTaskId = null;
         if (completedNow) {
@@ -2517,6 +2572,12 @@ public class AppService {
         }
         recordActivity(workspaceId, taskId, userId, "task.updated", "task", taskId);
         audit(workspaceId, userId, "task.updated", "task", taskId, Map.of());
+        if (assigneeId != null && !userId.equals(assigneeId)) {
+            notificationService.notify(assigneeId, workspaceId, taskId, "task.assigned",
+                "Assigned: " + title,
+                String.valueOf(userRow(userId).get("name")) + " updated your task.",
+                "/?task=" + taskId);
+        }
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
@@ -2540,6 +2601,21 @@ public class AppService {
             jdbc.update("""
                 INSERT OR IGNORE INTO task_dependency (task_id, depends_on_task_id, created_at) VALUES (?, ?, ?)
                 """, taskId, dependsOn, Instant.now().toString());
+        }
+    }
+
+    private void setReminderOffset(String userId, String taskId, String dueDate, Integer offset) {
+        jdbc.update("DELETE FROM reminder WHERE task_id = ? AND user_id = ? AND sent_at IS NULL", taskId, userId);
+        if (offset == null || dueDate == null) return;
+        ZoneId zone = ZoneId.of(zoneForUser(userId));
+        LocalDateTime due = parseLocalDateTime(dueDate, zone);
+        if (due == null) return;
+        Instant remindAt = due.atZone(zone).toInstant().minusSeconds(offset * 60L);
+        if (remindAt.isAfter(Instant.now())) {
+            jdbc.update("""
+                INSERT INTO reminder (id, task_id, user_id, remind_at, channel, created_at)
+                VALUES (?, ?, ?, ?, 'in_app', ?)
+                """, id(), taskId, userId, remindAt.toString(), Instant.now().toString());
         }
     }
 
@@ -2846,6 +2922,9 @@ public class AppService {
         Map<String, Object> current = taskRow(taskId);
         requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
         requireTaskBoardVisible(userId, current);
+        if (completed && openDependencyCount(taskId) > 0) {
+            throw ApiException.dependencyBlocked("Finish the work this task is waiting on first.");
+        }
         Map<String, Object> column = jdbc.queryForList("""
             SELECT id FROM board_column
             WHERE board_id = ? AND is_done = ? AND deleted_at IS NULL ORDER BY position LIMIT 1
@@ -3005,7 +3084,7 @@ public class AppService {
                    t.title, t.description, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes, t.archived_at AS archivedAt, t.version, c.is_done AS completed,
-                   t.position AS position, t.focus_date AS focusDate,
+                   t.position AS position, t.focus_date AS focusDate, t.created_by AS createdById,
                    t.assignee_id AS assigneeId, t.recurrence_rule AS recurrenceRule,
                    t.recurrence_ends_at AS recurrenceEndsAt,
                    u.display_name AS assigneeName, u.email AS assigneeEmail

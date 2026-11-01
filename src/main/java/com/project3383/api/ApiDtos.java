@@ -20,7 +20,8 @@ public final class ApiDtos {
         java.util.List<String> labels,
         String assigneeId,
         String recurrenceRule,
-        String recurrenceEndsAt
+        String recurrenceEndsAt,
+        Integer reminderOffsetMinutes
     ) {
     }
 
@@ -91,6 +92,13 @@ public final class ApiDtos {
         String workspaceId,
         String boardId,
         java.util.List<String> orderedIds
+    ) {
+    }
+
+    public record NotificationUpdate(
+        Boolean all,
+        Boolean read,
+        String id
     ) {
     }
 

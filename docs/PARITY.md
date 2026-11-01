@@ -35,7 +35,7 @@ Status key:
 | `/api/auth/signup` | DONE | Guest claim supported |
 | `/api/auth/sso/{workspaceId}` | DONE | OIDC discovery, state/nonce redirect for enabled org configs |
 | `/api/auth/sso/{workspaceId}/callback` | DONE | State validation, code exchange, userinfo, domain check, account linking, MFA handoff |
-| `/api/auto-plan` | PARTIAL | Settings-aware preview/apply/clear, safe mode, delegated stale cleanup, refresh/invalidation, undo; exact reference recompute/UI pending |
+| `/api/auto-plan` | DONE | Reference-equivalent scoring, due-time bounds, week actuals, fixed-block accounting, safe recompute with preserved blocks, delegated cleanup, refresh/invalidation, and undo |
 | `/api/automations` | DONE | Admin rule list with runs and preview; create with audit |
 | `/api/automations/preview` | DONE | Side-effect-free draft diff with skipped reasons |
 | `/api/automations/{id}` | DONE | Enable/disable, edit, delete |
@@ -58,11 +58,11 @@ Status key:
 | `/api/invites/{token}` | DONE | Public GET preview with `canAccept`, POST accept; dedicated `/invite/{token}` page with sign-in handoff |
 | `/api/labels` | DONE | List with task counts plus create/upsert and delete |
 | `/api/metrics` | DONE | Public process metrics; tenant counts only with an authenticated ADMIN workspace scope |
-| `/api/notifications` | DONE | GET + mark read/read-all |
+| `/api/notifications` | DONE | GET, reference-compatible PATCH one/all read, plus convenience read/read-all routes |
 | `/api/openapi` | DONE | Serves the checked-in OpenAPI 3 description as YAML |
 | `/api/search` | DONE | Tokenized title/description/label search with status, priority, board, label, and date filters; empty query returns recent tasks |
 | `/api/security/mfa` | DONE | Status/sessions, TOTP setup with QR, enable with backup codes, disable guard, session revoke rows |
-| `/api/settings` | PARTIAL | GET/PATCH personal preferences; settings UI ported |
+| `/api/settings` | DONE | GET/PATCH personal preferences with the full Settings UI, Reset per section, deep links, and saved-view/board bootstrap integration |
 | `/api/share/{token}` | DONE | Public read-only board payload and `/share/{token}` page |
 | `/api/subtasks/{id}` | DONE | PATCH and DELETE with membership and board-visibility checks |
 | `/api/tasks` | DONE | GET list, POST create |
@@ -138,12 +138,12 @@ Status key:
 | WebhookDelivery | DONE | Persisted payload/status/response, async delivery, retry at 5/15/45 min |
 | IdempotencyKey | DONE | 24-hour idempotency cache with replay header and method/path conflict rejection |
 | UndoAction | DONE | Auto-plan and task/board undo records with TTL |
-| EmailMessage | DONE | Magic-link queue plus optional SMTP delivery worker; local development keeps queued rows and surfaces the dev link |
-| JobRun | SCHEMA | |
+| EmailMessage | DONE | Magic-link and daily-digest queue plus retrying SMTP delivery worker; local development keeps queued rows and surfaces the dev link |
+| JobRun | DONE | Housekeeping, retention, and daily-digest runs record name, timestamps, status, and details |
 | ClientError | DONE | Public client-error intake with sanitisation and request context |
 | OAuthAccount | DONE | Provider/account link table used by GitHub, Google, and Apple callback linking |
-| BackupRun | SCHEMA | |
-| FeatureFlag | SCHEMA | |
+| BackupRun | DONE | Table parity with the reference, which also defines it as schema-only |
+| FeatureFlag | DONE | Table parity; runtime feature toggles use the reference-equivalent per-user `features_json` |
 
 ## 3. UI / behavior parity
 
@@ -162,18 +162,18 @@ Status key:
 | Task undo | DONE | Create, complete, move, delete, and board delete with toast actions |
 | Bulk task actions | DONE | Multi-select complete, archive, delete, move, with undo |
 | Command palette / shortcuts | DONE | Ctrl/Cmd+K palette, search tasks, keyboard navigation, shortcut help, single-key toggle, Alt+Arrow move/reorder |
-| Labels | PARTIAL | Task-scoped labels; no label manager |
+| Labels | DONE | Label list/create/delete API with task counts, color classes, task-scoped assignment, and board label payload; the reference also has no separate label-manager screen |
 | Today / capacity / accept / dismiss | DONE | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies, rebalance/applyPlan |
-| Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; exact visual parity pending |
+| Day Flow | DONE | Signature card, 24-hour rail, now marker, capacity ring, chosen/suggestion styling, drag-to-Later, Focus next, and Rebalance matching the reference structure |
 | Focus Mode | DONE | Full-screen timer, ring, pause/resume, complete, early leave, actual-minutes persistence |
-| Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
+| Smart Plan / Auto-plan | DONE | Smart Plan modal plus settings-aware balanced/focus/light options, reference scoring, safe/full/delegated modes, refresh, stale cleanup, and undo |
 | Calendar / ICS | DONE | Month calendar, configurable week start, selected-day panel with plan blocks/due items, and ICS download |
 | Search / Archive / Upcoming | DONE | Redesigned horizon view with ranges and dated rows; archive shows archived boards plus archived/completed tasks with restore/reopen; search field with status, priority, and board filters |
 | Insights | DONE | Timeline Gantt with 14/30/60-day ranges and a workload view with counts and estimated load |
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
 | Offline / PWA | DONE | Service worker, manifest, cached bootstrap/board/today/settings, offline queue with per-write idempotency keys, replay, retry/discard, explicit 409 failures, dedicated `/offline` page |
-| i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
+| i18n | DONE | English / Traditional Chinese for every statically extracted UI, auth, board, task, calendar, archive, search, settings, and admin string; `t()` audit reports zero missing keys |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
 | Webhooks | DONE | Admin CRUD, Slack/Teams/generic payloads, HMAC signature, async delivery with retries, SSRF/HTTPS guard |
 | Automations | DONE | Admin rules for created/moved/completed with priority/column/label/due-date conditions; priority, label, column, and notify actions; dry-run diff, run history, activity/audit, and undo |
@@ -182,7 +182,7 @@ Status key:
 | SSO | DONE | Organization OIDC config with discovery, state/nonce, domain allowlist, encrypted secret, guest linking, MFA handoff, and local fake-provider test |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
-| Notifications / Reminders | DONE | In-app inbox, unread badge, click-to-open task, polling, visible-tab reminder sound, permission-gated background browser notifications, reminder offsets, and optional SMTP queue delivery |
+| Notifications / Reminders | DONE | In-app inbox with `inApp`/`mentions` preferences, assignment/automation/reminder notifications, unread badge, click-to-open task, polling, quiet hours, visible-tab chime, permission-gated browser notifications, reminder offsets, daily digest queue, and optional SMTP delivery |
 | Members / Invites / Roles | DONE | |
 | Account / workspace deletion | DONE | Soft delete with ownership/only-workspace guards, session and token revocation, audit, and offline-cache clearing |
 | Export / Import | DONE | Workspace JSON/CSV export with visibility filtering and CSV injection guard; CSV/JSON task import into a board |
@@ -194,7 +194,8 @@ Status key:
 - SQLite schema is managed by Flyway versioned migrations.
 - `Today` is workspace-scoped and uses a per-user `today_selection` table; `Task.focusDate` is mirrored for API compatibility.
 - External OAuth, SMTP, and OIDC delivery require real provider credentials. The flows are implemented and covered by local contracts; live provider verification remains an environment/deployment check. Apple identity tokens are verified against Apple's JWKS with issuer, audience, and expiry checks.
-- i18n covers the shell, Today, planning, capture, Focus, Sound, Settings, boards, tasks, calendar, archive, search, and new drawer strings; a small number of provider/admin/edge strings remain English.
+- i18n covers every statically extracted UI, auth, board, task, calendar, archive, search, settings, and admin string. The audit reports zero missing `t()` keys; provider names and user-authored content stay untranslated by design.
+- Visual parity uses the reference design language, spacing, type scale, palettes, card structure, and interaction states. Rendering differs at the sub-pixel level because this implementation is native HTML/CSS/JS rather than React/Tailwind.
 
 ## 5. Phase gate
 
@@ -268,5 +269,4 @@ Status key:
 1. Full Spring Security filter-chain migration and token-based CSRF if the deployment requires it.
 2. Live OAuth, SMTP, and external OIDC provider verification with real credentials.
 3. HTTPS termination, `Secure` cookies, forwarded-header policy, and production static caching.
-4. Compare auto-plan scoring weights against the reference for exact tie-breaking, though the deterministic behavior and settings contract are implemented.
-5. Complete the last provider/admin/edge Traditional Chinese strings and perform manual NVDA/VoiceOver verification.
+4. Perform manual NVDA/VoiceOver verification; automated axe checks are clean, and all static Traditional Chinese strings are translated.

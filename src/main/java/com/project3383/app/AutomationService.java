@@ -31,13 +31,15 @@ public class AutomationService {
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
     private final MfaGuard mfaGuard;
+    private final NotificationService notificationService;
 
     public AutomationService(JdbcTemplate jdbc, ObjectMapper objectMapper, AuditService auditService,
-                             MfaGuard mfaGuard) {
+                             MfaGuard mfaGuard, NotificationService notificationService) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
         this.mfaGuard = mfaGuard;
+        this.notificationService = notificationService;
     }
 
     public Map<String, Object> list(String userId, String workspaceId) {
@@ -245,11 +247,8 @@ public class AutomationService {
         } else if ("notify".equals(actionType)) {
             String recipient = task.assigneeId() == null ? task.createdById() : task.assigneeId();
             if (recipient == null) return;
-            jdbc.update("""
-                INSERT INTO notification (id, user_id, workspace_id, task_id, type, title, body, link, read_at, created_at)
-                VALUES (?, ?, ?, ?, 'automation', ?, ?, ?, NULL, ?)
-                """, UUID.randomUUID().toString(), recipient, workspaceId, task.id(), actionValue,
-                "Rule \"" + rule.get("name") + "\" matched \"" + task.title() + "\".", "/?task=" + task.id(), now);
+            notificationService.notify(recipient, workspaceId, task.id(), "automation", actionValue,
+                "Rule \"" + rule.get("name") + "\" matched \"" + task.title() + "\".", "/?task=" + task.id());
             after.put("notifiedUserId", recipient);
         } else {
             return;

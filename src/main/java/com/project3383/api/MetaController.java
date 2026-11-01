@@ -1,6 +1,7 @@
 package com.project3383.api;
 
 import com.project3383.app.AppService;
+import com.project3383.app.SessionService;
 import com.project3383.auth.AuthInterceptor;
 import com.project3383.auth.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,9 +29,11 @@ import java.util.Map;
 public class MetaController {
 
     private final AppService appService;
+    private final SessionService sessionService;
 
-    public MetaController(AppService appService) {
+    public MetaController(AppService appService, SessionService sessionService) {
         this.appService = appService;
+        this.sessionService = sessionService;
     }
 
     @GetMapping("/labels")
@@ -73,6 +76,9 @@ public class MetaController {
                                        @RequestParam(required = false) String workspaceId) {
         HttpSession session = request.getSession(false);
         Object userId = session == null ? null : session.getAttribute(AuthInterceptor.SESSION_USER);
+        if (userId != null && !sessionService.touch(session, userId.toString())) {
+            userId = null;
+        }
         return appService.metrics(userId == null ? null : userId.toString(), workspaceId);
     }
 

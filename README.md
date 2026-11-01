@@ -37,7 +37,7 @@ Implemented:
   - Delete task
   - Sign out
 - JUnit/MockMvc suite covering auth/sessions, boards/columns/WIP/templates, task patches, invites, idempotency, labels/views/metrics/OpenAPI, Today, archive, enterprise controls, and security
-- Reminders, in-app notifications, polling, visible-tab chime, permission-gated browser notifications, and optional SMTP delivery
+- Reminders, assignment/automation notifications, in-app preferences, quiet hours, polling, visible-tab chime, permission-gated browser notifications, and optional SMTP delivery
 - Workspace-scoped, per-user Today selection with capacity, reasons, blocked-dependency state, rebalance, and applyPlan
 - Day Flow 24-hour time rail with capacity ring, now marker, chosen/suggested blocks, drag-to-Later, and Rebalance
 - Focus Mode full-screen timer with pause/resume, complete, early leave, and actual-minutes persistence
@@ -66,7 +66,7 @@ Implemented:
 - Labels, saved views, metrics, OpenAPI, client-error intake, and workspace-list APIs
 - `/settings`, `/settings#section`, `/offline`, `/invite/{token}`, `?view=`, `?board=`, and `?task=` deep links
 - `SEED_DEMO=true` demo account/workspace seed (`demo@drift.local` / `DriftDemo123!`)
-- Reminder, retention, and email workers with in-process scheduling
+- Hourly daily-digest queueing, reminder delivery, retrying email delivery, six-hourly housekeeping, retention soft-deletion, and `job_run` history
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
 - Settings storage/API (`/api/settings` GET/PATCH) and account profile update (`/api/account` PATCH)
 - Origin-based CSRF protection for cookie-authenticated mutations
@@ -197,6 +197,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/tasks/{id}/reminders` | Set a reminder |
 | DELETE | `/api/reminders/{id}` | Remove a reminder |
 | GET | `/api/notifications` | List in-app notifications |
+| PATCH | `/api/notifications` | Mark one or all notifications read (reference-compatible body) |
 | PATCH | `/api/notifications/{id}/read` | Mark one notification read |
 | PATCH | `/api/notifications/read-all` | Mark all notifications read |
 

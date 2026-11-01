@@ -8,13 +8,13 @@ Date: 2026-11-02
 
 | Check | Result |
 |---|---|
-| `./mvnw test` | 30 tests, 0 failures, 0 errors |
+| `./mvnw test` | 31 tests, 0 failures, 0 errors |
 | `./mvnw -DskipTests package` | Passed; executable jar produced |
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
 | Flyway migrations | V1–V9 validated and applied; schema advances through the column/WIP migration |
 | Git | Clean working tree at the acceptance commit |
 
-The API smoke suite covers guest sessions, persistent/revocable sessions, account claim/sign-in, roles and invite preview/acceptance, board templates/columns/WIP/archived boards, task CRUD and field-presence-safe PATCH, drag/move/conflict handling, checklist deletion, Today selection and rebalancing, recurrence, comments/dependencies/attachments, reminders, calendar/upcoming/search/archive/rich insights, labels/views/metrics/OpenAPI/client errors, idempotent replay and key conflicts, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), and security headers/origin rejection.
+The API smoke suite covers guest sessions, persistent/revocable sessions, account claim/sign-in and guest-workspace merge, roles and invite preview/acceptance, board templates/columns/WIP/archived boards, task CRUD and field-presence-safe PATCH, create-time reminders, drag/move/conflict handling, checklist deletion, Today selection and rebalancing, recurrence, comments/dependencies/attachments, notification preferences/read state, calendar/upcoming/search/archive/rich insights, labels/views/metrics/OpenAPI/client errors, idempotent replay and key conflicts, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), and security headers/origin rejection.
 
 ## Browser acceptance
 
@@ -104,9 +104,9 @@ These are environment-dependent or intentionally deferred items recorded in [`PA
 1. OAuth provider buttons appear only when `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, or `APPLE_CLIENT_ID`/`APPLE_CLIENT_SECRET` are configured. Live provider verification needs real credentials; the default local app hides the buttons.
 2. Magic-link mail is queued and the development link is returned. `spring.mail.*` delivery is implemented, but no live SMTP server is configured for the local acceptance run.
 3. A dedicated standalone label-manager screen is not present; label APIs, label assignment, task-scoped labels, and label counts are implemented. Reminder offsets and custom reminder timestamps are available in the drawer.
-4. Auto-plan is deterministic and settings-aware, with preview/apply/refresh/undo, safe apply, and delegated stale cleanup. It never calls an external model; exact scoring weights may differ slightly from the reference.
-5. Production deployment hardening (HTTPS termination, `Secure` cookies, proxy forwarded headers) is not part of the local profile. Scheduled reminder delivery, retention purge, and email delivery workers do run in-process.
-6. A few provider/admin/edge strings remain English in the Traditional Chinese preview.
+4. Auto-plan is deterministic and settings-aware, with reference-equivalent scoring, due-time bounds, week actuals, fixed-block accounting, safe apply, refresh/undo, and delegated stale cleanup. It never calls an external model.
+5. Production deployment hardening (HTTPS termination, `Secure` cookies, proxy forwarded headers) is not part of the local profile. Reminder delivery, retrying email delivery, daily-digest queueing, housekeeping, and retention soft-deletion run in-process and record `job_run` history.
+6. Traditional Chinese covers all statically extracted UI strings; provider names and user-authored content stay untranslated by design.
 
 ## Runbook
 

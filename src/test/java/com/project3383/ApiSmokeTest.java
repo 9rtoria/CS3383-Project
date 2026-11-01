@@ -103,6 +103,57 @@ class ApiSmokeTest {
     }
 
     @Test
+    void signingInMergesTheGuestWorkspaceIntoTheAccount() throws Exception {
+        MvcResult accountGuest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession accountSession = (MockHttpSession) accountGuest.getRequest().getSession(false);
+        String email = "merge-" + System.nanoTime() + "@example.com";
+        mockMvc.perform(post("/api/auth/signup")
+                .session(accountSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "Merge Owner",
+                    "email", email,
+                    "password", "Password123"
+                ))))
+            .andExpect(status().isOk());
+
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession guestSession = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String columnId = board.path("columns").get(0).path("id").asText();
+        mockMvc.perform(post("/api/tasks")
+                .session(guestSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", columnId,
+                    "title", "Guest work to keep"
+                ))))
+            .andExpect(status().isCreated());
+
+        MvcResult signin = mockMvc.perform(post("/api/auth/signin")
+                .session(guestSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "email", email,
+                    "password", "Password123"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspaces[?(@.name == 'Imported personal')]").isNotEmpty())
+            .andReturn();
+        MockHttpSession mergedSession = (MockHttpSession) signin.getRequest().getSession(false);
+        mockMvc.perform(get("/api/boards/" + boardId).session(mergedSession))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.name").value("My tasks"))
+            .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Guest work to keep"));
+    }
+
+    @Test
     void guestCanCreateAndMoveATask() throws Exception {
         MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
             .andExpect(status().isOk())
@@ -2708,6 +2759,23 @@ class ApiSmokeTest {
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.received").value(true));
 
+        String notificationId = java.util.UUID.randomUUID().toString();
+        jdbc.update("""
+            INSERT INTO notification (id, user_id, workspace_id, type, title, body, link, created_at)
+            VALUES (?, ?, ?, 'reminder', 'Test reminder', 'Body', '/?task=test', ?)
+            """, notificationId, boot.path("user").path("id").asText(), workspaceId,
+            Instant.now().toString());
+        mockMvc.perform(patch("/api/notifications")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "all", true,
+                    "read", true
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.updated").isNumber())
+            .andExpect(jsonPath("$.notifications[?(@.id == '" + notificationId + "')].readAt").isNotEmpty());
+
         String inviteEmail = "invited-" + System.nanoTime() + "@example.com";
         MvcResult invite = mockMvc.perform(post("/api/workspaces/" + workspaceId + "/invites")
                 .session(session)
@@ -2792,6 +2860,12 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.revoked").value(true));
         mockMvc.perform(get("/api/security/mfa").session(second))
             .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/auth/session").session(second))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.authenticated").value(false));
+        mockMvc.perform(get("/api/auth/session").session(first))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.authenticated").value(true));
 
         String key = "test-idem-" + java.util.UUID.randomUUID();
         String idempotentTitle = "Idempotent " + key;
@@ -2861,7 +2935,8 @@ class ApiSmokeTest {
                     "columnId", todo,
                     "title", "Drawer task",
                     "dueDate", dueDate,
-                    "dueAllDay", false
+                    "dueAllDay", false,
+                    "reminderOffsetMinutes", 30
                 ))))
             .andExpect(status().isCreated())
             .andReturn().getResponse().getContentAsString()).path("task");
@@ -2879,6 +2954,10 @@ class ApiSmokeTest {
         String firstId = first.path("id").asText();
         String blockerId = blocker.path("id").asText();
 
+        mockMvc.perform(get("/api/tasks/" + firstId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.reminders[0].channel").value("in_app"));
+
         mockMvc.perform(patch("/api/tasks/" + firstId)
                 .session(session)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -2894,6 +2973,10 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.dependencies[0].id").value(blockerId))
             .andExpect(jsonPath("$.task.reminders[0].channel").value("in_app"));
+
+        mockMvc.perform(post("/api/tasks/" + firstId + "/complete").session(session))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("DEPENDENCY_BLOCKED"));
 
         mockMvc.perform(patch("/api/tasks/" + firstId)
                 .session(session)

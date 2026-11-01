@@ -28,6 +28,8 @@ import java.util.UUID;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final String GUEST_MERGE = "project3383.guestMerge";
+
     private final AppService appService;
     private final SessionService sessionService;
 
@@ -70,14 +72,19 @@ public class AuthController {
     @PostMapping("/signin")
     public Map<String, Object> signin(HttpServletRequest request, @RequestBody ApiDtos.Signin input) {
         AppService.AuthResult result = appService.signin(input);
+        HttpSession old = request.getSession(false);
+        Object guestId = old == null ? null : old.getAttribute(AuthInterceptor.SESSION_USER);
         if (result.mfaRequired()) {
+            if (old != null && guestId != null) old.setAttribute(GUEST_MERGE, guestId.toString());
             Map<String, Object> challenge = new java.util.LinkedHashMap<>();
             challenge.put("mfaRequired", true);
             challenge.put("challenge", result.challenge());
             return challenge;
         }
-        HttpSession old = request.getSession(false);
         if (old != null) {
+            if (guestId != null && !guestId.toString().equals(result.userId())) {
+                appService.mergeGuestWorkspace(guestId.toString(), result.userId());
+            }
             sessionService.revokeIfPresent(old);
             old.invalidate();
         }
@@ -85,7 +92,7 @@ public class AuthController {
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, result.mfaVerified());
         sessionService.start(session, result.userId(), request, result.mfaVerified());
-        return result.bootstrap();
+        return appService.bootstrap(result.userId());
     }
 
     @PostMapping("/mfa/challenge")
@@ -94,6 +101,11 @@ public class AuthController {
             input == null ? null : input.challenge(), input == null ? null : input.code());
         HttpSession old = request.getSession(false);
         if (old != null) {
+            Object guestId = old.getAttribute(GUEST_MERGE);
+            if (guestId == null) guestId = old.getAttribute(AuthInterceptor.SESSION_USER);
+            if (guestId != null && !guestId.toString().equals(result.userId())) {
+                appService.mergeGuestWorkspace(guestId.toString(), result.userId());
+            }
             sessionService.revokeIfPresent(old);
             old.invalidate();
         }
@@ -101,7 +113,7 @@ public class AuthController {
         session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, true);
         sessionService.start(session, result.userId(), request, true);
-        return result.bootstrap();
+        return appService.bootstrap(result.userId());
     }
 
     @PostMapping("/magic")
@@ -138,11 +150,16 @@ public class AuthController {
         try {
             AppService.MagicLogin login = appService.loginWithMagicToken(token);
             String destination = safeNext(next);
+            Object guestId = session == null ? null : session.getAttribute(AuthInterceptor.SESSION_USER);
             if (login.mfaChallenge() != null) {
+                if (session != null && guestId != null) session.setAttribute(GUEST_MERGE, guestId.toString());
                 return redirect(baseUrl + "/auth?mfa=1&challenge=" + encode(login.mfaChallenge())
                     + "&next=" + encode(destination));
             }
             if (session != null) {
+                if (guestId != null && !guestId.toString().equals(login.userId())) {
+                    appService.mergeGuestWorkspace(guestId.toString(), login.userId());
+                }
                 sessionService.revokeIfPresent(session);
                 session.invalidate();
             }
@@ -173,6 +190,18 @@ public class AuthController {
 
     private boolean constantTimeEquals(String left, String right) {
         return MessageDigest.isEqual(left.getBytes(StandardCharsets.UTF_8), right.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @GetMapping("/session")
+    public Map<String, Object> session(HttpSession session) {
+        Object userId = session.getAttribute(AuthInterceptor.SESSION_USER);
+        if (userId == null || !sessionService.touch(session, userId.toString())) {
+            return Map.of("authenticated", false);
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("authenticated", true);
+        result.put("bootstrap", appService.bootstrap(userId.toString()));
+        return result;
     }
 
     @GetMapping("/me")

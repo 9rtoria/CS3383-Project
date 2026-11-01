@@ -641,12 +641,20 @@
     $("authModal").classList.add("hidden");
   }
 
+  function inQuietHours(settings = state.settings) {
+    const start = settings?.quietStart;
+    const end = settings?.quietEnd;
+    if (start === null || start === undefined || end === null || end === undefined || start === end) return false;
+    const hour = new Date().getHours();
+    return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+  }
+
   async function loadNotifications() {
     try {
       const result = await request("/api/notifications");
       const notifications = result.notifications ?? [];
       const fresh = notifications.filter((notification) => !state.seenNotificationIds.has(notification.id));
-      if (state.notificationsReady) {
+      if (state.notificationsReady && !inQuietHours()) {
         const reminder = fresh.find((notification) => notification.type === "reminder");
         if (reminder) {
           const browserEnabled = state.settings?.notifications?.browser !== false;

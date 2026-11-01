@@ -286,14 +286,15 @@
     const initialError = query.get("error");
     if (initialError) showError(ERROR_MESSAGES[initialError] || "Sign-in could not be completed. Please try again.");
     try {
-      const boot = await api("/api/auth/me");
+      const session = await api("/api/auth/session");
+      const boot = session?.authenticated ? session.bootstrap : null;
       const guest = boot?.user?.isGuest === 1 || boot?.user?.isGuest === true;
       if (guest && !state.challenge) {
         state.claim = true;
         state.mode = query.get("mode") === "magic" ? "magic" : query.get("mode") === "signin" ? "signin" : "signup";
         const nameInput = $("signupForm").querySelector("[data-auth-name]");
         if (boot?.user?.name && boot.user.name !== "Guest") nameInput.value = boot.user.name;
-      } else if (!guest && !state.challenge) {
+      } else if (boot && !guest && !state.challenge) {
         goHome();
         return;
       }

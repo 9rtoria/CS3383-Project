@@ -36,8 +36,9 @@ public class EmailDeliveryService {
         if (sender == null) return;
         List<Map<String, Object>> messages = jdbc.queryForList("""
             SELECT id, recipient, subject, body FROM email_message
-            WHERE status = 'queued' ORDER BY created_at LIMIT 20
-            """);
+            WHERE status IN ('queued', 'failed') AND created_at < ?
+            ORDER BY created_at LIMIT 20
+            """, Instant.now().minusSeconds(60).toString());
         for (Map<String, Object> message : messages) {
             try {
                 SimpleMailMessage mail = new SimpleMailMessage();
