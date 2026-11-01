@@ -109,4 +109,11 @@ public final class ApiDtos {
         String remindAt
     ) {
     }
+
+    public record AutoPlanRequest(
+        String action,
+        String workspaceId,
+        String optionId
+    ) {
+    }
 }

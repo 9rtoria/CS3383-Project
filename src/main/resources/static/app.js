@@ -12,6 +12,7 @@
     detail: null,
     workspaceTasks: [],
     notifications: [],
+    autoPlan: null,
     authMode: "signin",
   };
 
@@ -507,6 +508,22 @@
       list.append(row);
     }
 
+    const flow = $("dayFlowList");
+    flow.replaceChildren();
+    const blocks = state.today?.planBlocks ?? [];
+    if (!blocks.length) {
+      flow.append(element("div", "empty", "No scheduled blocks yet. Use Auto-plan to shape the day."));
+    }
+    for (const block of blocks) {
+      const row = element("div", "today-row");
+      const time = element("strong", "", `${minutesLabel(block.startMinute)}–${minutesLabel(block.startMinute + block.minutes)}`);
+      const grow = element("div", "grow");
+      grow.append(element("h3", "", block.title));
+      grow.append(element("p", "", `${block.minutes} min · ${block.priority || "none"} priority`));
+      row.append(time, grow);
+      flow.append(row);
+    }
+
     const capacity = state.today?.capacity ?? { totalMinutes: 300, selectedMinutes: 0 };
     const selected = Number(capacity.selectedMinutes || 0);
     const total = Number(capacity.totalMinutes || 300);
@@ -516,6 +533,83 @@
     $("capacityHint").textContent = capacity.overbooked
       ? "This day is over capacity."
       : `${Math.max(0, total - selected)} minutes still open.`;
+  }
+
+  function minutesLabel(minutes) {
+    const value = Number(minutes) || 0;
+    const hour = Math.floor(value / 60);
+    const minute = value % 60;
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  async function openAutoPlan() {
+    try {
+      const result = await request("/api/auto-plan", {
+        method: "POST",
+        body: { action: "preview", workspaceId: workspace().id },
+      });
+      state.autoPlan = result;
+      renderAutoPlan();
+      $("autoPlanModal").classList.remove("hidden");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function renderAutoPlan() {
+    const container = $("autoPlanPreview");
+    container.replaceChildren();
+    for (const option of state.autoPlan?.options ?? []) {
+      const panel = element("div", "detail-section");
+      const head = element("div", "section-head");
+      head.append(element("h3", "", option.label));
+      head.append(element("span", "muted small", `${option.blocks?.length ?? 0} blocks · ${option.scheduledMinutes ?? 0} min`));
+      panel.append(head);
+      for (const block of (option.blocks ?? []).slice(0, 6)) {
+        const row = element("div", "detail-item");
+        row.append(element("span", "grow", `${block.date} ${minutesLabel(block.startMinute)}–${minutesLabel(block.startMinute + block.minutes)} · ${block.title}`));
+        panel.append(row);
+      }
+      if ((option.unscheduled ?? []).length) {
+        panel.append(element("p", "small muted", `${option.unscheduled.length} task(s) could not be placed.`));
+      }
+      container.append(panel);
+    }
+    $("applyAutoPlanButton").disabled = !(state.autoPlan?.options?.length);
+  }
+
+  async function applyAutoPlan() {
+    const button = $("applyAutoPlanButton");
+    button.disabled = true;
+    try {
+      await request("/api/auto-plan", {
+        method: "POST",
+        body: { action: "apply", workspaceId: workspace().id, optionId: "balanced" },
+      });
+      $("autoPlanModal").classList.add("hidden");
+      await loadToday();
+      await loadBoard(state.currentBoardId);
+      showToast("Auto-plan applied.");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function clearAutoPlan() {
+    if (!window.confirm("Clear scheduled Auto-plan blocks?")) return;
+    try {
+      await request("/api/auto-plan", {
+        method: "POST",
+        body: { action: "clear", workspaceId: workspace().id },
+      });
+      $("autoPlanModal").classList.add("hidden");
+      await loadToday();
+      showToast("Auto-plan cleared.");
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   async function todayAction(action, taskId) {
@@ -895,6 +989,13 @@
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
     $("newBoardButton").addEventListener("click", createBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);
+    $("autoPlanButton").addEventListener("click", openAutoPlan);
+    $("closeAutoPlanModal").addEventListener("click", () => $("autoPlanModal").classList.add("hidden"));
+    $("applyAutoPlanButton").addEventListener("click", applyAutoPlan);
+    $("clearAutoPlanButton").addEventListener("click", clearAutoPlan);
+    $("autoPlanModal").addEventListener("click", (event) => {
+      if (event.target === $("autoPlanModal")) $("autoPlanModal").classList.add("hidden");
+    });
     $("notificationsButton").addEventListener("click", openNotificationsModal);
     $("closeNotificationsModal").addEventListener("click", () => $("notificationsModal").classList.add("hidden"));
     $("markAllReadButton").addEventListener("click", markAllRead);

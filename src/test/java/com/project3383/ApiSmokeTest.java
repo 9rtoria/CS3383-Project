@@ -222,5 +222,30 @@ class ApiSmokeTest {
         mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/reopen").session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.completed").value(0));
+
+        mockMvc.perform(post("/api/auto-plan")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "preview",
+                    "workspaceId", workspaceId
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.options[0].id").value("balanced"));
+
+        mockMvc.perform(post("/api/auto-plan")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "action", "apply",
+                    "workspaceId", workspaceId,
+                    "optionId", "balanced"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.applied").isNumber());
+
+        mockMvc.perform(get("/api/today").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.planBlocks").isArray());
     }
 }

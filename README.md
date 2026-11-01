@@ -31,10 +31,10 @@ Implemented:
   - Sign out
 - JUnit/MockMvc smoke test for guest ??task ??move ??Today
 - Reminders, in-app notifications, and background delivery
+- Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 
 Not implemented yet:
 
-- Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
 - SSO/MFA/API tokens/Webhooks/Automations
 - Offline/PWA, Focus Mode, voice, sound, i18n
@@ -91,8 +91,9 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/invites/{token}` | Accept an invitation |
 | POST | `/api/boards` | Create a board and its starter columns |
 | GET | `/api/boards/{id}` | Board with columns and tasks |
-| GET | `/api/today` | Open-task list with capacity |
+| GET | `/api/today` | Open-task list with capacity and day blocks |
 | POST | `/api/today` | Accept or dismiss a task for today |
+| POST | `/api/auto-plan` | Preview, apply, or clear the deterministic plan |
 | POST | `/api/tasks` | Create a task |
 | GET | `/api/tasks/{id}` | Task detail with comments and checklist |
 | PATCH | `/api/tasks/{id}` | Update a task with version check |

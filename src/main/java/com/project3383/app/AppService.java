@@ -350,6 +350,14 @@ public class AppService {
             suggestions.add(suggestion);
         }
         int capacity = 300;
+        List<Map<String, Object>> planBlocks = jdbc.queryForList("""
+            SELECT pb.id, pb.task_id AS taskId, pb.start_minute AS startMinute, pb.minutes,
+                   pb.date, t.title, t.priority
+            FROM plan_block pb JOIN task t ON t.id = pb.task_id
+            WHERE pb.user_id = ? AND pb.date = ?
+              AND t.deleted_at IS NULL
+            ORDER BY pb.start_minute
+            """, userId, today);
         return linked(Map.of(
             "date", today,
             "capacity", linked(Map.of(
@@ -359,7 +367,8 @@ public class AppService {
                 "percent", capacity == 0 ? 0 : Math.min(100, Math.round(selectedMinutes * 100f / capacity)),
                 "overbooked", selectedMinutes > capacity
             )),
-            "suggestions", suggestions
+            "suggestions", suggestions,
+            "planBlocks", planBlocks
         ));
     }
 

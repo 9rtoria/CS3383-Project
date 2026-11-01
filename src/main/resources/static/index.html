@@ -50,12 +50,18 @@
         </div>
         <div class="top-actions">
           <span id="dateChip" class="date-chip"></span>
+          <button type="button" id="autoPlanButton" class="btn">Auto-plan</button>
           <button type="button" id="notificationsButton" class="btn">Notifications <span id="notificationCount">0</span></button>
           <button type="button" id="newTaskButton" class="btn primary">New task</button>
         </div>
       </header>
 
       <section id="todayView">
+        <div class="panel" style="margin-bottom:16px">
+          <h2>Day Flow</h2>
+          <p class="hint">The shape of today, with or without Auto-plan.</p>
+          <div id="dayFlowList" class="today-list"></div>
+        </div>
         <div class="today-grid">
           <div class="panel">
             <h2>Today’s work</h2>
@@ -76,6 +82,23 @@
         <div id="board" class="board"></div>
       </section>
     </main>
+  </div>
+
+  <div id="autoPlanModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="autoPlanTitle">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Local rules</p>
+          <h2 id="autoPlanTitle">Auto-plan</h2>
+        </div>
+        <button type="button" id="closeAutoPlanModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <div id="autoPlanPreview" class="detail-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="clearAutoPlanButton" class="btn spacer">Clear plan</button>
+        <button type="button" id="applyAutoPlanButton" class="btn primary">Apply balanced plan</button>
+      </div>
+    </div>
   </div>
 
   <div id="notificationsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="notificationsTitle">

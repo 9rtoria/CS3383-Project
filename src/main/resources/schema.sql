@@ -105,6 +105,24 @@ CREATE TABLE IF NOT EXISTS task_label (
     FOREIGN KEY (label_id) REFERENCES label(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS plan_block (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    start_minute INTEGER NOT NULL,
+    minutes INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'auto',
+    locked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id) REFERENCES workspace(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_block_user_date ON plan_block(user_id, date, start_minute);
+
 CREATE TABLE IF NOT EXISTS reminder (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
