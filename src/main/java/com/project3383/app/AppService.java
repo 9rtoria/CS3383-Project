@@ -930,6 +930,8 @@ public class AppService {
                 """, today, now, input.taskId());
             jdbc.update("DELETE FROM today_dismissal WHERE user_id = ? AND task_id = ? AND date = ?",
                 userId, input.taskId(), today);
+            recordActivity((String) task.get("workspaceId"), input.taskId(), userId,
+                "today.accepted", "task", input.taskId());
         } else if ("dismiss".equals(input.action())) {
             if (task == null) throw ApiException.badRequest("A task is required.");
             jdbc.update("""
@@ -1105,6 +1107,7 @@ public class AppService {
             normalizeRecurrence(input.recurrenceRule()), normalizeRecurrenceEnds(input.recurrenceEndsAt()),
             position, userId, now, now);
         replaceTaskLabels(taskId, workspaceId, input.labels());
+        recordActivity(workspaceId, taskId, userId, "task.created", "task", taskId);
         return linked(Map.of("task", task(userId, taskId)));
     }
 
@@ -1126,7 +1129,42 @@ public class AppService {
             FROM attachment WHERE task_id = ? AND deleted_at IS NULL ORDER BY created_at DESC
             """, taskId));
         task.put("reminders", reminderList(taskId, userId));
+        task.put("activity", activityList(taskId));
         return linked(Map.of("task", task));
+    }
+
+    private void recordActivity(String workspaceId, String taskId, String actorId,
+                                String action, String entityType, String entityId) {
+        jdbc.update("""
+            INSERT INTO activity_event (id, workspace_id, task_id, actor_id, action,
+                                        entity_type, entity_id, metadata, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)
+            """, id(), workspaceId, taskId, actorId, action, entityType, entityId, Instant.now().toString());
+    }
+
+    private List<Map<String, Object>> activityList(String taskId) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+            SELECT a.id, a.action, a.actor_id AS actorId, a.created_at AS createdAt,
+                   u.display_name AS actorName
+            FROM activity_event a
+            LEFT JOIN app_user u ON u.id = a.actor_id
+            WHERE a.task_id = ?
+            ORDER BY a.created_at DESC, a.rowid DESC
+            LIMIT 50
+            """, taskId);
+        for (Map<String, Object> row : rows) {
+            Object actorId = row.remove("actorId");
+            Object actorName = row.remove("actorName");
+            if (actorId == null) {
+                row.put("actor", null);
+            } else {
+                Map<String, Object> actor = new LinkedHashMap<>();
+                actor.put("id", actorId);
+                actor.put("name", actorName == null ? "" : actorName);
+                row.put("actor", actor);
+            }
+        }
+        return rows;
     }
 
     public Map<String, Object> addComment(String userId, String taskId, ApiDtos.CommentCreate input) {
@@ -1138,6 +1176,7 @@ public class AppService {
         jdbc.update("""
             INSERT INTO task_comment (id, task_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)
             """, commentId, taskId, userId, input.body().trim(), Instant.now().toString());
+        recordActivity((String) task.get("workspaceId"), taskId, userId, "comment.created", "comment", commentId);
         return linked(Map.of("comment", jdbc.queryForList("""
             SELECT c.id, c.body, c.created_at AS createdAt, c.author_id AS authorId,
                    u.display_name AS authorName
@@ -1159,6 +1198,7 @@ public class AppService {
             INSERT INTO subtask (id, task_id, title, completed, position, created_at)
             VALUES (?, ?, ?, 0, ?, ?)
             """, subtaskId, taskId, input.title().trim(), position, Instant.now().toString());
+        recordActivity((String) task.get("workspaceId"), taskId, userId, "subtask.created", "subtask", subtaskId);
         return linked(Map.of("subtask", subtaskRow(subtaskId)));
     }
 
@@ -1340,6 +1380,7 @@ public class AppService {
             Instant.now().toString(), taskId, version);
         if (updated == 0) throw ApiException.conflict("This task changed elsewhere.", version + 1);
         if (input.labels() != null) replaceTaskLabels(taskId, (String) current.get("workspaceId"), input.labels());
+        recordActivity((String) current.get("workspaceId"), taskId, userId, "task.updated", "task", taskId);
         return linked(Map.of("task", task(userId, taskId)));
     }
 
@@ -1372,6 +1413,8 @@ public class AppService {
         String nextTaskId = completing
             ? createNextOccurrence(userId, current, (String) current.get("columnId"))
             : null;
+        recordActivity((String) current.get("workspaceId"), taskId, userId,
+            completing ? "task.completed" : "task.moved", "task", taskId);
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
@@ -1384,6 +1427,7 @@ public class AppService {
         jdbc.update("""
             UPDATE task SET deleted_at = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL
             """, Instant.now().toString(), taskId);
+        recordActivity((String) current.get("workspaceId"), taskId, userId, "task.deleted", "task", taskId);
         return Map.of("deleted", true);
     }
 
@@ -1413,6 +1457,9 @@ public class AppService {
         String nextTaskId = complete && number(current.get("completed")) == 0
             ? createNextOccurrence(userId, current, (String) current.get("columnId"))
             : null;
+        if (complete && number(current.get("completed")) == 0) {
+            recordActivity((String) current.get("workspaceId"), taskId, userId, "task.completed", "task", taskId);
+        }
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
@@ -1434,6 +1481,8 @@ public class AppService {
         String nextTaskId = completed && number(current.get("completed")) == 0
             ? createNextOccurrence(userId, current, (String) current.get("columnId"))
             : null;
+        recordActivity((String) current.get("workspaceId"), taskId, userId,
+            completed ? "task.completed" : "task.reopened", "task", taskId);
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (nextTaskId != null) result.put("nextTaskId", nextTaskId);
         return result;
@@ -1841,6 +1890,8 @@ public class AppService {
         List<String> labelNames = labelsForTask((String) task.get("id")).stream()
             .map(label -> String.valueOf(label.get("name"))).toList();
         if (!labelNames.isEmpty()) replaceTaskLabels(nextId, (String) task.get("workspaceId"), labelNames);
+        recordActivity((String) task.get("workspaceId"), String.valueOf(task.get("id")), userId,
+            "task.recurred", "task", String.valueOf(task.get("id")));
         return nextId;
     }
 

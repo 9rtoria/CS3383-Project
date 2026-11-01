@@ -19,7 +19,7 @@ Implemented:
 - Public read-only board share links
 - Task create / update / move / soft-delete APIs
 - Task assignee, recurrence rules, and automatic next-occurrence creation
-- Task detail API with comments, checklist, labels, dependencies, attachments, completion, and reopen
+- Task detail API with comments, checklist, labels, dependencies, attachments, activity, completion, and reopen
 - Attachment upload/download/delete with local storage, MIME allowlist, and 10 MB limit
 - Task start date, all-day due date, and tracked actual minutes
 - Version-based 409 conflict handling

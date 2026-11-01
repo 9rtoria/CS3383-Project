@@ -73,6 +73,11 @@ public class AttachmentService {
                 INSERT INTO attachment (id, task_id, uploader_id, name, storage_name, mime_type, size, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, id, taskId, userId, original, storageName, mimeType, file.getSize(), Instant.now().toString());
+            jdbc.update("""
+                INSERT INTO activity_event (id, workspace_id, task_id, actor_id, action,
+                                            entity_type, entity_id, metadata, created_at)
+                VALUES (?, ?, ?, ?, 'attachment.created', 'attachment', ?, '{}', ?)
+                """, UUID.randomUUID().toString(), task.get("workspaceId"), taskId, userId, id, Instant.now().toString());
             return Map.of("attachment", attachment(id));
         } catch (IOException exception) {
             try { Files.deleteIfExists(target); } catch (IOException ignored) { }
@@ -105,13 +110,19 @@ public class AttachmentService {
 
     public Map<String, Object> delete(String userId, String attachmentId) {
         Map<String, Object> row = jdbc.queryForList("""
-            SELECT a.id, a.storage_name AS storageName, t.workspace_id AS workspaceId
+            SELECT a.id, a.task_id AS taskId, a.storage_name AS storageName, t.workspace_id AS workspaceId
             FROM attachment a JOIN task t ON t.id = a.task_id
             WHERE a.id = ? AND a.deleted_at IS NULL
             """, attachmentId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Attachment not found."));
         requireMember(userId, (String) row.get("workspaceId"));
         jdbc.update("UPDATE attachment SET deleted_at = ? WHERE id = ?", Instant.now().toString(), attachmentId);
+        jdbc.update("""
+            INSERT INTO activity_event (id, workspace_id, task_id, actor_id, action,
+                                        entity_type, entity_id, metadata, created_at)
+            VALUES (?, ?, ?, ?, 'attachment.deleted', 'attachment', ?, '{}', ?)
+            """, UUID.randomUUID().toString(), row.get("workspaceId"), row.get("taskId"),
+            userId, attachmentId, Instant.now().toString());
         try { Files.deleteIfExists(directory.resolve((String) row.get("storageName"))); } catch (IOException ignored) { }
         return Map.of("deleted", true);
     }

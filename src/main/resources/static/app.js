@@ -2202,6 +2202,7 @@
     $("dependencySelect").replaceChildren();
     $("attachmentList").replaceChildren();
     $("reminderList").replaceChildren();
+    $("activityList").replaceChildren();
     $("subtaskProgress").textContent = "";
     const board = currentBoard();
     const columns = board?.columns ?? [];
@@ -2272,8 +2273,39 @@
     }
   }
 
-  function renderTaskDetail() {
-    const task = state.detail?.task;
+  function relativeTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const diff = Math.max(0, Date.now() - date.getTime());
+    const minute = 60000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    if (diff < minute) return t("just now");
+    if (diff < hour) return t("{{count}}m ago", { count: Math.floor(diff / minute) });
+    if (diff < day) return t("{{count}}h ago", { count: Math.floor(diff / hour) });
+    if (diff < 7 * day) return t("{{count}}d ago", { count: Math.floor(diff / day) });
+    return new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(date);
+  }
+
+  function activityLabel(action) {
+    const labels = {
+      "task.created": "created the task",
+      "task.updated": "updated the task",
+      "task.completed": "completed the task",
+      "task.reopened": "reopened the task",
+      "task.moved": "moved the task",
+      "task.recurred": "created the next occurrence",
+      "task.deleted": "deleted the task",
+      "comment.created": "commented",
+      "subtask.created": "added a checklist item",
+      "attachment.created": "attached a file",
+      "attachment.deleted": "removed an attachment",
+      "today.accepted": "added this to Today",
+    };
+    return t(labels[action] || String(action || "").replace(/[._]/g, " "));
+  }
+
+  function renderTaskDetail() {    const task = state.detail?.task;
     if (!task) return;
     const subtasks = task.subtasks ?? [];
     const completed = subtasks.filter((item) => Number(item.completed) === 1).length;
@@ -2360,6 +2392,22 @@
       remove.addEventListener("click", () => removeReminder(reminder.id));
       row.append(label, remove);
       reminderList.append(row);
+    }
+
+    const activity = task.activity ?? [];
+    const activityList = $("activityList");
+    activityList.replaceChildren();
+    if (!activity.length) activityList.append(element("div", "empty", "No activity recorded yet."));
+    for (const entry of activity.slice(0, 50)) {
+      const row = element("div", "activity-item");
+      const dot = element("span", `side-dot${String(entry.action).includes("completed") ? " today" : ""}`);
+      const grow = element("div", "grow");
+      const copy = element("div", "activity-copy");
+      copy.append(element("strong", "", entry.actor?.name || "Someone"));
+      copy.append(document.createTextNode(` ${activityLabel(entry.action)}`));
+      grow.append(copy, element("div", "activity-time", relativeTime(entry.createdAt)));
+      row.append(dot, grow);
+      activityList.append(row);
     }
   }
 

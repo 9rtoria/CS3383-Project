@@ -877,6 +877,17 @@ body[data-view="settings"] .main { padding: 0; }
   .settings-range { flex-wrap: wrap; }
 }
 
+/* ---------- Activity ---------- */
+.activity-list { gap: 0; }
+.activity-item { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+.activity-item:last-child { border-bottom: 0; }
+.activity-item .grow { flex: 1; min-width: 0; }
+.activity-item strong { color: var(--text-soft); font-weight: 600; }
+.activity-copy { line-height: 1.45; }
+.activity-time { color: var(--faint); font-size: 10px; margin-top: 2px; }
+.side-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); flex: 0 0 auto; margin-top: 5px; }
+.side-dot.today { background: var(--accent); }
+
 /* ---------- Public read-only share ---------- */
 .share-body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
 .share-page { min-height: 100dvh; background: var(--bg); }

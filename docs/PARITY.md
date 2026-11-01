@@ -117,7 +117,7 @@ Status key:
 | TaskDependency | DONE | |
 | Comment | DONE | `task_comment` |
 | Attachment | DONE | |
-| ActivityEvent | SCHEMA | No activity UI/API yet |
+| ActivityEvent | DONE | Recorded for task, comment, checklist, attachment, Today, and recurrence changes |
 | AuditEvent | SCHEMA | No audit API/jobs yet |
 | Reminder | DONE | |
 | View | SCHEMA | No saved-view UI/API |
@@ -153,6 +153,7 @@ Status key:
 | Task archive | PARTIAL | `archived_at` added; delegated stale cleanup + Archive view; no manual archive action/API |
 | Task drawer fields | PARTIAL | Assignee and recurrence implemented; reminder display and full label management still partial |
 | Task comments / checklist | DONE | |
+| Task activity feed | DONE | Task detail activity trail with actors and relative times |
 | Task dependencies | DONE | |
 | Attachments | DONE | |
 | Task completion / reopen | DONE | |
@@ -206,6 +207,7 @@ Status key:
 - [x] Board settings, duplicate, archive, soft delete, and private visibility
 - [x] Task assignee and recurrence with next-occurrence generation
 - [x] Public read-only board share links with token revocation
+- [x] Task activity trail for task, comment, checklist, attachment, Today, and recurrence events
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -232,6 +234,6 @@ Status key:
 3. Full drawer parity for reminders and label management.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Remaining Phase 2 board/task gaps: activity feed, undo/bulk actions, command palette.
+6. Remaining Phase 2 board/task gaps: undo/bulk actions, command palette.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

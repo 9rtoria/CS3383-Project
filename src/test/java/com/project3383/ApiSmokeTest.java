@@ -683,4 +683,60 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/share/" + token)).andExpect(status().isNotFound());
         mockMvc.perform(get("/api/share/not-a-real-token")).andExpect(status().isNotFound());
     }
+
+    @Test
+    void taskActivityTracksTaskChanges() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Activity smoke task"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String taskId = objectMapper.readTree(created.getResponse().getContentAsString()).path("task").path("id").asText();
+
+        mockMvc.perform(post("/api/tasks/" + taskId + "/comments")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("body", "Activity comment"))))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/tasks/" + taskId + "/subtasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("title", "Activity step"))))
+            .andExpect(status().isCreated());
+        MockMultipartFile file = new MockMultipartFile("file", "activity.txt", "text/plain", "activity".getBytes());
+        mockMvc.perform(multipart("/api/tasks/" + taskId + "/attachments")
+                .file(file)
+                .session(session))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/tasks/" + taskId + "/complete").session(session))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/tasks/" + taskId + "/reopen").session(session))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/tasks/" + taskId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.activity[0].action").value("task.reopened"))
+            .andExpect(jsonPath("$.task.activity[0].actor.name").value("Guest"))
+            .andExpect(jsonPath("$.task.activity[?(@.action == 'task.created')]").isNotEmpty())
+            .andExpect(jsonPath("$.task.activity[?(@.action == 'task.completed')]").isNotEmpty())
+            .andExpect(jsonPath("$.task.activity[?(@.action == 'task.reopened')]").isNotEmpty())
+            .andExpect(jsonPath("$.task.activity[?(@.action == 'comment.created')]").isNotEmpty())
+            .andExpect(jsonPath("$.task.activity[?(@.action == 'subtask.created')]").isNotEmpty())
+            .andExpect(jsonPath("$.task.activity[?(@.action == 'attachment.created')]").isNotEmpty());
+    }
 }
