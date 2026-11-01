@@ -107,6 +107,34 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.columnId").value(doing));
 
+        String otherJson = objectMapper.writeValueAsString(Map.of(
+            "workspaceId", workspaceId,
+            "boardId", boardId,
+            "columnId", todo,
+            "title", "Other task"
+        ));
+        MvcResult otherCreated = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(otherJson))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String otherId = objectMapper.readTree(otherCreated.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+
+        mockMvc.perform(post("/api/tasks/" + otherId + "/dependencies")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("dependsOnTaskId", task.path("id").asText()))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.dependencies[0].title").value("Smoke task"));
+
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/dependencies")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("dependsOnTaskId", otherId))))
+            .andExpect(status().isBadRequest());
+
         mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/comments")
                 .session(session)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -160,6 +188,6 @@ class ApiSmokeTest {
                     "taskId", task.path("id").asText()
                 ))))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.suggestions").isEmpty());
+            .andExpect(jsonPath("$.suggestions[?(@.title == 'Smoke task')]").isEmpty());
     }
 }

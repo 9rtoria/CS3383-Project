@@ -10,6 +10,7 @@
     currentBoardId: null,
     editing: null,
     detail: null,
+    workspaceTasks: [],
     authMode: "signin",
   };
 
@@ -491,6 +492,8 @@
     $("taskDetail").classList.toggle("hidden", !task);
     $("subtaskList").replaceChildren();
     $("commentList").replaceChildren();
+    $("dependencyList").replaceChildren();
+    $("dependencySelect").replaceChildren();
     $("subtaskProgress").textContent = "";
     const board = currentBoard();
     const columns = board?.columns ?? [];
@@ -518,7 +521,12 @@
 
   async function loadTaskDetail(taskId) {
     try {
-      state.detail = await request(`/api/tasks/${encodeURIComponent(taskId)}`);
+      const [detail, taskList] = await Promise.all([
+        request(`/api/tasks/${encodeURIComponent(taskId)}`),
+        request(`/api/tasks?workspaceId=${encodeURIComponent(workspace().id)}`),
+      ]);
+      state.detail = detail;
+      state.workspaceTasks = taskList.tasks ?? [];
       renderTaskDetail();
     } catch (error) {
       showToast(error.message);
@@ -556,6 +564,55 @@
       grow.append(element("p", "", comment.body));
       row.append(grow);
       commentsList.append(row);
+    }
+
+    const dependencies = task.dependencies ?? [];
+    const dependencyList = $("dependencyList");
+    dependencyList.replaceChildren();
+    if (!dependencies.length) dependencyList.append(element("div", "empty", "No blockers."));
+    for (const dependency of dependencies) {
+      const row = element("div", "detail-item");
+      const title = element("span", "grow", dependency.title);
+      if (Number(dependency.completed) === 1) title.classList.add("muted");
+      const remove = element("button", "btn ghost sm", "Remove");
+      remove.type = "button";
+      remove.addEventListener("click", () => removeDependency(dependency.id));
+      row.append(title, remove);
+      dependencyList.append(row);
+    }
+    const select = $("dependencySelect");
+    select.replaceChildren();
+    const existing = new Set(dependencies.map((item) => item.id));
+    for (const item of state.workspaceTasks) {
+      if (item.id === task.id || existing.has(item.id)) continue;
+      select.add(new Option(item.title, item.id));
+    }
+    if (!select.options.length) select.add(new Option("No other tasks", ""));
+  }
+
+  async function addDependency() {
+    const dependsOnTaskId = $("dependencySelect").value;
+    if (!dependsOnTaskId || !state.editing) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/dependencies`, {
+        method: "POST",
+        body: { dependsOnTaskId },
+      });
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function removeDependency(dependsOnTaskId) {
+    if (!state.editing) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/dependencies/${encodeURIComponent(dependsOnTaskId)}`, {
+        method: "DELETE",
+      });
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
     }
   }
 
@@ -688,6 +745,7 @@
     $("taskForm").addEventListener("submit", saveTask);
     $("subtaskAddButton").addEventListener("click", addSubtask);
     $("commentAddButton").addEventListener("click", addComment);
+    $("dependencyAddButton").addEventListener("click", addDependency);
     $("subtaskTitle").addEventListener("keydown", (event) => {
       if (event.key === "Enter") { event.preventDefault(); void addSubtask(); }
     });

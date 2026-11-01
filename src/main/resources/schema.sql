@@ -105,6 +105,15 @@ CREATE TABLE IF NOT EXISTS task_label (
     FOREIGN KEY (label_id) REFERENCES label(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS task_dependency (
+    task_id TEXT NOT NULL,
+    depends_on_task_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, depends_on_task_id),
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE,
+    FOREIGN KEY (depends_on_task_id) REFERENCES task(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS task_comment (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,

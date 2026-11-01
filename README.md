@@ -17,7 +17,7 @@ Implemented:
 - Workspace members, invite links, role changes, and member removal
 - Board create/read API
 - Task create / update / move / soft-delete APIs
-- Task detail API with comments, checklist items, and labels
+- Task detail API with comments, checklist, labels, and dependencies
 - Task start date, all-day due date, and tracked actual minutes
 - Version-based 409 conflict handling
 - Today list with capacity and accept/dismiss actions
@@ -32,7 +32,7 @@ Implemented:
 
 Not implemented yet:
 
-- Task drawer parity (attachments, dependencies, reminders)
+- Task drawer parity (attachments, reminders)
 - Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
 - SSO/MFA/API tokens/Webhooks/Automations

@@ -99,4 +99,9 @@ public final class ApiDtos {
         Boolean completed
     ) {
     }
+
+    public record DependencyCreate(
+        String dependsOnTaskId
+    ) {
+    }
 }

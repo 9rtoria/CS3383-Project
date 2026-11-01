@@ -437,6 +437,7 @@ public class AppService {
             SELECT id, title, completed, position
             FROM subtask WHERE task_id = ? ORDER BY position, created_at
             """, taskId));
+        task.put("dependencies", dependencyList(taskId));
         return linked(Map.of("task", task));
     }
 
@@ -482,6 +483,75 @@ public class AppService {
         jdbc.update("UPDATE subtask SET title = ?, completed = ? WHERE id = ?",
             title, completed ? 1 : 0, subtaskId);
         return linked(Map.of("subtask", subtaskRow(subtaskId)));
+    }
+
+    public Map<String, Object> listTasks(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        return linked(Map.of("tasks", jdbc.queryForList("""
+            SELECT t.id, t.title, c.is_done AS completed, t.board_id AS boardId
+            FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.workspace_id = t.workspace_id
+            ORDER BY t.title
+            """, workspaceId)));
+    }
+
+    public Map<String, Object> addDependency(String userId, String taskId, ApiDtos.DependencyCreate input) {
+        Map<String, Object> task = taskRow(taskId);
+        requireMembership(userId, (String) task.get("workspaceId"));
+        if (input == null || blank(input.dependsOnTaskId())) throw ApiException.badRequest("Choose a task to wait on.");
+        if (taskId.equals(input.dependsOnTaskId())) throw ApiException.badRequest("A task cannot depend on itself.");
+        Map<String, Object> dependency = taskRow(input.dependsOnTaskId());
+        if (!task.get("workspaceId").equals(dependency.get("workspaceId"))) {
+            throw ApiException.badRequest("Dependencies must be in the same workspace.");
+        }
+        if (wouldCreateCycle(taskId, input.dependsOnTaskId())) {
+            throw ApiException.badRequest("That dependency would create a cycle.");
+        }
+        jdbc.update("""
+            INSERT OR IGNORE INTO task_dependency (task_id, depends_on_task_id, created_at) VALUES (?, ?, ?)
+            """, taskId, input.dependsOnTaskId(), Instant.now().toString());
+        return linked(Map.of("dependencies", dependencyList(taskId)));
+    }
+
+    public Map<String, Object> removeDependency(String userId, String taskId, String dependsOnTaskId) {
+        Map<String, Object> task = taskRow(taskId);
+        requireMembership(userId, (String) task.get("workspaceId"));
+        jdbc.update("""
+            DELETE FROM task_dependency WHERE task_id = ? AND depends_on_task_id = ?
+            """, taskId, dependsOnTaskId);
+        return linked(Map.of("dependencies", dependencyList(taskId)));
+    }
+
+    private List<Map<String, Object>> dependencyList(String taskId) {
+        return jdbc.queryForList("""
+            SELECT t.id, t.title, c.is_done AS completed
+            FROM task_dependency d
+            JOIN task t ON t.id = d.depends_on_task_id AND t.deleted_at IS NULL
+            JOIN board_column c ON c.id = t.column_id
+            WHERE d.task_id = ?
+            ORDER BY t.title
+            """, taskId);
+    }
+
+    private boolean wouldCreateCycle(String taskId, String dependsOnTaskId) {
+        // Adding task -> dependsOn creates a cycle if dependsOn can already reach task.
+        List<Map<String, Object>> edges = jdbc.queryForList("SELECT task_id AS taskId, depends_on_task_id AS dependsOnTaskId FROM task_dependency");
+        Map<String, List<String>> graph = new java.util.HashMap<>();
+        for (Map<String, Object> edge : edges) {
+            graph.computeIfAbsent((String) edge.get("taskId"), key -> new ArrayList<>())
+                .add((String) edge.get("dependsOnTaskId"));
+        }
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        queue.add(dependsOnTaskId);
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            if (current.equals(taskId)) return true;
+            if (!seen.add(current)) continue;
+            for (String next : graph.getOrDefault(current, List.of())) queue.add(next);
+        }
+        return false;
     }
 
     private Map<String, Object> subtaskRow(String subtaskId) {

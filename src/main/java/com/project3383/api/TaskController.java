@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,9 +33,24 @@ public class TaskController {
         return appService.createTask(CurrentUser.id(session), input);
     }
 
+    @GetMapping
+    public Map<String, Object> list(HttpSession session, @RequestParam String workspaceId) {
+        return appService.listTasks(CurrentUser.id(session), workspaceId);
+    }
+
     @GetMapping("/{id}")
     public Map<String, Object> detail(HttpSession session, @PathVariable String id) {
         return appService.taskDetail(CurrentUser.id(session), id);
+    }
+
+    @PostMapping("/{id}/dependencies")
+    public Map<String, Object> dependency(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.DependencyCreate input) {
+        return appService.addDependency(CurrentUser.id(session), id, input);
+    }
+
+    @DeleteMapping("/{id}/dependencies/{dependsOnTaskId}")
+    public Map<String, Object> removeDependency(HttpSession session, @PathVariable String id, @PathVariable String dependsOnTaskId) {
+        return appService.removeDependency(CurrentUser.id(session), id, dependsOnTaskId);
     }
 
     @PostMapping("/{id}/comments")
