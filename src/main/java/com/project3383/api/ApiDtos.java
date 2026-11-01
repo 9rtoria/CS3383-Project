@@ -12,8 +12,11 @@ public final class ApiDtos {
         String title,
         String description,
         String priority,
+        String startDate,
         String dueDate,
-        Integer estimateMinutes
+        Boolean dueAllDay,
+        Integer estimateMinutes,
+        Integer actualMinutes
     ) {
     }
 
@@ -22,8 +25,11 @@ public final class ApiDtos {
         String title,
         String description,
         String priority,
+        String startDate,
         String dueDate,
-        Integer estimateMinutes
+        Boolean dueAllDay,
+        Integer estimateMinutes,
+        Integer actualMinutes
     ) {
     }
 

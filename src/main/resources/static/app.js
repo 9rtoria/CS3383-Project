@@ -273,6 +273,8 @@
       meta.append(element("span", `pill priority-${task.priority}`, task.priority));
     }
     if (task.estimateMinutes) meta.append(element("span", "pill", `${task.estimateMinutes}m`));
+    if (task.actualMinutes) meta.append(element("span", "pill", `${task.actualMinutes}m tracked`));
+    if (task.startDate) meta.append(element("span", "pill", `starts ${task.startDate.slice(0, 10)}`));
     if (task.dueDate) meta.append(element("span", "pill", `due ${task.dueDate.slice(0, 10)}`));
     if (meta.childElementCount) card.append(meta);
     return card;
@@ -292,6 +294,8 @@
       const bits = [];
       if (task.reason) bits.push(task.reason);
       if (task.estimateMinutes) bits.push(`${task.estimateMinutes}m`);
+      if (task.actualMinutes) bits.push(`${task.actualMinutes}m tracked`);
+      if (task.startDate) bits.push(`starts ${task.startDate.slice(0, 10)}`);
       if (task.dueDate) bits.push(`due ${task.dueDate.slice(0, 10)}`);
       grow.append(element("p", "", bits.join(" · ")));
 
@@ -349,7 +353,10 @@
     $("taskDescription").value = task?.description ?? "";
     $("taskPriority").value = task?.priority ?? "none";
     $("taskEstimate").value = task?.estimateMinutes ?? "";
+    $("taskStart").value = task?.startDate ? String(task.startDate).slice(0, 10) : "";
     $("taskDue").value = task?.dueDate ? String(task.dueDate).slice(0, 10) : "";
+    $("taskDueAllDay").checked = task ? Number(task.dueAllDay) === 1 : true;
+    $("taskActual").value = task?.actualMinutes ?? "";
     $("taskColumn").replaceChildren();
     for (const column of columns) $("taskColumn").add(new Option(column.name, column.id));
     if (columnId) $("taskColumn").value = columnId;
@@ -463,7 +470,10 @@
         description: $("taskDescription").value.trim(),
         priority: $("taskPriority").value,
         estimateMinutes: $("taskEstimate").value ? Number($("taskEstimate").value) : null,
+        actualMinutes: $("taskActual").value ? Number($("taskActual").value) : null,
+        startDate: $("taskStart").value || null,
         dueDate: $("taskDue").value || null,
+        dueAllDay: $("taskDueAllDay").checked,
       };
       if (task) {
         await request(`/api/tasks/${encodeURIComponent(task.id)}`, {

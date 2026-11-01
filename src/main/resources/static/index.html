@@ -141,13 +141,29 @@
         </div>
         <div class="form-row">
           <div class="field">
+            <label for="taskStart">Start date</label>
+            <input id="taskStart" name="startDate" class="input" type="date">
+          </div>
+          <div class="field">
             <label for="taskDue">Due date</label>
             <input id="taskDue" name="dueDate" class="input" type="date">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="taskActual">Actual minutes</label>
+            <input id="taskActual" name="actualMinutes" class="input" type="number" min="0" max="1440" step="5" placeholder="0">
           </div>
           <div class="field" id="columnField">
             <label for="taskColumn">Column</label>
             <select id="taskColumn" name="columnId" class="select"></select>
           </div>
+        </div>
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:500">
+            <input id="taskDueAllDay" name="dueAllDay" type="checkbox" checked>
+            All-day due date
+          </label>
         </div>
         <div id="taskDetail" class="hidden">
           <div class="detail-section">

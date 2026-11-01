@@ -181,7 +181,9 @@ public class AppService {
         List<Map<String, Object>> tasks = jdbc.queryForList("""
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId,
                    t.column_id AS columnId, t.title, t.description, t.priority,
-                   t.due_date AS dueDate, t.estimate_minutes AS estimateMinutes,
+                   t.start_date AS startDate, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
+                   t.actual_minutes AS actualMinutes,
                    t.focus_date AS focusDate, t.version, t.updated_at AS updatedAt
             FROM task t
             JOIN membership m ON m.workspace_id = t.workspace_id AND m.user_id = ?
@@ -272,14 +274,16 @@ public class AppService {
         String taskId = id();
         String now = Instant.now().toString();
         String priority = priority(input.priority());
+        boolean dueAllDay = input.dueAllDay() == null || input.dueAllDay();
         jdbc.update("""
             INSERT INTO task (id, workspace_id, board_id, column_id, title, description,
-                              priority, due_date, due_all_day, estimate_minutes, position,
-                              version, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 1, ?, ?, ?)
+                              priority, start_date, due_date, due_all_day, estimate_minutes,
+                              actual_minutes, position, version, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             """, taskId, workspaceId, input.boardId(), input.columnId(), input.title().trim(),
-            input.description() == null ? "" : input.description(), priority, input.dueDate(),
-            normalizeEstimate(input.estimateMinutes()), position, userId, now, now);
+            input.description() == null ? "" : input.description(), priority, input.startDate(),
+            input.dueDate(), dueAllDay ? 1 : 0, normalizeEstimate(input.estimateMinutes()),
+            normalizeActual(input.actualMinutes()), position, userId, now, now);
         return linked(Map.of("task", task(userId, taskId)));
     }
 
@@ -361,15 +365,24 @@ public class AppService {
         if (blank(title)) throw ApiException.badRequest("Task title is required.");
         String description = input.description() == null ? (String) current.get("description") : input.description();
         String priority = input.priority() == null ? (String) current.get("priority") : priority(input.priority());
+        String startDate = input.startDate() == null ? (String) current.get("startDate") : input.startDate();
         String dueDate = input.dueDate() == null ? (String) current.get("dueDate") : input.dueDate();
+        boolean dueAllDay = input.dueAllDay() == null
+            ? number(current.get("dueAllDay")) == 1
+            : input.dueAllDay();
         Integer estimate = input.estimateMinutes() == null
             ? (Integer) current.get("estimateMinutes")
             : normalizeEstimate(input.estimateMinutes());
+        Integer actual = input.actualMinutes() == null
+            ? (Integer) current.get("actualMinutes")
+            : normalizeActual(input.actualMinutes());
         int updated = jdbc.update("""
-            UPDATE task SET title = ?, description = ?, priority = ?, due_date = ?,
-                            estimate_minutes = ?, version = version + 1, updated_at = ?
+            UPDATE task SET title = ?, description = ?, priority = ?, start_date = ?,
+                            due_date = ?, due_all_day = ?, estimate_minutes = ?,
+                            actual_minutes = ?, version = version + 1, updated_at = ?
             WHERE id = ? AND version = ? AND deleted_at IS NULL
-            """, title, description, priority, dueDate, estimate, Instant.now().toString(), taskId, version);
+            """, title, description, priority, startDate, dueDate, dueAllDay ? 1 : 0,
+            estimate, actual, Instant.now().toString(), taskId, version);
         if (updated == 0) throw ApiException.conflict("This task changed elsewhere.", version + 1);
         return linked(Map.of("task", task(userId, taskId)));
     }
@@ -423,7 +436,9 @@ public class AppService {
         return jdbc.queryForList("""
             SELECT t.id, t.workspace_id AS workspaceId, t.board_id AS boardId,
                    t.column_id AS columnId, t.title, t.description, t.priority,
-                   t.due_date AS dueDate, t.estimate_minutes AS estimateMinutes,
+                   t.start_date AS startDate, t.due_date AS dueDate,
+                   t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
+                   t.actual_minutes AS actualMinutes,
                    t.focus_date AS focusDate, t.version, t.updated_at AS updatedAt
             FROM task t
             JOIN board b ON b.id = t.board_id
@@ -453,8 +468,9 @@ public class AppService {
     private Map<String, Object> taskRow(String taskId) {
         return jdbc.queryForList("""
             SELECT id, workspace_id AS workspaceId, board_id AS boardId, column_id AS columnId,
-                   title, description, priority, due_date AS dueDate,
-                   estimate_minutes AS estimateMinutes, version
+                   title, description, priority, start_date AS startDate, due_date AS dueDate,
+                   due_all_day AS dueAllDay, estimate_minutes AS estimateMinutes,
+                   actual_minutes AS actualMinutes, version
             FROM task WHERE id = ? AND deleted_at IS NULL
             """, taskId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Task not found."));
@@ -480,6 +496,11 @@ public class AppService {
     private Integer normalizeEstimate(Integer value) {
         if (value == null) return null;
         return Math.max(5, Math.min(24 * 60, value));
+    }
+
+    private Integer normalizeActual(Integer value) {
+        if (value == null) return null;
+        return Math.max(0, Math.min(24 * 60, value));
     }
 
     private int number(Object value) {
