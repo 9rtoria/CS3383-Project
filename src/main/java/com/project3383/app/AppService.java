@@ -564,7 +564,8 @@ public class AppService {
         for (Map<String, Object> task : tasks) {
             Map<String, Object> suggestion = linked(task);
             suggestion.put("labels", labelsForTask((String) task.get("id")));
-            boolean selected = number(task.get("selectedFlag")) == 1;
+            boolean accepted = number(task.get("selectedFlag")) == 1;
+            boolean selected = accepted;
             boolean blocked = number(task.get("openDependencies")) > 0;
             String due = task.get("dueDate") == null ? null : String.valueOf(task.get("dueDate"));
             String dueDay = due != null && due.length() >= 10 ? due.substring(0, 10) : null;
@@ -576,7 +577,7 @@ public class AppService {
             String reason;
             if (blocked) reason = "Waiting on a task that is not done yet";
             else if (overdue) reason = "Overdue since " + dueDay;
-            else if (selected) reason = "You chose this for today";
+            else if (accepted) reason = "You chose this for today";
             else if (dueToday) reason = "Due today";
             else if ("urgent".equals(priority) || "high".equals(priority)) {
                 reason = Character.toUpperCase(priority.charAt(0)) + priority.substring(1) + " priority with no due date";
@@ -586,15 +587,26 @@ public class AppService {
                 reason = "Next best use of your available time";
             }
             suggestion.put("selected", selected);
-            suggestion.put("accepted", selected);
+            suggestion.put("accepted", accepted);
             suggestion.put("blocked", blocked);
             suggestion.put("reason", reason);
-            suggestion.put("focusDate", selected ? today : null);
-            if (selected) {
+            suggestion.put("focusDate", accepted ? today : null);
+            if (accepted) {
                 selectedMinutes += Math.max(0, estimate);
                 selectedCount++;
             }
             suggestions.add(suggestion);
+        }
+        int autoRemaining = Math.max(0, capacity - selectedMinutes);
+        for (Map<String, Object> suggestion : suggestions) {
+            if (Boolean.TRUE.equals(suggestion.get("selected")) || Boolean.TRUE.equals(suggestion.get("blocked"))) continue;
+            int estimate = suggestion.get("estimateMinutes") == null ? 30 : number(suggestion.get("estimateMinutes"));
+            if (estimate <= autoRemaining) {
+                suggestion.put("selected", true);
+                selectedMinutes += Math.max(0, estimate);
+                selectedCount++;
+                autoRemaining -= Math.max(0, estimate);
+            }
         }
         List<Map<String, Object>> planBlocks = jdbc.queryForList("""
             SELECT pb.id, pb.task_id AS taskId, pb.start_minute AS startMinute, pb.minutes,

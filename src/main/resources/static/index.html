@@ -63,19 +63,50 @@
       </header>
 
       <section id="todayView">
-        <div id="dayFlowPanel" class="panel" style="margin-bottom:16px">
-          <h2>Day Flow</h2>
-          <p class="hint">The shape of today, with or without Auto-plan.</p>
-          <div id="dayFlowList" class="today-list"></div>
+        <div id="dayFlowPanel" class="panel day-flow-panel" style="margin-bottom:16px">
+          <div class="day-flow-head">
+            <div>
+              <p class="eyebrow">Signature view</p>
+              <h2>Day flow</h2>
+              <p class="hint">Your chosen work laid across the day. Blocks breathe when the plan changes.</p>
+              <div class="day-flow-legend" aria-hidden>
+                <span><i class="chosen"></i>chosen</span>
+                <span><i class="suggested"></i>suggestion</span>
+              </div>
+            </div>
+            <div id="dayFlowRing" class="day-flow-ring" role="img" aria-label="Daily capacity planned">
+              <svg viewBox="0 0 74 74" width="74" height="74" aria-hidden>
+                <circle class="day-flow-ring-track" cx="37" cy="37" r="31" fill="none"></circle>
+                <circle id="dayFlowRingValueArc" class="day-flow-ring-value" cx="37" cy="37" r="31" fill="none"></circle>
+              </svg>
+              <div class="day-flow-ring-copy">
+                <strong id="dayFlowRingValue">0%</strong>
+                <span id="dayFlowRingLabel">planned</span>
+              </div>
+            </div>
+          </div>
+          <div id="dayFlowRailWrap" class="day-flow-rail-wrap">
+            <div id="dayFlowRail" class="day-flow-rail" role="group" aria-label="A 24 hour timeline of today's selected tasks">
+              <div id="dayFlowGrid" class="day-flow-grid" aria-hidden></div>
+            </div>
+            <div id="dayFlowHours" class="day-flow-hours" aria-hidden></div>
+          </div>
+          <div class="day-flow-foot">
+            <div id="dayFlowNext" class="day-flow-next"></div>
+            <div class="day-flow-actions">
+              <button type="button" id="dayFlowFocusNext" class="btn ghost sm">Focus next</button>
+              <button type="button" id="dayFlowRebalance" class="btn soft sm">Rebalance</button>
+            </div>
+          </div>
+          <div id="dayFlowLater" class="day-flow-later">
+            <span>Drag a block here — or use Dismiss on a task below — to let it wait for another day.</span>
+          </div>
         </div>
         <div class="today-grid">
           <div class="panel">
             <div class="section-head">
               <h2>Today’s work</h2>
-              <div class="top-actions">
-                <button type="button" id="rebalanceTodayButton" class="btn sm">Rebalance</button>
-                <button type="button" id="applyTodayPlanButton" class="btn sm">Apply plan</button>
-              </div>
+              <button type="button" id="applyTodayPlanButton" class="btn sm">Apply plan</button>
             </div>
             <p class="hint">A calm starting point. Choose one thing and make it visible.</p>
             <div id="todayList" class="today-list"></div>

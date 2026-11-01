@@ -18,6 +18,8 @@
     autoPlanTimer: null,
     autoPlanDebounce: null,
     lastAutoApplyAt: 0,
+    dayFlowAnchor: null,
+    draggingTaskId: null,
     calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
     settings: null,
@@ -469,6 +471,7 @@
   async function switchWorkspace(workspaceId) {
     state.currentWorkspaceId = workspaceId;
     state.currentBoardId = boards()[0]?.id ?? null;
+    state.dayFlowAnchor = null;
     renderSidebar();
     if (state.currentBoardId) await loadBoard(state.currentBoardId);
     await loadToday();
@@ -693,22 +696,6 @@
       list.append(row);
     }
 
-    const flow = $("dayFlowList");
-    flow.replaceChildren();
-    const blocks = state.today?.planBlocks ?? [];
-    if (!blocks.length) {
-      flow.append(element("div", "empty", "No scheduled blocks yet. Use Auto-plan to shape the day."));
-    }
-    for (const block of blocks) {
-      const row = element("div", "today-row");
-      const time = element("strong", "", `${minutesLabel(block.startMinute)}–${minutesLabel(block.startMinute + block.minutes)}`);
-      const grow = element("div", "grow");
-      grow.append(element("h3", "", block.title));
-      grow.append(element("p", "", `${block.minutes} min · ${block.priority || "none"} priority`));
-      row.append(time, grow);
-      flow.append(row);
-    }
-
     const capacity = state.today?.capacity ?? { totalMinutes: 300, selectedMinutes: 0 };
     const selected = Number(capacity.selectedMinutes || 0);
     const total = Number(capacity.totalMinutes || 300);
@@ -718,7 +705,182 @@
     $("capacityHint").textContent = capacity.overbooked
       ? "This day is over capacity."
       : `${Math.max(0, total - selected)} minutes still open.`;
-    $("applyTodayPlanButton").disabled = !suggestions.some((task) => task.accepted);
+    $("applyTodayPlanButton").disabled = !suggestions.some((task) => task.selected);
+    renderDayFlow(suggestions);
+  }
+
+  const DAY_MINUTES = 24 * 60;
+  const DAY_FLOW_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
+
+  function dayFlowClock(minutes) {
+    const value = ((Math.round(Number(minutes) || 0) % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+    const hour = Math.floor(value / 60);
+    const minute = value % 60;
+    const format = state.settings?.timeFormat || "auto";
+    if (format === "24") return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    if (format === "12") {
+      const suffix = hour >= 12 ? "PM" : "AM";
+      return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${suffix}`;
+    }
+    try {
+      return new Intl.DateTimeFormat(state.settings?.locale || undefined, { hour: "numeric", minute: "2-digit" })
+        .format(new Date(2000, 0, 1, hour, minute));
+    } catch {
+      return `${hour}:${String(minute).padStart(2, "0")}`;
+    }
+  }
+
+  function currentDayMinutes() {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }
+
+  function dayFlowAnchor() {
+    if (!state.dayFlowAnchor) {
+      state.dayFlowAnchor = Math.max(6 * 60, Math.ceil(currentDayMinutes() / 15) * 15);
+    }
+    return state.dayFlowAnchor;
+  }
+
+  function renderDayFlow(suggestions) {
+    const rail = $("dayFlowRail");
+    const grid = $("dayFlowGrid");
+    const settings = state.settings ?? {};
+    const workdayStart = Number.isFinite(Number(settings.workdayStart)) ? Number(settings.workdayStart) : 9;
+    const workdayEnd = Number.isFinite(Number(settings.workdayEnd)) ? Number(settings.workdayEnd) : 18;
+    const buffer = Math.max(0, Number(settings.blockBufferMinutes) || 0);
+    const nowMinutes = currentDayMinutes();
+    const capacity = state.today?.capacity ?? { totalMinutes: 300, selectedMinutes: 0, percent: 0, overbooked: false };
+
+    grid.replaceChildren();
+    if (workdayStart > 0) {
+      const outside = element("span", "day-flow-outside");
+      outside.style.left = "0";
+      outside.style.width = `${(workdayStart / 24) * 100}%`;
+      grid.append(outside);
+    }
+    if (workdayEnd < 24) {
+      const outside = element("span", "day-flow-outside");
+      outside.style.left = `${(workdayEnd / 24) * 100}%`;
+      outside.style.width = `${((24 - workdayEnd) / 24) * 100}%`;
+      grid.append(outside);
+    }
+    for (const hour of DAY_FLOW_HOURS) {
+      const line = element("span", "day-flow-grid-line");
+      line.style.left = `${(hour / 24) * 100}%`;
+      grid.append(line);
+    }
+    grid.append(element("span", "day-flow-night"));
+    const nowMarker = element("span", "day-flow-now");
+    nowMarker.style.left = `${(nowMinutes / DAY_MINUTES) * 100}%`;
+    nowMarker.append(element("span", "", "now"));
+    grid.append(nowMarker);
+
+    rail.querySelectorAll(".day-flow-block").forEach((node) => node.remove());
+    rail.querySelectorAll(".day-flow-empty").forEach((node) => node.remove());
+    const selected = suggestions.filter((task) => task.accepted || task.selected).slice(0, 14);
+    const scheduled = (state.today?.planBlocks ?? [])
+      .map((block) => {
+        const task = suggestions.find((entry) => entry.id === block.taskId);
+        if (!task || (!task.accepted && !task.selected)) return null;
+        return { task: { ...task, accepted: true }, start: Number(block.startMinute), duration: Number(block.minutes), blockId: block.id };
+      })
+      .filter(Boolean);
+    const scheduledIds = new Set(scheduled.map((block) => block.task.id));
+    let cursor = scheduled.length
+      ? scheduled.reduce((end, block) => Math.max(end, block.start + block.duration), dayFlowAnchor()) + buffer
+      : dayFlowAnchor();
+    const fallback = [];
+    for (const task of selected) {
+      if (scheduledIds.has(task.id)) continue;
+      const duration = Math.max(15, Number(task.estimateMinutes) || 30);
+      let start = cursor;
+      if (start + duration > DAY_MINUTES) start = Math.max(0, DAY_MINUTES - duration);
+      fallback.push({ task, start, duration });
+      cursor = start + duration + buffer;
+    }
+    const blocks = [...scheduled, ...fallback];
+
+    if (!blocks.length) {
+      const empty = element("div", "day-flow-empty");
+      empty.append(element("span", "day-flow-empty-mark", "◷"));
+      empty.append(element("span", "", "Nothing on the rail yet. Choose one task below and watch the day take shape."));
+      rail.append(empty);
+    }
+
+    for (const block of blocks) {
+      const { task, start, duration } = block;
+      const button = element("button", `day-flow-block ${task.accepted ? "chosen" : "suggested"} priority-${task.priority || "none"}${task.blocked ? " blocked" : ""}`);
+      button.type = "button";
+      button.draggable = true;
+      button.style.left = `${(start / DAY_MINUTES) * 100}%`;
+      button.style.width = `${Math.max(0.7, (duration / DAY_MINUTES) * 100)}%`;
+      button.title = `${dayFlowClock(start)}–${dayFlowClock(start + duration)} · ${task.title}`;
+      button.setAttribute("aria-label", `${task.title}, ${dayFlowClock(start)} to ${dayFlowClock(start + duration)}`);
+      const mark = element("span", "day-flow-block-mark", task.accepted ? "✓" : "");
+      if (!task.accepted) mark.append(element("span", ""));
+      button.append(mark);
+      if (duration >= 60) {
+        button.append(element("span", "day-flow-block-title", task.title));
+        button.append(element("span", "day-flow-block-time", `${dayFlowClock(start)} · ${duration}m`));
+      }
+      button.addEventListener("click", () => openTaskModal(task));
+      button.addEventListener("dragstart", (event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", task.id);
+        state.draggingTaskId = task.id;
+        button.classList.add("dragging");
+      });
+      button.addEventListener("dragend", () => {
+        state.draggingTaskId = null;
+        button.classList.remove("dragging");
+      });
+      rail.append(button);
+    }
+
+    const hours = $("dayFlowHours");
+    hours.replaceChildren();
+    for (const hour of [0, 6, 12, 18, 24]) {
+      const label = element("span", "", hour === 24 ? (settings.timeFormat === "24" ? "24:00" : "12 AM") : dayFlowClock(hour * 60));
+      label.style.left = `${(hour / 24) * 100}%`;
+      hours.append(label);
+    }
+
+    const percent = Math.max(0, Math.min(100, Number(capacity.percent) || 0));
+    const circumference = 2 * Math.PI * 31;
+    const arc = $("dayFlowRingValueArc");
+    arc.style.strokeDasharray = String(circumference);
+    arc.style.strokeDashoffset = String(circumference * (1 - percent / 100));
+    $("dayFlowRing").classList.toggle("over", Boolean(capacity.overbooked));
+    $("dayFlowRingValue").textContent = `${Math.round(Number(capacity.percent) || 0)}%`;
+    $("dayFlowRingLabel").textContent = capacity.overbooked ? "over" : "planned";
+
+    const next = blocks.find((block) => block.start + block.duration >= nowMinutes) ?? null;
+    const nextNode = $("dayFlowNext");
+    nextNode.replaceChildren();
+    if (next) {
+      nextNode.append(element("span", "day-flow-next-dot"));
+      const copy = element("span");
+      copy.append(element("strong", "", next.task.title));
+      copy.append(element("span", "", `${dayFlowClock(next.start)} · ${next.duration}m · ${next.task.accepted ? "chosen" : "suggestion"}`));
+      nextNode.append(copy);
+    } else {
+      const copy = element("span");
+      copy.append(element("strong", "", blocks.length ? "The rail is behind you." : "The rail is clear."));
+      copy.append(element("span", "", blocks.length ? "Pick one small thing for the rest of the day, or stop here." : "Protect the empty space, or add one small thing."));
+      nextNode.append(copy);
+    }
+    const focusNext = $("dayFlowFocusNext");
+    focusNext.classList.toggle("hidden", !next);
+    focusNext.onclick = next ? () => openTaskModal(next.task) : null;
+
+    const wrap = $("dayFlowRailWrap");
+    window.requestAnimationFrame(() => {
+      if (wrap.scrollWidth <= wrap.clientWidth + 1) return;
+      const focus = blocks[0]?.start ?? nowMinutes;
+      const target = (focus / DAY_MINUTES) * wrap.scrollWidth - wrap.clientWidth / 2;
+      wrap.scrollLeft = Math.max(0, Math.min(wrap.scrollWidth - wrap.clientWidth, target));
+    });
   }
 
   function minutesLabel(minutes) {
@@ -931,7 +1093,7 @@
   }
 
   async function rebalanceToday() {
-    const button = $("rebalanceTodayButton");
+    const button = $("dayFlowRebalance");
     button.disabled = true;
     try {
       await request("/api/today", {
@@ -950,7 +1112,7 @@
 
   async function applyTodayPlan() {
     const taskIds = (state.today?.suggestions ?? [])
-      .filter((task) => task.accepted && !task.blocked)
+      .filter((task) => task.selected && !task.blocked)
       .map((task) => task.id);
     if (!taskIds.length) {
       showToast("Choose at least one task for today first.");
@@ -2037,8 +2199,22 @@
       });
     });
     $("newTaskButton").addEventListener("click", () => openTaskModal(null));
-    $("rebalanceTodayButton").addEventListener("click", rebalanceToday);
+    $("dayFlowRebalance").addEventListener("click", rebalanceToday);
     $("applyTodayPlanButton").addEventListener("click", applyTodayPlan);
+    const later = $("dayFlowLater");
+    later.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      later.classList.add("active");
+    });
+    later.addEventListener("dragleave", () => later.classList.remove("active"));
+    later.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      later.classList.remove("active");
+      const taskId = event.dataTransfer.getData("text/plain") || state.draggingTaskId;
+      state.draggingTaskId = null;
+      if (taskId) await todayAction("dismiss", taskId);
+    });
     $("newBoardButton").addEventListener("click", createBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);
     $("autoPlanButton").addEventListener("click", openAutoPlan);

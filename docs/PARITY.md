@@ -156,7 +156,7 @@ Status key:
 | Task completion / reopen | DONE | |
 | Labels | PARTIAL | Task-scoped labels; no label manager |
 | Today / capacity / accept / dismiss | DONE | Workspace-scoped, per-user selection, capacity/reasons/blocked dependencies, rebalance/applyPlan |
-| Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
+| Day Flow | PARTIAL | 24-hour rail, capacity ring, now marker, chosen/suggested blocks, drag-to-Later, Rebalance; Focus handoff and exact visual parity pending |
 | Smart Plan / Auto-plan | PARTIAL | Settings-aware preview/apply/clear, safe/full/delegated modes, refresh, stale cleanup, undo; exact reference UI/recompute pending |
 | Calendar / ICS | DONE | Month calendar and ICS download |
 | Search / Archive / Upcoming | PARTIAL | Search uses LIKE; Archive/Upcoming implemented |
@@ -210,6 +210,7 @@ Status key:
 - [x] Auto-plan consumes capacity/workday/lunch/rest/week/deep-work/estimate settings and supports undo
 - [x] Auto-plan safe/full/delegated modes, refresh, task-change invalidation, and stale cleanup
 - [x] Today rebalance and applyPlan actions
+- [x] Day Flow 24-hour rail, chosen/suggested blocks, drag-to-Later, and Rebalance
 - [x] Baseline API/unit smoke tests and setup/runbook
 
 ## 6. Next work after Phase 0/1
