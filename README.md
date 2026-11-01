@@ -49,6 +49,7 @@ Implemented:
 - Workspace API tokens with bearer authentication, workspace scoping, expiry, and revocation
 - Admin audit log with cursor pagination, actor details, and configurable retention
 - Admin webhooks for Slack, Microsoft Teams, and generic JSON with HMAC signing, async delivery, retries, and delivery status
+- Admin automations for task created/moved/completed events with priority, label, column, and notify actions, draft impact previews, run history, notifications, and 60-second undo
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -58,7 +59,7 @@ Implemented:
 Not implemented yet:
 
 - Full Insights and visual parity
-- SSO/MFA, Automations
+- SSO/MFA
 - Import/export, account/workspace deletion
 - Full accessibility, E2E, performance, and final parity sign-off
 
@@ -129,6 +130,11 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/tokens` | Create an API token and return the raw token once |
 | DELETE | `/api/tokens/{id}` | Revoke an API token |
 | GET | `/api/audit` | Admin audit feed with cursor pagination |
+| GET | `/api/automations` | Admin automation rules with recent runs and a live preview |
+| POST | `/api/automations` | Create an automation rule |
+| POST | `/api/automations/preview` | Dry-run a draft rule and return the diff |
+| PATCH | `/api/automations/{id}` | Update or enable/disable a rule |
+| DELETE | `/api/automations/{id}` | Delete a rule |
 | GET | `/api/webhooks` | Admin webhook list with delivery counts and last status |
 | POST | `/api/webhooks` | Create a webhook and return the signing secret once |
 | PATCH | `/api/webhooks/{id}` | Enable/disable or update a webhook |

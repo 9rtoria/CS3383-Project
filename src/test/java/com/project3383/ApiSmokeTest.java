@@ -1240,6 +1240,202 @@ class ApiSmokeTest {
     }
 
     @Test
+    void automationsRunOnEventsPreviewAndUndo() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+
+        MvcResult createdRule = mockMvc.perform(post("/api/automations")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Flag urgent work",
+                    "trigger", "task.created",
+                    "conditionsJson", "{}",
+                    "actionType", "set_priority",
+                    "actionValue", "high",
+                    "enabled", true
+                ))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.rule.name").value("Flag urgent work"))
+            .andExpect(jsonPath("$.rule.enabled").value(true))
+            .andReturn();
+        String ruleId = objectMapper.readTree(createdRule.getResponse().getContentAsString())
+            .path("rule").path("id").asText();
+
+        MvcResult createdTask = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Automation target",
+                    "priority", "none"
+                ))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.task.priority").value("high"))
+            .andReturn();
+        String taskId = objectMapper.readTree(createdTask.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+
+        mockMvc.perform(get("/api/automations").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rules[?(@.id == '" + ruleId + "')].lastRunAt").isNotEmpty())
+            .andExpect(jsonPath("$.rules[?(@.id == '" + ruleId + "')].runs[0].taskId").value(taskId));
+
+        mockMvc.perform(post("/api/automations/preview")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "trigger", "task.created",
+                    "actionType", "set_priority",
+                    "actionValue", "urgent",
+                    "conditionsJson", "{}"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.matches[?(@.taskId == '" + taskId + "')]").isNotEmpty())
+            .andExpect(jsonPath("$.matches[?(@.before == 'Priority: high')]").isNotEmpty());
+
+        String undoId = jdbc.queryForObject("""
+            SELECT id FROM undo_action WHERE action = 'automation.run' AND workspace_id = ?
+            ORDER BY created_at DESC LIMIT 1
+            """, String.class, workspaceId);
+        mockMvc.perform(post("/api/undo/" + undoId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.undone").value(true));
+        mockMvc.perform(get("/api/tasks/" + taskId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.priority").value("none"));
+
+        mockMvc.perform(patch("/api/automations/" + ruleId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("workspaceId", workspaceId, "enabled", false))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.rule.enabled").value(false));
+
+        mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Automation bypass",
+                    "priority", "none"
+                ))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.task.priority").value("none"));
+
+        mockMvc.perform(delete("/api/automations/" + ruleId)
+                .session(session)
+                .param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deleted").value(true));
+        mockMvc.perform(get("/api/audit").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.events[?(@.action == 'automation.created')]").isNotEmpty())
+            .andExpect(jsonPath("$.events[?(@.action == 'automation.applied')]").isNotEmpty())
+            .andExpect(jsonPath("$.events[?(@.action == 'automation.deleted')]").isNotEmpty());
+    }
+
+    @Test
+    void automationsSupportMoveNotifyAndCompletionTriggers() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+        String inProgress = board.path("columns").get(1).path("id").asText();
+
+        mockMvc.perform(post("/api/automations")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "name", "Send new work to progress",
+                    "trigger", "task.created",
+                    "conditionsJson", "{}",
+                    "actionType", "move_to_column",
+                    "actionValue", inProgress,
+                    "enabled", true
+                ))))
+            .andExpect(status().isCreated());
+
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Moved by automation",
+                    "priority", "none"
+                ))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.task.columnId").value(inProgress))
+            .andReturn();
+        JsonNode createdTask = objectMapper.readTree(created.getResponse().getContentAsString()).path("task");
+        int version = createdTask.path("version").asInt();
+        String taskId = createdTask.path("id").asText();
+
+        mockMvc.perform(post("/api/automations")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Notify on move",
+                    "trigger", "task.moved",
+                    "conditionsJson", "{}",
+                    "actionType", "notify",
+                    "actionValue", "Moved task needs attention",
+                    "enabled", true
+                ))))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(patch("/api/tasks/" + taskId + "/move")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("version", version, "columnId", todo))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.columnId").value(todo));
+        mockMvc.perform(get("/api/notifications").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.notifications[?(@.title == 'Moved task needs attention')]").isNotEmpty());
+
+        mockMvc.perform(post("/api/automations")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Urgent on completion",
+                    "trigger", "task.completed",
+                    "conditionsJson", "{}",
+                    "actionType", "set_priority",
+                    "actionValue", "urgent",
+                    "enabled", true
+                ))))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/tasks/" + taskId + "/complete").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.completed").value(1))
+            .andExpect(jsonPath("$.task.priority").value("urgent"));
+    }
+
+    @Test
     void webhooksDeliverSignedEventsAndCanBeDeleted() throws Exception {
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
             new java.net.InetSocketAddress("127.0.0.1", 0), 0);

@@ -130,6 +130,32 @@ public class UndoService {
                         """, position, taskId, workspaceId);
                 }
             }
+            case "automation.run" -> {
+                String taskId = stringValue(inverse.get("taskId"));
+                Map<String, Object> before = mapValue(inverse.get("before"));
+                Map<String, Object> after = mapValue(inverse.get("after"));
+                if (taskId != null) {
+                    String priority = stringValue(before.get("priority"));
+                    if (priority != null) {
+                        jdbc.update("""
+                            UPDATE task SET priority = ?, version = version + 1
+                            WHERE id = ? AND workspace_id = ?
+                            """, priority, taskId, workspaceId);
+                    }
+                    String columnId = stringValue(before.get("columnId"));
+                    if (columnId != null) {
+                        jdbc.update("""
+                            UPDATE task SET column_id = ?, version = version + 1
+                            WHERE id = ? AND workspace_id = ?
+                            """, columnId, taskId, workspaceId);
+                    }
+                    String labelId = stringValue(after.get("labelId"));
+                    if (labelId != null) {
+                        jdbc.update("DELETE FROM task_label WHERE task_id = ? AND label_id = ?", taskId, labelId);
+                    }
+                }
+                jdbc.update("UPDATE automation_run SET undone_at = ? WHERE id = ?", now, entityId);
+            }
             case "board.delete" -> {
                 jdbc.update("""
                     UPDATE board SET deleted_at = NULL, version = version + 1
@@ -183,6 +209,16 @@ public class UndoService {
             }
         }
         return values;
+    }
+
+    private Map<String, Object> mapValue(Object value) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                result.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+        }
+        return result;
     }
 
     private List<Map<String, Object>> mapList(Object value) {

@@ -2450,6 +2450,7 @@
       "attachment.created": "attached a file",
       "attachment.deleted": "removed an attachment",
       "today.accepted": "added this to Today",
+      "automation.applied": "applied an automation",
     };
     return t(labels[action] || String(action || "").replace(/[._]/g, " "));
   }
@@ -3169,6 +3170,7 @@
     ];
     if (["OWNER", "ADMIN"].includes(role)) {
       definitions.push(
+        { id: "automations", label: "Automations", render: renderAutomationSettings },
         { id: "integrations", label: "Integrations", render: renderIntegrationSettings },
         { id: "audit", label: "Audit log", render: renderAuditSettings },
       );
@@ -3592,6 +3594,354 @@
     toggleFeature("smartPlan", "Smart Plan", "Preview a local rules plan, then apply or undo it. No model call.");
     toggleFeature("voice", "Voice capture", "Show the browser speech shortcut. Text capture is always available.");
     settingsRow(card, "Single-key shortcuts", "C, /, ? and G sequences. Saved on this device.", makeToggle(state.singleKeyShortcuts, "Single-key shortcuts", setSingleKeyShortcuts));
+    return section;
+  }
+
+  const AUTOMATION_TRIGGERS = [
+    ["task.created", "When a task is created"],
+    ["task.moved", "When a task moves"],
+    ["task.completed", "When a task is completed"],
+  ];
+  const AUTOMATION_ACTIONS = [
+    ["set_priority", "Set priority"],
+    ["add_label", "Add a label"],
+    ["move_to_column", "Move to a column"],
+    ["notify", "Notify the assignee"],
+  ];
+  const AUTOMATION_PRIORITIES = ["urgent", "high", "medium", "low", "none"];
+
+  function renderAutomationSettings() {
+    const { section, card } = createSettingsSection(
+      "automations",
+      "Automations",
+      "Explicit rules, previews, and undo. No autonomous mutation."
+    );
+    const toolbar = element("div", "inline");
+    toolbar.style.cssText = "justify-content:flex-end;margin-bottom:10px";
+    const newRule = element("button", "btn primary sm", `+ ${t("New rule")}`);
+    newRule.type = "button";
+    toolbar.append(newRule);
+    section.insertBefore(toolbar, card);
+    const previewWrap = element("div");
+    previewWrap.style.marginTop = "14px";
+    section.append(previewWrap);
+
+    const labelFor = (list, value) => t(list.find((entry) => entry[0] === value)?.[1] ?? value);
+    const boardName = (id) => boards().find((board) => board.id === id)?.name ?? "";
+
+    const renderPreview = (preview) => {
+      previewWrap.replaceChildren();
+      if (!preview.length) return;
+      previewWrap.append(element("div", "field-hint", t("Preview against current tasks")));
+      for (const entry of preview.slice(0, 6)) {
+        const row = element("div", "inline");
+        row.style.cssText = "font-size:11px;padding:5px 0;color:var(--muted)";
+        row.append(element("span", "automation-check", "✓"));
+        row.append(document.createTextNode(` ${entry.title}: ${entry.change}`));
+        previewWrap.append(row);
+      }
+    };
+
+    const refreshRules = async () => {
+      try {
+        const result = await request(`/api/automations?workspaceId=${encodeURIComponent(workspace().id)}`);
+        const rules = result?.rules ?? [];
+        card.replaceChildren();
+        if (!rules.length) {
+          const row = element("div", "settings-row");
+          const copy = element("div", "settings-copy");
+          copy.append(element("strong", "", t("No automations yet")));
+          copy.append(element("span", "", t("A rule is a quiet, explainable helper — never a surprise.")));
+          row.append(copy);
+          card.append(row);
+        }
+        for (const rule of rules) {
+          const row = element("div", "settings-row");
+          const copy = element("div", "settings-copy");
+          copy.append(element("strong", "", rule.name));
+          const parts = [
+            labelFor(AUTOMATION_TRIGGERS, rule.trigger),
+            `${labelFor(AUTOMATION_ACTIONS, rule.actionType)}: ${rule.actionValue}`,
+          ];
+          if (rule.boardId) parts.push(boardName(rule.boardId));
+          if (rule.lastRunAt) parts.push(`${t("Last ran")} ${relativeTime(rule.lastRunAt)}`);
+          copy.append(element("span", "", parts.join(" · ")));
+          const controls = element("div", "settings-control inline");
+          controls.append(makeToggle(Boolean(rule.enabled), `${t("Enable")} ${rule.name}`, async (next) => {
+            try {
+              await request(`/api/automations/${encodeURIComponent(rule.id)}`, {
+                method: "PATCH",
+                body: { workspaceId: workspace().id, enabled: next },
+              });
+              showToast(t("Automation updated."));
+              await refreshRules();
+            } catch (error) {
+              showToast(error.message);
+              await refreshRules();
+            }
+          }));
+          const remove = element("button", "btn ghost sm", t("Delete"));
+          remove.type = "button";
+          remove.addEventListener("click", async () => {
+            if (!window.confirm(t("Delete this automation?"))) return;
+            try {
+              await request(`/api/automations/${encodeURIComponent(rule.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
+              showToast(t("Automation deleted."));
+              await refreshRules();
+            } catch (error) {
+              showToast(error.message);
+            }
+          });
+          controls.append(remove);
+          row.append(copy, controls);
+          card.append(row);
+        }
+        renderPreview(result?.preview ?? []);
+      } catch (error) {
+        card.replaceChildren(element("div", "empty", error.message));
+        previewWrap.replaceChildren();
+      }
+    };
+
+    const openRuleModal = () => {
+      const backdrop = element("div", "modal-backdrop");
+      const modal = element("div", "modal");
+      modal.style.width = "min(640px, 100%)";
+      const head = element("div", "modal-head");
+      const headCopy = element("div");
+      headCopy.append(element("p", "eyebrow", workspace()?.name ?? ""));
+      headCopy.append(element("h2", "", t("New automation")));
+      const close = element("button", "btn ghost sm", "×");
+      close.type = "button";
+      close.setAttribute("aria-label", t("Close"));
+      head.append(headCopy, close);
+      const form = element("form", "form-grid");
+      form.id = "automation-form";
+
+      const nameField = element("label", "field");
+      nameField.append(element("span", "", t("Name")));
+      const nameInput = element("input", "input");
+      nameInput.placeholder = t("Flag urgent work");
+      nameInput.maxLength = 80;
+      nameField.append(nameInput);
+
+      const triggerField = element("label", "field");
+      triggerField.append(element("span", "", t("When")));
+      const trigger = element("select", "select");
+      for (const [value, label] of AUTOMATION_TRIGGERS) trigger.add(new Option(t(label), value));
+      triggerField.append(trigger);
+
+      const conditionField = element("label", "field");
+      conditionField.append(element("span", "", t("Only when priority is")));
+      const conditionPriority = element("select", "select");
+      conditionPriority.add(new Option(t("Any priority"), ""));
+      for (const priority of AUTOMATION_PRIORITIES) {
+        conditionPriority.add(new Option(t(priority), priority));
+      }
+      conditionField.append(conditionPriority);
+
+      const actionField = element("label", "field");
+      actionField.append(element("span", "", t("Do")));
+      const action = element("select", "select");
+      for (const [value, label] of AUTOMATION_ACTIONS) action.add(new Option(t(label), value));
+      actionField.append(action);
+
+      const scopeField = element("label", "field");
+      scopeField.append(element("span", "", t("Board scope")));
+      const scope = element("select", "select");
+      scope.add(new Option(t("Every board"), ""));
+      for (const board of boards()) scope.add(new Option(board.name, board.id));
+      scopeField.append(scope);
+
+      const valueField = element("label", "field");
+      const valueLabel = element("span", "", t("Priority"));
+      valueField.append(valueLabel);
+      let valueControl;
+      const boardColumns = () => boards().find((board) => board.id === scope.value)?.columns ?? [];
+      const rebuildValue = () => {
+        previewBox.replaceChildren();
+        previewBox.classList.add("hidden");
+        valueField.querySelectorAll(".select, .input").forEach((node) => node.remove());
+        if (action.value === "set_priority") {
+          valueLabel.textContent = t("Priority");
+          valueControl = element("select", "select");
+          for (const priority of AUTOMATION_PRIORITIES) valueControl.add(new Option(t(priority), priority));
+          valueControl.value = "high";
+        } else if (action.value === "move_to_column") {
+          valueLabel.textContent = t("Column");
+          valueControl = element("select", "select");
+          if (!scope.value) {
+            valueControl.add(new Option(t("Choose a board scope first"), ""));
+          } else {
+            valueControl.add(new Option(t("Choose column"), ""));
+            for (const column of boardColumns()) valueControl.add(new Option(column.name, column.id));
+          }
+        } else if (action.value === "add_label") {
+          valueLabel.textContent = t("Label name");
+          valueControl = element("input", "input");
+          valueControl.placeholder = t("Needs review");
+        } else {
+          valueLabel.textContent = t("Notification message");
+          valueControl = element("input", "input");
+          valueControl.placeholder = t("A task needs your attention");
+        }
+        valueField.append(valueControl);
+        apply.disabled = !nameInput.value.trim() || !valueControl.value.trim();
+        const syncValue = () => {
+          previewBox.replaceChildren();
+          previewBox.classList.add("hidden");
+          apply.disabled = !nameInput.value.trim() || !valueControl.value.trim();
+        };
+        valueControl.addEventListener("input", syncValue);
+        valueControl.addEventListener("change", syncValue);
+      };
+      const valueOf = () => String(valueControl?.value ?? "").trim();
+
+      const boardField = scopeField;
+      const previewBox = element("div", "automation-preview hidden");
+      previewBox.setAttribute("role", "status");
+      previewBox.setAttribute("aria-live", "polite");
+
+      const clearPreview = () => {
+        previewBox.replaceChildren();
+        previewBox.classList.add("hidden");
+      };
+      action.addEventListener("change", rebuildValue);
+      scope.addEventListener("change", rebuildValue);
+      trigger.addEventListener("change", clearPreview);
+      conditionPriority.addEventListener("change", clearPreview);
+      nameInput.addEventListener("input", () => {
+        clearPreview();
+        apply.disabled = !nameInput.value.trim() || !valueOf();
+      });
+
+      form.append(nameField, triggerField, conditionField, actionField, valueField, boardField, previewBox);
+
+      const actions = element("div", "modal-actions");
+      const cancel = element("button", "btn ghost", t("Cancel"));
+      cancel.type = "button";
+      const previewButton = element("button", "btn", t("Preview impact"));
+      previewButton.type = "button";
+      const apply = element("button", "btn primary", t("Apply rule"));
+      apply.type = "submit";
+      apply.setAttribute("form", "automation-form");
+      apply.disabled = true;
+      actions.append(cancel, previewButton, apply);
+      modal.append(head, form, actions);
+      backdrop.append(modal);
+      document.body.append(backdrop);
+
+      const closeModal = () => {
+        document.removeEventListener("keydown", onKeydown);
+        backdrop.remove();
+      };
+      const onKeydown = (event) => {
+        if (event.key === "Escape") closeModal();
+      };
+      document.addEventListener("keydown", onKeydown);
+      close.addEventListener("click", closeModal);
+      cancel.addEventListener("click", closeModal);
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) closeModal();
+      });
+      nameInput.focus();
+
+      const renderDraftPreview = (result) => {
+        previewBox.replaceChildren();
+        previewBox.classList.remove("hidden");
+        const total = Number(result?.total ?? 0);
+        previewBox.append(element("strong", "",
+          total === 0 ? t("No current tasks would change.")
+            : total === 1 ? t("{{count}} task would change.", { count: total })
+            : t("{{count}} tasks would change.", { count: total })));
+        for (const match of result?.matches ?? []) {
+          const row = element("div", "automation-preview-row");
+          const title = element("span", "", match.title);
+          title.append(element("span", "field-hint", ` · ${match.boardName}`));
+          const diff = element("span", "automation-diff");
+          const before = element("del", "", match.before);
+          const after = element("ins", "", match.after);
+          diff.append(before, document.createTextNode(" → "), after);
+          row.append(title, diff);
+          previewBox.append(row);
+        }
+        if (result?.truncated) {
+          previewBox.append(element("span", "field-hint",
+            t("Showing the first {{count}}. The rule applies to every match when it runs.", { count: (result.matches ?? []).length })));
+        }
+        for (const reason of result?.skipped ?? []) {
+          previewBox.append(element("span", "field-hint", t(reason)));
+        }
+        previewBox.append(element("span", "field-hint",
+          t("Dry run only. Nothing changes until a matching event occurs; each run is logged and undoable for 60 seconds.")));
+      };
+
+      previewButton.addEventListener("click", async () => {
+        if (!valueOf()) {
+          showToast(t("Choose an action value before previewing."));
+          return;
+        }
+        if (action.value === "move_to_column" && !scope.value) {
+          showToast(t("Choose a board scope before previewing a column move."));
+          return;
+        }
+        previewButton.disabled = true;
+        try {
+          const result = await request("/api/automations/preview", {
+            method: "POST",
+            body: {
+              workspaceId: workspace().id,
+              boardId: scope.value || null,
+              trigger: trigger.value,
+              actionType: action.value,
+              actionValue: valueOf(),
+              conditionsJson: JSON.stringify(conditionPriority.value ? { priority: conditionPriority.value } : {}),
+            },
+          });
+          renderDraftPreview(result);
+        } catch (error) {
+          showToast(error.message);
+        } finally {
+          previewButton.disabled = false;
+        }
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!nameInput.value.trim() || !valueOf()) {
+          showToast(t("Give the rule a name and an action value."));
+          return;
+        }
+        apply.disabled = true;
+        try {
+          await request("/api/automations", {
+            method: "POST",
+            body: {
+              workspaceId: workspace().id,
+              boardId: scope.value || null,
+              name: nameInput.value.trim(),
+              trigger: trigger.value,
+              actionType: action.value,
+              actionValue: valueOf(),
+              conditionsJson: JSON.stringify(conditionPriority.value ? { priority: conditionPriority.value } : {}),
+              enabled: true,
+            },
+          });
+          closeModal();
+          showToast(t("Automation created."));
+          await refreshRules();
+        } catch (error) {
+          showToast(error.message);
+          apply.disabled = false;
+        }
+      });
+
+      rebuildValue();
+    };
+
+    newRule.addEventListener("click", openRuleModal);
+    section.refreshSettingsSection = () => void refreshRules();
+    void refreshRules();
     return section;
   }
 

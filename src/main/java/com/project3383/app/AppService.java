@@ -41,14 +41,17 @@ public class AppService {
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
     private final WebhookService webhookService;
+    private final AutomationService automationService;
 
     public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, ObjectMapper objectMapper,
-                      AuditService auditService, WebhookService webhookService) {
+                      AuditService auditService, WebhookService webhookService,
+                      AutomationService automationService) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
         this.webhookService = webhookService;
+        this.automationService = automationService;
     }
 
     @Transactional
@@ -1152,6 +1155,7 @@ public class AppService {
         audit(workspaceId, userId, "task.created", "task", taskId, Map.of("title", input.title().trim()));
         webhookService.dispatch(workspaceId, "task.created",
             Map.of("taskId", taskId, "title", input.title().trim(), "columnId", input.columnId()));
+        automationService.runForEvent(workspaceId, "task.created", taskId, userId);
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         Map<String, Object> undo = createUndo(userId, workspaceId, "task.create", "task", taskId,
             Map.of("columnId", input.columnId()), 10);
@@ -1567,6 +1571,8 @@ public class AppService {
         webhookService.dispatch((String) current.get("workspaceId"),
             completing ? "task.completed" : "task.moved",
             Map.of("taskId", taskId, "title", String.valueOf(current.get("title")), "columnId", input.columnId()));
+        automationService.runForEvent((String) current.get("workspaceId"),
+            completing ? "task.completed" : "task.moved", taskId, userId);
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         Map<String, Object> inverse = new LinkedHashMap<>();
         inverse.put("columnId", current.get("columnId"));
@@ -1773,6 +1779,7 @@ public class AppService {
         if (completed) {
             webhookService.dispatch((String) current.get("workspaceId"), "task.completed",
                 Map.of("taskId", taskId, "title", String.valueOf(current.get("title")), "columnId", column.get("id")));
+            automationService.runForEvent((String) current.get("workspaceId"), "task.completed", taskId, userId);
         }
         Map<String, Object> result = linked(Map.of("task", task(userId, taskId)));
         if (completed) {

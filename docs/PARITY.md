@@ -36,9 +36,9 @@ Status key:
 | `/api/auth/sso/{workspaceId}` | MISSING | |
 | `/api/auth/sso/{workspaceId}/callback` | MISSING | |
 | `/api/auto-plan` | PARTIAL | Settings-aware preview/apply/clear, safe mode, delegated stale cleanup, refresh/invalidation, undo; exact reference recompute/UI pending |
-| `/api/automations` | MISSING | Schema only |
-| `/api/automations/preview` | MISSING | |
-| `/api/automations/{id}` | MISSING | |
+| `/api/automations` | DONE | Admin rule list with runs and preview; create with audit |
+| `/api/automations/preview` | DONE | Side-effect-free draft diff with skipped reasons |
+| `/api/automations/{id}` | DONE | Enable/disable, edit, delete |
 | `/api/boards` | DONE | GET/POST with description, color, and visibility |
 | `/api/boards/{id}` | DONE | GET/PATCH/DELETE with version checks and soft delete |
 | `/api/boards/{id}/duplicate` | DONE | Copies columns, tasks, labels, assignee, and recurrence |
@@ -122,8 +122,8 @@ Status key:
 | AuditEvent | DONE | Admin audit log, retention purge, cursor pagination |
 | Reminder | DONE | |
 | View | SCHEMA | No saved-view UI/API |
-| AutomationRule | SCHEMA | No automation service |
-| AutomationRun | SCHEMA | |
+| AutomationRule | DONE | Trigger/conditions/action, board scope, enable/disable, last run |
+| AutomationRun | DONE | Before/after snapshots, activity, audit, 60-second undo |
 | Notification | DONE | |
 | UserSettings | DONE | Settings UI + GET/PATCH API |
 | PlanBlock | DONE | Auto-plan |
@@ -175,7 +175,7 @@ Status key:
 | i18n | PARTIAL | English / Traditional Chinese for shell, Today, planning, capture, Focus, Sound, and Settings; some admin/edge strings remain English |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
 | Webhooks | DONE | Admin CRUD, Slack/Teams/generic payloads, HMAC signature, async delivery with retries, SSRF/HTTPS guard |
-| Automations | MISSING | |
+| Automations | DONE | Admin rules for created/moved/completed with priority/column/label/due-date conditions; priority, label, column, and notify actions; dry-run diff, run history, activity/audit, and undo |
 | SSO / MFA | MISSING | |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
@@ -221,6 +221,7 @@ Status key:
 - [x] Workspace API tokens with bearer auth, expiry, revocation, and audit
 - [x] Admin audit log with retention purge and cursor pagination
 - [x] Admin webhooks (Slack/Teams/generic) with signed async delivery, retries, and audit
+- [x] Automations with task-event triggers, condition matching, four actions, draft preview, notifications, run history, and undo
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -248,5 +249,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. Automations, SSO/MFA, import/export, deletion.
+7. SSO/MFA, import/export, deletion.
 8. Full E2E, screenshots, performance, and final parity sign-off.

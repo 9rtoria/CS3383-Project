@@ -113,6 +113,40 @@ public final class ApiDtos {
     ) {
     }
 
+    public record AutomationCreate(
+        String workspaceId,
+        String boardId,
+        String name,
+        String trigger,
+        String conditionsJson,
+        String actionType,
+        String actionValue,
+        Boolean enabled
+    ) {
+    }
+
+    public record AutomationUpdate(
+        String workspaceId,
+        String boardId,
+        String name,
+        Boolean enabled,
+        String trigger,
+        String conditionsJson,
+        String actionType,
+        String actionValue
+    ) {
+    }
+
+    public record AutomationPreviewInput(
+        String workspaceId,
+        String boardId,
+        String trigger,
+        String conditionsJson,
+        String actionType,
+        String actionValue
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type
