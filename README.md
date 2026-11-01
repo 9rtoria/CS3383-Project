@@ -32,12 +32,13 @@ Implemented:
 - JUnit/MockMvc smoke test for guest ??task ??move ??Today
 - Reminders, in-app notifications, and background delivery
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
+- Calendar month view, task search, and basic Insights
 - Settings storage/API (`/api/settings` GET/PATCH)
 - Origin-based CSRF protection for cookie-authenticated mutations
 
 Not implemented yet:
 
-- Calendar, Search, Archive, Insights
+- Archive, Upcoming, ICS, full Insights
 - SSO/MFA/API tokens/Webhooks/Automations
 - Offline/PWA, Focus Mode, voice, sound, i18n
 - Full visual and behavioral parity with `ProjectA2`

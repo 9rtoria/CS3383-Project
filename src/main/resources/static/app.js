@@ -13,6 +13,7 @@
     workspaceTasks: [],
     notifications: [],
     autoPlan: null,
+    calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     authMode: "signin",
   };
 
@@ -292,6 +293,95 @@
     }
   }
 
+  function dateKey(value) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  async function loadCalendar() {
+    const year = state.calendarMonth.getFullYear();
+    const month = state.calendarMonth.getMonth();
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0);
+    try {
+      const result = await request(`/api/calendar?workspaceId=${encodeURIComponent(workspace().id)}&start=${dateKey(start)}&end=${dateKey(end)}`);
+      $("calendarTitle").textContent = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(start);
+      renderCalendar(result.days ?? []);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function renderCalendar(days) {
+    const byDate = new Map(days.map((day) => [day.date, day]));
+    const grid = $("calendarGrid");
+    grid.replaceChildren();
+    const first = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth(), 1);
+    const gridStart = new Date(first);
+    gridStart.setDate(first.getDate() - first.getDay());
+    const today = dateKey(new Date());
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(gridStart);
+      date.setDate(gridStart.getDate() + i);
+      const key = dateKey(date);
+      const day = element("div", `calendar-day${date.getMonth() !== state.calendarMonth.getMonth() ? " other" : ""}${key === today ? " today" : ""}`);
+      day.append(element("h3", "", String(date.getDate())));
+      const data = byDate.get(key);
+      for (const task of (data?.tasks ?? []).slice(0, 6)) {
+        day.append(element("button", "calendar-item", task.title));
+      }
+      for (const block of (data?.planBlocks ?? []).slice(0, 4)) {
+        day.append(element("div", "calendar-item block", `${minutesLabel(block.startMinute)} ${block.title}`));
+      }
+      grid.append(day);
+    }
+  }
+
+  async function runSearch() {
+    const query = $("searchInput").value.trim();
+    const results = $("searchResults");
+    results.replaceChildren();
+    if (!query) return;
+    try {
+      const data = await request(`/api/search?workspaceId=${encodeURIComponent(workspace().id)}&q=${encodeURIComponent(query)}`);
+      if (!(data.results ?? []).length) results.append(element("div", "empty", "No matching tasks."));
+      for (const task of data.results ?? []) {
+        const row = element("div", "detail-item");
+        const grow = element("div", "grow");
+        grow.append(element("strong", "", task.title));
+        grow.append(element("p", "", `${task.boardName} · ${task.columnName}`));
+        row.append(grow, element("span", "pill", task.priority || "none"));
+        results.append(row);
+      }
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function loadInsights() {
+    try {
+      const data = await request(`/api/insights?workspaceId=${encodeURIComponent(workspace().id)}`);
+      const grid = $("insightsGrid");
+      grid.replaceChildren();
+      for (const [label, value] of [["Open", data.open], ["Done", data.done], ["Overdue", data.overdue], ["Priority groups", (data.byPriority ?? []).length]]) {
+        const card = element("div", "insight-card");
+        card.append(element("span", "muted small", label));
+        card.append(element("strong", "", String(value ?? 0)));
+        grid.append(card);
+      }
+      for (const row of data.byPriority ?? []) {
+        const card = element("div", "insight-card");
+        card.append(element("span", "muted small", row.priority || "none"));
+        card.append(element("strong", "", String(row.count)));
+        grid.append(card);
+      }
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
   async function createWorkspace() {
     const name = window.prompt("Team workspace name");
     if (!name || !name.trim()) return;
@@ -379,14 +469,27 @@
 
   function setView(view) {
     state.view = view;
-    $("todayView").classList.toggle("hidden", view !== "today");
-    $("boardView").classList.toggle("hidden", view !== "board");
+    for (const [id, name] of [["todayView", "today"], ["boardView", "board"], ["calendarView", "calendar"], ["searchView", "search"], ["insightsView", "insights"]]) {
+      $(id).classList.toggle("hidden", name !== view);
+    }
     document.querySelectorAll(".nav button").forEach((button) => {
       button.classList.toggle("active", button.dataset.view === view);
     });
     if (view === "board") {
       $("viewEyebrow").textContent = "Board";
       $("viewTitle").textContent = currentBoard()?.name ?? "Board";
+    } else if (view === "calendar") {
+      $("viewEyebrow").textContent = "Calendar";
+      $("viewTitle").textContent = "Calendar";
+      void loadCalendar();
+    } else if (view === "search") {
+      $("viewEyebrow").textContent = "Search";
+      $("viewTitle").textContent = "Search";
+      window.setTimeout(() => $("searchInput").focus(), 20);
+    } else if (view === "insights") {
+      $("viewEyebrow").textContent = "Workspace";
+      $("viewTitle").textContent = "Insights";
+      void loadInsights();
     } else {
       $("viewEyebrow").textContent = "Plan";
       $("viewTitle").textContent = "Today";
@@ -995,6 +1098,18 @@
     $("clearAutoPlanButton").addEventListener("click", clearAutoPlan);
     $("autoPlanModal").addEventListener("click", (event) => {
       if (event.target === $("autoPlanModal")) $("autoPlanModal").classList.add("hidden");
+    });
+    $("searchButton").addEventListener("click", runSearch);
+    $("searchInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); void runSearch(); }
+    });
+    $("calendarPrev").addEventListener("click", () => {
+      state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() - 1, 1);
+      void loadCalendar();
+    });
+    $("calendarNext").addEventListener("click", () => {
+      state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() + 1, 1);
+      void loadCalendar();
     });
     $("notificationsButton").addEventListener("click", openNotificationsModal);
     $("closeNotificationsModal").addEventListener("click", () => $("notificationsModal").classList.add("hidden"));

@@ -44,7 +44,7 @@ Status key:
 | `/api/boards/{id}/duplicate` | MISSING | |
 | `/api/boards/{id}/share` | MISSING | |
 | `/api/bootstrap` | DONE | Core payload; no settings/theme bundle yet |
-| `/api/calendar` | MISSING | |
+| `/api/calendar` | DONE | Date-range tasks and plan blocks |
 | `/api/calendar/ics` | MISSING | |
 | `/api/client-errors` | MISSING | Schema only |
 | `/api/columns` | MISSING | |
@@ -53,15 +53,15 @@ Status key:
 | `/api/export` | MISSING | |
 | `/api/health` | DONE | |
 | `/api/import` | MISSING | |
-| `/api/insights` | MISSING | |
+| `/api/insights` | PARTIAL | Basic counts/priority breakdown |
 | `/api/invites/{token}` | PARTIAL | POST accept; no public GET preview |
 | `/api/labels` | MISSING | Labels are created through task input, no label API |
 | `/api/metrics` | MISSING | |
 | `/api/notifications` | DONE | GET + mark read/read-all |
 | `/api/openapi` | MISSING | |
-| `/api/search` | MISSING | |
+| `/api/search` | PARTIAL | SQL LIKE search, not FTS |
 | `/api/security/mfa` | MISSING | |
-| `/api/settings` | MISSING | Schema only |
+| `/api/settings` | PARTIAL | GET/PATCH core preferences; UI not ported |
 | `/api/share/{token}` | MISSING | |
 | `/api/subtasks/{id}` | PARTIAL | PATCH; DELETE not exposed |
 | `/api/tasks` | DONE | GET list, POST create |
@@ -156,10 +156,10 @@ Status key:
 | Today / capacity / accept / dismiss | DONE | |
 | Day Flow | PARTIAL | Vertical list; not the full reference rail/drag/visual parity |
 | Smart Plan / Auto-plan | PARTIAL | Preview/apply/clear; no undo, no full settings |
-| Calendar / ICS | MISSING | |
-| Search / Archive / Upcoming | MISSING | |
-| Insights | MISSING | |
-| Settings / Focus / Voice / Sound | MISSING | |
+| Calendar / ICS | PARTIAL | Month calendar; ICS missing |
+| Search / Archive / Upcoming | PARTIAL | Search implemented with LIKE; Archive/Upcoming missing |
+| Insights | PARTIAL | Basic counts; full reference views missing |
+| Settings / Focus / Voice / Sound | PARTIAL | Settings storage/API only; UI/Focus/Voice/Sound missing |
 | Offline / PWA | MISSING | |
 | i18n | MISSING | |
 | Public board share | MISSING | |

@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -310,6 +311,116 @@ public class AppService {
             "name", board.get("name"),
             "columns", columns
         ))));
+    }
+
+    public Map<String, Object> calendar(String userId, String workspaceId, String start, String end) {
+        requireMembership(userId, workspaceId);
+        LocalDate from;
+        LocalDate to;
+        try {
+            from = LocalDate.parse(start);
+            to = LocalDate.parse(end);
+        } catch (Exception exception) {
+            throw ApiException.badRequest("Calendar start and end must be dates.");
+        }
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) > 366) {
+            throw ApiException.badRequest("Calendar range is invalid.");
+        }
+        List<Map<String, Object>> tasks = jdbc.queryForList("""
+            SELECT t.id, t.title, t.priority, t.due_date AS dueDate,
+                   substr(t.due_date, 1, 10) AS date, t.board_id AS boardId,
+                   b.name AS boardName, c.name AS columnName, c.is_done AS completed
+            FROM task t
+            JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.workspace_id = t.workspace_id
+              AND substr(t.due_date, 1, 10) BETWEEN ? AND ?
+            ORDER BY t.due_date, t.position
+            LIMIT 500
+            """, workspaceId, from.toString(), to.toString());
+        List<Map<String, Object>> blocks = jdbc.queryForList("""
+            SELECT pb.date, pb.start_minute AS startMinute, pb.minutes,
+                   pb.task_id AS taskId, t.title
+            FROM plan_block pb JOIN task t ON t.id = pb.task_id
+            WHERE pb.user_id = ? AND pb.workspace_id = ? AND pb.date BETWEEN ? AND ?
+              AND t.deleted_at IS NULL
+            ORDER BY pb.date, pb.start_minute
+            """, userId, workspaceId, from.toString(), to.toString());
+        Map<String, List<Map<String, Object>>> tasksByDate = new HashMap<>();
+        Map<String, List<Map<String, Object>>> blocksByDate = new HashMap<>();
+        for (Map<String, Object> task : tasks) {
+            tasksByDate.computeIfAbsent((String) task.get("date"), key -> new ArrayList<>()).add(task);
+        }
+        for (Map<String, Object> block : blocks) {
+            blocksByDate.computeIfAbsent((String) block.get("date"), key -> new ArrayList<>()).add(block);
+        }
+        List<Map<String, Object>> days = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            String key = date.toString();
+            days.add(linked(Map.of(
+                "date", key,
+                "tasks", tasksByDate.getOrDefault(key, List.of()),
+                "planBlocks", blocksByDate.getOrDefault(key, List.of())
+            )));
+        }
+        return linked(Map.of("days", days, "start", from.toString(), "end", to.toString()));
+    }
+
+    public Map<String, Object> search(String userId, String workspaceId, String query) {
+        requireMembership(userId, workspaceId);
+        String term = query == null ? "" : query.trim().toLowerCase();
+        if (term.isEmpty()) return linked(Map.of("results", List.of()));
+        String like = "%" + term + "%";
+        List<Map<String, Object>> results = jdbc.queryForList("""
+            SELECT t.id, t.title, t.description, t.priority, t.due_date AS dueDate,
+                   t.board_id AS boardId, b.name AS boardName, c.name AS columnName,
+                   c.is_done AS completed
+            FROM task t
+            JOIN board b ON b.id = t.board_id
+            JOIN board_column c ON c.id = t.column_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.workspace_id = t.workspace_id
+              AND (lower(t.title) LIKE ? OR lower(t.description) LIKE ?)
+            ORDER BY c.is_done, t.updated_at DESC
+            LIMIT 50
+            """, workspaceId, like, like);
+        return linked(Map.of("results", results));
+    }
+
+    public Map<String, Object> insights(String userId, String workspaceId) {
+        requireMembership(userId, workspaceId);
+        List<Map<String, Object>> byPriority = jdbc.queryForList("""
+            SELECT t.priority, COUNT(*) AS count
+            FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+              AND b.workspace_id = t.workspace_id
+            GROUP BY t.priority
+            """, workspaceId);
+        Integer open = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+              AND b.workspace_id = t.workspace_id
+            """, Integer.class, workspaceId);
+        Integer done = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 1
+              AND b.workspace_id = t.workspace_id
+            """, Integer.class, workspaceId);
+        Integer overdue = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM task t JOIN board_column c ON c.id = t.column_id
+            JOIN board b ON b.id = t.board_id
+            WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND c.is_done = 0
+              AND b.workspace_id = t.workspace_id
+              AND substr(t.due_date, 1, 10) < ?
+            """, Integer.class, workspaceId, LocalDate.now().toString());
+        return linked(Map.of(
+            "open", open == null ? 0 : open,
+            "done", done == null ? 0 : done,
+            "overdue", overdue == null ? 0 : overdue,
+            "byPriority", byPriority
+        ));
     }
 
     public Map<String, Object> today(String userId) {

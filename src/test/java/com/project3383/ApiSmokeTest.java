@@ -255,6 +255,24 @@ class ApiSmokeTest {
                 .content(taskJson))
             .andExpect(status().isForbidden());
 
+        String today = java.time.LocalDate.now().toString();
+        mockMvc.perform(get("/api/calendar")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("start", today)
+                .param("end", java.time.LocalDate.now().plusDays(7).toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.days").isArray());
+        mockMvc.perform(get("/api/search")
+                .session(session)
+                .param("workspaceId", workspaceId)
+                .param("q", "Smoke"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.results[?(@.title == 'Smoke task')]").isNotEmpty());
+        mockMvc.perform(get("/api/insights").session(session).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.open").isNumber());
+
         mockMvc.perform(get("/api/settings").session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.settings.capacity_minutes").value(300));
