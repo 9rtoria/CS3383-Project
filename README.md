@@ -43,6 +43,7 @@ Implemented:
 - Day Flow, Smart Plan-style preview, and deterministic Auto-plan apply/clear
 - Auto-plan settings integration and five-minute undo (`/api/undo/{id}`)
 - Undo toast actions for task create / complete / move / delete and board delete
+- Multi-select bulk complete / archive / delete / move with undo
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -120,6 +121,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/today` | Accept or dismiss a task for today |
 | POST | `/api/auto-plan` | Preview, apply, or clear the deterministic plan |
 | POST | `/api/tasks` | Create a task |
+| POST | `/api/tasks/bulk` | Bulk complete, archive, delete, or move tasks |
 | GET | `/api/tasks/{id}` | Task detail with comments and checklist |
 | PATCH | `/api/tasks/{id}` | Update a task with version check |
 | PATCH | `/api/tasks/{id}/move` | Move a task to another column |

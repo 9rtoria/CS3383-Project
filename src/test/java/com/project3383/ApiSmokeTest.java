@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -914,5 +915,164 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/boards/" + boardId).session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.board.columns[0].tasks[0].title").value("Board undo task"));
+    }
+
+    @Test
+    void bulkTaskActionsAndUndo() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+        String doing = board.path("columns").get(1).path("id").asText();
+        String done = board.path("columns").get(2).path("id").asText();
+
+        List<String> taskIds = new ArrayList<>();
+        for (String title : List.of("Bulk A", "Bulk B", "Bulk C")) {
+            MvcResult created = mockMvc.perform(post("/api/tasks")
+                    .session(session)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of(
+                        "workspaceId", workspaceId,
+                        "boardId", boardId,
+                        "columnId", todo,
+                        "title", title
+                    ))))
+                .andExpect(status().isCreated())
+                .andReturn();
+            taskIds.add(objectMapper.readTree(created.getResponse().getContentAsString())
+                .path("task").path("id").asText());
+        }
+
+        MvcResult completed = mockMvc.perform(post("/api/tasks/bulk")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "taskIds", taskIds.subList(0, 2),
+                    "action", "complete"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.affected").value(2))
+            .andExpect(jsonPath("$.undo.id").isString())
+            .andReturn();
+        String completeUndo = objectMapper.readTree(completed.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.completed").value(1))
+            .andExpect(jsonPath("$.task.columnId").value(done));
+        mockMvc.perform(post("/api/undo/" + completeUndo).session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.completed").value(0))
+            .andExpect(jsonPath("$.task.columnId").value(todo));
+
+        MvcResult archived = mockMvc.perform(post("/api/tasks/bulk")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "taskIds", taskIds.subList(0, 2),
+                    "action", "archive"
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String archiveUndo = objectMapper.readTree(archived.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Bulk A"))));
+        mockMvc.perform(post("/api/undo/" + archiveUndo).session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session)).andExpect(status().isOk());
+
+        MvcResult deleted = mockMvc.perform(post("/api/tasks/bulk")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "taskIds", taskIds.subList(0, 2),
+                    "action", "delete"
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String deleteUndo = objectMapper.readTree(deleted.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session)).andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/undo/" + deleteUndo).session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session)).andExpect(status().isOk());
+
+        MvcResult moved = mockMvc.perform(post("/api/tasks/bulk")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "taskIds", taskIds.subList(0, 2),
+                    "action", "move",
+                    "columnId", doing
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String moveUndo = objectMapper.readTree(moved.getResponse().getContentAsString())
+            .path("undo").path("id").asText();
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.columnId").value(doing));
+        mockMvc.perform(post("/api/undo/" + moveUndo).session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/tasks/" + taskIds.get(0)).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.columnId").value(todo));
+
+        mockMvc.perform(post("/api/tasks/bulk")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "taskIds", taskIds.subList(0, 2),
+                    "action", "move"
+                ))))
+            .andExpect(status().isBadRequest());
+
+        MvcResult secondBoard = mockMvc.perform(post("/api/boards")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "name", "Bulk other board"
+                ))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String secondBoardId = objectMapper.readTree(secondBoard.getResponse().getContentAsString())
+            .path("board").path("id").asText();
+        JsonNode secondBoardPayload = objectMapper.readTree(
+            mockMvc.perform(get("/api/boards/" + secondBoardId).session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()
+        ).path("board");
+        String secondTodo = secondBoardPayload.path("columns").get(0).path("id").asText();
+        MvcResult crossTask = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", secondBoardId,
+                    "columnId", secondTodo,
+                    "title", "Bulk cross task"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String crossTaskId = objectMapper.readTree(crossTask.getResponse().getContentAsString())
+            .path("task").path("id").asText();
+        mockMvc.perform(post("/api/tasks/bulk")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "taskIds", List.of(taskIds.get(0), crossTaskId),
+                    "action", "delete"
+                ))))
+            .andExpect(status().isBadRequest());
     }
 }

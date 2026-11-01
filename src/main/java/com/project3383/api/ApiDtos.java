@@ -77,6 +77,14 @@ public final class ApiDtos {
     ) {
     }
 
+    public record TaskBulkAction(
+        String workspaceId,
+        java.util.List<String> taskIds,
+        String action,
+        String columnId
+    ) {
+    }
+
     public record WorkspaceCreate(
         String name,
         String type

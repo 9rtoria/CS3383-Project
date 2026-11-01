@@ -1490,6 +1490,110 @@ public class AppService {
         return result;
     }
 
+    @Transactional
+    public Map<String, Object> bulkTaskAction(String userId, ApiDtos.TaskBulkAction input) {
+        if (input == null || blank(input.workspaceId())) {
+            throw ApiException.badRequest("Choose a workspace.");
+        }
+        requireMinimumRole(userId, input.workspaceId(), "MEMBER");
+        List<String> taskIds = input.taskIds() == null ? List.of() : input.taskIds().stream()
+            .filter(taskId -> taskId != null && !taskId.isBlank())
+            .distinct()
+            .toList();
+        if (taskIds.isEmpty()) throw ApiException.badRequest("Choose at least one task.");
+        if (taskIds.size() > 100) throw ApiException.badRequest("Bulk actions support up to 100 tasks.");
+        String action = input.action() == null ? "" : input.action();
+        if (!Set.of("complete", "delete", "archive", "move").contains(action)) {
+            throw ApiException.badRequest("Unknown bulk action.");
+        }
+        List<Map<String, Object>> tasks = new ArrayList<>();
+        for (String taskId : taskIds) {
+            Map<String, Object> task = taskRow(taskId);
+            if (!input.workspaceId().equals(task.get("workspaceId"))) {
+                throw ApiException.notFound("Task not found.");
+            }
+            requireTaskBoardVisible(userId, task);
+            tasks.add(task);
+        }
+        String boardId = (String) tasks.get(0).get("boardId");
+        for (Map<String, Object> task : tasks) {
+            if (!boardId.equals(task.get("boardId"))) {
+                throw ApiException.badRequest("Bulk actions require tasks from one board.");
+            }
+        }
+        String now = Instant.now().toString();
+        List<Map<String, Object>> previous = new ArrayList<>();
+        if ("complete".equals(action)) {
+            Map<String, Object> doneColumn = jdbc.queryForList("""
+                SELECT id FROM board_column WHERE board_id = ? AND is_done = 1 ORDER BY position LIMIT 1
+                """, boardId).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("This board has no done column."));
+            String doneId = (String) doneColumn.get("id");
+            for (Map<String, Object> task : tasks) {
+                Map<String, Object> before = new LinkedHashMap<>();
+                before.put("taskId", task.get("id"));
+                before.put("columnId", task.get("columnId"));
+                before.put("position", task.get("position"));
+                previous.add(before);
+                jdbc.update("""
+                    UPDATE task SET column_id = ?, version = version + 1, updated_at = ?
+                    WHERE id = ? AND workspace_id = ?
+                    """, doneId, now, task.get("id"), input.workspaceId());
+            }
+        } else if ("archive".equals(action)) {
+            for (Map<String, Object> task : tasks) {
+                jdbc.update("""
+                    UPDATE task SET archived_at = ?, version = version + 1, updated_at = ?
+                    WHERE id = ? AND workspace_id = ?
+                    """, now, now, task.get("id"), input.workspaceId());
+            }
+        } else if ("delete".equals(action)) {
+            for (Map<String, Object> task : tasks) {
+                jdbc.update("""
+                    UPDATE task SET deleted_at = ?, version = version + 1, updated_at = ?
+                    WHERE id = ? AND workspace_id = ?
+                    """, now, now, task.get("id"), input.workspaceId());
+            }
+        } else {
+            if (blank(input.columnId())) throw ApiException.badRequest("Choose a destination column.");
+            Map<String, Object> target = jdbc.queryForList("""
+                SELECT id, board_id AS boardId FROM board_column WHERE id = ?
+                """, input.columnId()).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("Column not found."));
+            if (!boardId.equals(target.get("boardId"))) {
+                throw ApiException.badRequest("That column is not on this board.");
+            }
+            Integer lastPosition = jdbc.queryForObject("""
+                SELECT COALESCE(MAX(position), -1) FROM task
+                WHERE column_id = ? AND deleted_at IS NULL
+                """, Integer.class, input.columnId());
+            int position = (lastPosition == null ? 0 : lastPosition + 1);
+            for (Map<String, Object> task : tasks) {
+                Map<String, Object> before = new LinkedHashMap<>();
+                before.put("taskId", task.get("id"));
+                before.put("columnId", task.get("columnId"));
+                before.put("position", task.get("position"));
+                previous.add(before);
+                jdbc.update("""
+                    UPDATE task SET column_id = ?, position = ?, version = version + 1, updated_at = ?
+                    WHERE id = ? AND workspace_id = ?
+                    """, input.columnId(), position++, now, task.get("id"), input.workspaceId());
+            }
+        }
+        String entityId = String.join(",", taskIds);
+        recordActivity(input.workspaceId(), null, userId, "task.bulk_" + action, "task", entityId);
+        Map<String, Object> inverse = new LinkedHashMap<>();
+        inverse.put("taskIds", taskIds);
+        inverse.put("action", action);
+        inverse.put("previous", previous);
+        Map<String, Object> undo = createUndo(userId, input.workspaceId(),
+            "task.bulk_" + action, "task", entityId, inverse, "delete".equals(action) ? 10 : 60);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("affected", taskIds.size());
+        if (undo != null) result.put("undo", undo);
+        return result;
+    }
+
     public Map<String, Object> focusTask(String userId, String taskId, ApiDtos.FocusLog input) {
         Map<String, Object> current = taskRow(taskId);
         requireMinimumRole(userId, (String) current.get("workspaceId"), "MEMBER");
@@ -1658,6 +1762,7 @@ public class AppService {
                    t.title, t.description, t.priority, t.start_date AS startDate, t.due_date AS dueDate,
                    t.due_all_day AS dueAllDay, t.estimate_minutes AS estimateMinutes,
                    t.actual_minutes AS actualMinutes, t.archived_at AS archivedAt, t.version, c.is_done AS completed,
+                   t.position AS position,
                    t.assignee_id AS assigneeId, t.recurrence_rule AS recurrenceRule,
                    t.recurrence_ends_at AS recurrenceEndsAt,
                    u.display_name AS assigneeName, u.email AS assigneeEmail

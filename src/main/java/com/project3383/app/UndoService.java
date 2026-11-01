@@ -100,15 +100,23 @@ public class UndoService {
                         """, taskId, workspaceId);
                 }
             }
-            case "task.bulk_complete" -> {
+            case "task.bulk_complete", "task.bulk_move" -> {
                 for (Map<String, Object> row : mapList(inverse.get("previous"))) {
                     String taskId = stringValue(row.get("taskId"));
                     String columnId = stringValue(row.get("columnId"));
                     if (taskId == null || columnId == null) continue;
-                    jdbc.update("""
-                        UPDATE task SET column_id = ?, version = version + 1
-                        WHERE id = ? AND workspace_id = ?
-                        """, columnId, taskId, workspaceId);
+                    Object position = row.get("position");
+                    if (position == null) {
+                        jdbc.update("""
+                            UPDATE task SET column_id = ?, version = version + 1
+                            WHERE id = ? AND workspace_id = ?
+                            """, columnId, taskId, workspaceId);
+                    } else {
+                        jdbc.update("""
+                            UPDATE task SET column_id = ?, position = ?, version = version + 1
+                            WHERE id = ? AND workspace_id = ?
+                            """, columnId, position, taskId, workspaceId);
+                    }
                 }
             }
             case "board.delete" -> {

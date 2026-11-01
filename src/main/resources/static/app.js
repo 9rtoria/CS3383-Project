@@ -32,6 +32,9 @@
     settings: null,
     settingsQueue: Promise.resolve(),
     members: {},
+    selectedTaskIds: new Set(),
+    bulkTargetColumn: "",
+    bulkBusy: false,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -1018,6 +1021,76 @@
     }
   }
 
+  function toggleTaskSelection(taskId, selected) {
+    if (selected) state.selectedTaskIds.add(taskId);
+    else state.selectedTaskIds.delete(taskId);
+    const card = document.querySelector(`.card[data-task-id="${CSS.escape(taskId)}"]`);
+    card?.classList.toggle("selected", selected);
+    renderBulkToolbar();
+  }
+
+  function clearTaskSelection() {
+    state.selectedTaskIds.clear();
+    document.querySelectorAll(".card.selected").forEach((card) => card.classList.remove("selected"));
+    document.querySelectorAll(".task-select").forEach((checkbox) => { checkbox.checked = false; });
+    renderBulkToolbar();
+  }
+
+  function renderBulkToolbar() {
+    const toolbar = $("bulkToolbar");
+    if (!toolbar) return;
+    const count = state.selectedTaskIds.size;
+    const columns = currentBoard()?.columns ?? [];
+    toolbar.classList.toggle("hidden", count === 0);
+    $("bulkCount").textContent = t("{{count}} selected", { count });
+    const select = $("bulkMoveTarget");
+    const previous = state.bulkTargetColumn;
+    select.replaceChildren();
+    for (const column of columns) select.add(new Option(column.name, column.id));
+    if (previous && columns.some((column) => column.id === previous)) select.value = previous;
+    else if (columns.length) select.value = columns[0].id;
+    state.bulkTargetColumn = select.value;
+    const disabled = state.bulkBusy || count === 0;
+    for (const id of ["bulkCompleteButton", "bulkArchiveButton", "bulkMoveButton", "bulkDeleteButton"]) {
+      $(id).disabled = disabled;
+    }
+    select.disabled = disabled;
+    $("bulkClearButton").disabled = state.bulkBusy;
+  }
+
+  async function runBulkTaskAction(action) {
+    const taskIds = [...state.selectedTaskIds];
+    if (!taskIds.length || state.bulkBusy) return;
+    if (action === "delete" && !window.confirm(t("Delete {{count}} selected tasks? You can undo for a few seconds.", { count: taskIds.length }))) return;
+    const targetColumnId = action === "move" ? $("bulkMoveTarget").value : null;
+    state.bulkBusy = true;
+    renderBulkToolbar();
+    try {
+      const body = { workspaceId: workspace().id, taskIds, action };
+      if (action === "move") body.columnId = targetColumnId;
+      const result = await request("/api/tasks/bulk", { method: "POST", body });
+      state.selectedTaskIds.clear();
+      await loadBoard(state.currentBoardId);
+      await loadToday();
+      const messages = {
+        complete: taskIds.length === 1 ? "{{count}} task completed." : "{{count}} tasks completed.",
+        archive: taskIds.length === 1 ? "{{count}} task archived." : "{{count}} tasks archived.",
+        delete: taskIds.length === 1 ? "{{count}} task deleted." : "{{count}} tasks deleted.",
+        move: taskIds.length === 1 ? "{{count}} task moved." : "{{count}} tasks moved.",
+      };
+      showToast(t(messages[action], { count: result.affected ?? taskIds.length }), undoToastAction(result.undo, async () => {
+        await loadBoard(state.currentBoardId);
+        await loadToday();
+        renderBulkToolbar();
+      }));
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      state.bulkBusy = false;
+      renderBulkToolbar();
+    }
+  }
+
   function renderBoard() {
     const container = $("board");
     container.replaceChildren();
@@ -1028,6 +1101,10 @@
     $("boardDescription").textContent = board.description || t("A quiet place to move work forward.");
     $("boardVisibility").textContent = board.visibility === "private" ? t("Private board") : t("Shared with workspace");
     const flatTasks = (board.columns ?? []).flatMap((column) => column.tasks ?? []);
+    const activeTaskIds = new Set(flatTasks.map((task) => task.id));
+    for (const taskId of [...state.selectedTaskIds]) {
+      if (!activeTaskIds.has(taskId)) state.selectedTaskIds.delete(taskId);
+    }
     const openCount = flatTasks.filter((task) => Number(task.completed) !== 1).length;
     const doneCount = flatTasks.length - openCount;
     $("boardMeta").textContent = doneCount
@@ -1092,10 +1169,12 @@
 
       container.append(columnNode);
     }
+    renderBulkToolbar();
   }
 
   function taskCard(task) {
-    const card = element("article", "card");
+    const card = element("article", `card${state.selectedTaskIds.has(task.id) ? " selected" : ""}`);
+    card.dataset.taskId = task.id;
     card.draggable = true;
     card.tabIndex = 0;
     card.addEventListener("click", () => openTaskModal(task));
@@ -1133,7 +1212,16 @@
       avatar.title = task.assignee.name || task.assignee.email || "";
       meta.append(avatar);
     }
-    if (meta.childElementCount) card.append(meta);
+    const select = element("input", "task-select");
+    select.type = "checkbox";
+    select.checked = state.selectedTaskIds.has(task.id);
+    select.title = t("Select task");
+    select.setAttribute("aria-label", t("Select task"));
+    select.addEventListener("click", (event) => event.stopPropagation());
+    select.addEventListener("dragstart", (event) => event.preventDefault());
+    select.addEventListener("change", () => toggleTaskSelection(task.id, select.checked));
+    meta.append(select);
+    card.append(meta);
     return card;
   }
 
@@ -3632,6 +3720,12 @@
     });
     $("boardDuplicateButton").addEventListener("click", duplicateBoard);
     $("boardShareButton").addEventListener("click", toggleBoardShare);
+    $("bulkCompleteButton").addEventListener("click", () => void runBulkTaskAction("complete"));
+    $("bulkArchiveButton").addEventListener("click", () => void runBulkTaskAction("archive"));
+    $("bulkMoveButton").addEventListener("click", () => void runBulkTaskAction("move"));
+    $("bulkMoveTarget").addEventListener("change", (event) => { state.bulkTargetColumn = event.target.value; });
+    $("bulkDeleteButton").addEventListener("click", () => void runBulkTaskAction("delete"));
+    $("bulkClearButton").addEventListener("click", clearTaskSelection);
     $("boardArchiveButton").addEventListener("click", archiveBoard);
     $("boardDeleteButton").addEventListener("click", deleteCurrentBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);

@@ -147,6 +147,17 @@
             <button type="button" id="boardDeleteButton" class="btn danger sm">Delete</button>
           </div>
         </div>
+        <div id="bulkToolbar" class="bulk-toolbar hidden">
+          <strong id="bulkCount" class="bulk-count">0 selected</strong>
+          <button type="button" id="bulkCompleteButton" class="btn sm">Complete</button>
+          <button type="button" id="bulkArchiveButton" class="btn ghost sm">Archive</button>
+          <div class="bulk-move">
+            <select id="bulkMoveTarget" class="select" aria-label="Bulk destination column"></select>
+            <button type="button" id="bulkMoveButton" class="btn ghost sm">Move</button>
+          </div>
+          <button type="button" id="bulkDeleteButton" class="btn danger sm">Delete</button>
+          <button type="button" id="bulkClearButton" class="btn ghost sm">Clear</button>
+        </div>
         <div id="board" class="board" data-i18n-skip></div>
       </section>
 

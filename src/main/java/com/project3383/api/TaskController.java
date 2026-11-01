@@ -38,6 +38,11 @@ public class TaskController {
         return appService.listTasks(CurrentUser.id(session), workspaceId);
     }
 
+    @PostMapping("/bulk")
+    public Map<String, Object> bulk(HttpSession session, @RequestBody ApiDtos.TaskBulkAction input) {
+        return appService.bulkTaskAction(CurrentUser.id(session), input);
+    }
+
     @GetMapping("/{id}")
     public Map<String, Object> detail(HttpSession session, @PathVariable String id) {
         return appService.taskDetail(CurrentUser.id(session), id);
