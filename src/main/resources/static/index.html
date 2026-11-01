@@ -132,6 +132,20 @@
       </section>
 
       <section id="boardView" class="hidden" aria-label="Board">
+        <div class="board-header">
+          <div class="grow">
+            <span id="boardVisibility" class="badge slate">Shared with workspace</span>
+            <h2 id="boardTitle" class="page-title">Board</h2>
+            <p id="boardDescription" class="muted small"></p>
+          </div>
+          <div class="board-header-actions">
+            <span id="boardMeta" class="muted small"></span>
+            <button type="button" id="boardSettingsButton" class="btn sm">Board settings</button>
+            <button type="button" id="boardDuplicateButton" class="btn ghost sm">Duplicate</button>
+            <button type="button" id="boardArchiveButton" class="btn ghost sm">Archive</button>
+            <button type="button" id="boardDeleteButton" class="btn danger sm">Delete</button>
+          </div>
+        </div>
         <div id="board" class="board" data-i18n-skip></div>
       </section>
 
@@ -376,6 +390,24 @@
             <input id="taskEstimate" name="estimateMinutes" class="input" type="number" min="5" max="1440" step="5" placeholder="30">
           </div>
         </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="taskAssignee">Assignee</label>
+            <select id="taskAssignee" name="assigneeId" class="select">
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="taskRecurrence">Repeats</label>
+            <select id="taskRecurrence" name="recurrenceRule" class="select">
+              <option value="">Does not repeat</option>
+              <option value="FREQ=DAILY;INTERVAL=1">Every day</option>
+              <option value="FREQ=WEEKLY;INTERVAL=1">Every week</option>
+              <option value="FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR">Every weekday</option>
+              <option value="FREQ=MONTHLY;INTERVAL=1">Every month</option>
+            </select>
+          </div>
+        </div>
         <div class="field">
           <label for="taskLabels">Labels</label>
           <input id="taskLabels" name="labels" class="input" maxlength="400" placeholder="launch, design, personal">
@@ -511,6 +543,72 @@
         <div id="focusDoneStats" class="focus-done-stats" data-i18n-skip></div>
         <button type="button" id="focusReturn" class="btn primary lg">Return to Today</button>
       </div>
+    </div>
+  </div>
+
+  <div id="boardSettingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="boardSettingsTitle">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Board</p>
+          <h2 id="boardSettingsTitle">Board settings</h2>
+        </div>
+        <button type="button" id="closeBoardSettings" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <form id="boardSettingsForm">
+        <div class="field">
+          <label for="boardSettingsName">Name</label>
+          <input id="boardSettingsName" class="input" maxlength="120" required>
+        </div>
+        <div class="field">
+          <label for="boardSettingsDescription">Description</label>
+          <textarea id="boardSettingsDescription" class="textarea" maxlength="1000" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <label for="boardSettingsVisibility">Who can see this board?</label>
+          <select id="boardSettingsVisibility" class="select">
+            <option value="workspace">Everyone in the workspace</option>
+            <option value="private">Only me and workspace admins</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancelBoardSettings" class="btn ghost">Cancel</button>
+          <button type="submit" id="saveBoardSettings" class="btn primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="boardCreateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="boardCreateTitle">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <h2 id="boardCreateTitle">New board</h2>
+        </div>
+        <button type="button" id="closeBoardCreate" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <form id="boardCreateForm">
+        <div class="field">
+          <label for="boardCreateName">Name</label>
+          <input id="boardCreateName" class="input" maxlength="120" required placeholder="Product launch">
+        </div>
+        <div class="field">
+          <label for="boardCreateDescription">Description</label>
+          <textarea id="boardCreateDescription" class="textarea" maxlength="1000" rows="3" placeholder="What is this board for?"></textarea>
+        </div>
+        <div class="field">
+          <label for="boardCreateVisibility">Who can see this board?</label>
+          <select id="boardCreateVisibility" class="select">
+            <option value="workspace">Everyone in the workspace</option>
+            <option value="private">Only me and workspace admins</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancelBoardCreate" class="btn ghost">Cancel</button>
+          <button type="submit" id="submitBoardCreate" class="btn primary">Create board</button>
+        </div>
+      </form>
     </div>
   </div>
 

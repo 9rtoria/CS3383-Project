@@ -7,12 +7,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 import java.util.Map;
 
@@ -39,6 +41,21 @@ public class AppController {
     @PostMapping("/boards")
     public Map<String, Object> createBoard(HttpSession session, @RequestBody ApiDtos.BoardCreate input) {
         return appService.createBoard(CurrentUser.id(session), input);
+    }
+
+    @PatchMapping("/boards/{id}")
+    public Map<String, Object> updateBoard(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.BoardUpdate input) {
+        return appService.updateBoard(CurrentUser.id(session), id, input);
+    }
+
+    @PostMapping("/boards/{id}/duplicate")
+    public Map<String, Object> duplicateBoard(HttpSession session, @PathVariable String id) {
+        return appService.duplicateBoard(CurrentUser.id(session), id);
+    }
+
+    @DeleteMapping("/boards/{id}")
+    public Map<String, Object> deleteBoard(HttpSession session, @PathVariable String id) {
+        return appService.deleteBoard(CurrentUser.id(session), id);
     }
 
     @PostMapping("/workspaces")

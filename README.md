@@ -15,8 +15,9 @@ Implemented:
 - Bootstrap payload with workspace, board, and columns
 - Workspace create/switch, including a new team workspace
 - Workspace members, invite links, role changes, and member removal
-- Board create/read API
+- Board create/read/update/delete, duplicate, archive, and private visibility
 - Task create / update / move / soft-delete APIs
+- Task assignee, recurrence rules, and automatic next-occurrence creation
 - Task detail API with comments, checklist, labels, dependencies, attachments, completion, and reopen
 - Attachment upload/download/delete with local storage, MIME allowlist, and 10 MB limit
 - Task start date, all-day due date, and tracked actual minutes
@@ -108,6 +109,9 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/invites/{token}` | Accept an invitation |
 | POST | `/api/boards` | Create a board and its starter columns |
 | GET | `/api/boards/{id}` | Board with columns and tasks |
+| PATCH | `/api/boards/{id}` | Rename, describe, set visibility, archive/restore |
+| DELETE | `/api/boards/{id}` | Soft-delete a board |
+| POST | `/api/boards/{id}/duplicate` | Duplicate a board with tasks |
 | GET | `/api/today` | Open-task list with capacity and day blocks |
 | POST | `/api/today` | Accept or dismiss a task for today |
 | POST | `/api/auto-plan` | Preview, apply, or clear the deterministic plan |

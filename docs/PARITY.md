@@ -39,9 +39,9 @@ Status key:
 | `/api/automations` | MISSING | Schema only |
 | `/api/automations/preview` | MISSING | |
 | `/api/automations/{id}` | MISSING | |
-| `/api/boards` | PARTIAL | GET/POST; no full update/delete contract |
-| `/api/boards/{id}` | PARTIAL | GET only; no PATCH/DELETE |
-| `/api/boards/{id}/duplicate` | MISSING | |
+| `/api/boards` | DONE | GET/POST with description, color, and visibility |
+| `/api/boards/{id}` | DONE | GET/PATCH/DELETE with version checks and soft delete |
+| `/api/boards/{id}/duplicate` | DONE | Copies columns, tasks, labels, assignee, and recurrence |
 | `/api/boards/{id}/share` | MISSING | |
 | `/api/bootstrap` | DONE | Core payload; no settings/theme bundle yet |
 | `/api/calendar` | DONE | Date-range tasks and plan blocks |
@@ -148,9 +148,9 @@ Status key:
 |---|---|---|
 | Auth / guest / signup / signin | DONE | |
 | App shell / workspace switcher | DONE | |
-| Board / columns / task CRUD | DONE | |
+| Board / columns / task CRUD | DONE | Board settings, duplicate, archive, soft delete, visibility |
 | Task archive | PARTIAL | `archived_at` added; delegated stale cleanup + Archive view; no manual archive action/API |
-| Task drawer fields | PARTIAL | Missing recurrence, assignee, reminders display parity, full labels management |
+| Task drawer fields | PARTIAL | Assignee and recurrence implemented; reminder display and full label management still partial |
 | Task comments / checklist | DONE | |
 | Task dependencies | DONE | |
 | Attachments | DONE | |
@@ -202,6 +202,8 @@ Status key:
 - [x] Static HTML/CSS/JS served
 - [x] Session/guest/signup/signin
 - [x] Workspace/membership/board/task core
+- [x] Board settings, duplicate, archive, soft delete, and private visibility
+- [x] Task assignee and recurrence with next-occurrence generation
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -225,9 +227,9 @@ Status key:
 
 1. Full Spring Security filter-chain migration and token-based CSRF hardening.
 2. Remaining workspace/security/audit/data settings.
-3. Task recurrence/assignee and full drawer parity.
+3. Full drawer parity for reminders and label management.
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
-6. Remaining Phase 2 board/task gaps.
+6. Remaining Phase 2 board/task gaps: public share, activity feed, undo/bulk actions, command palette.
 7. Automations, webhooks, SSO/MFA, tokens, audit/retention.
 8. Full E2E, screenshots, performance, and final parity sign-off.

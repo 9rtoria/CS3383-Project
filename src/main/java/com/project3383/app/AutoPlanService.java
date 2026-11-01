@@ -206,10 +206,11 @@ public class AutoPlanService {
                 JOIN board b ON b.id = t.board_id
                 WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
                   AND c.is_done = 0 AND b.workspace_id = t.workspace_id
+                  AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
                   AND t.due_date IS NULL AND t.focus_date IS NULL
                   AND t.updated_at < ?
                 ORDER BY t.updated_at LIMIT 50
-                """, workspaceId, cutoff).stream()
+                """, workspaceId, userId, canSeePrivate(userId, workspaceId), cutoff).stream()
                 .filter(row -> !selectedTaskIds.contains(String.valueOf(row.get("id"))))
                 .limit(25)
                 .toList();
@@ -533,7 +534,8 @@ public class AutoPlanService {
             JOIN board_column c ON c.id = t.column_id
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
-            """, workspaceId).stream().map(row -> new PlanTask(
+              AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
+            """, workspaceId, userId, canSeePrivate(userId, workspaceId)).stream().map(row -> new PlanTask(
             String.valueOf(row.get("id")),
             String.valueOf(row.get("title")),
             row.get("priority") == null ? "none" : String.valueOf(row.get("priority")),
@@ -793,6 +795,14 @@ public class AutoPlanService {
             SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
             """, Integer.class, userId, workspaceId);
         if (count == null || count == 0) throw ApiException.notFound("Workspace not found.");
+    }
+
+    private int canSeePrivate(String userId, String workspaceId) {
+        List<String> roles = jdbc.queryForList("""
+            SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
+            """, String.class, userId, workspaceId);
+        String role = roles.isEmpty() ? "GUEST" : roles.get(0);
+        return Set.of("OWNER", "ADMIN").contains(role) ? 1 : 0;
     }
 
     private Map<String, Object> linked(Map<String, Object> value) {

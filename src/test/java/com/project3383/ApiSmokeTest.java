@@ -7,14 +7,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -22,6 +26,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.hamcrest.Matchers.nullValue;
 
 @SpringBootTest(properties = "spring.datasource.url=jdbc:sqlite:target/test-project3383.db")
 @AutoConfigureMockMvc
@@ -32,6 +38,9 @@ class ApiSmokeTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Test
     void guestCanClaimAnAccountAndSignInAgain() throws Exception {
@@ -380,5 +389,200 @@ class ApiSmokeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.user.name").value("Smoke Owner"))
             .andExpect(jsonPath("$.user.timezone").value("Asia/Tokyo"));
+    }
+
+    @Test
+    void boardManagementAssigneeAndRecurrence() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
+            .andExpect(status().isOk())
+            .andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
+        JsonNode workspace = boot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String userId = boot.path("user").path("id").asText();
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+        int boardVersion = board.path("version").asInt();
+
+        mockMvc.perform(get("/api/boards/" + boardId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.description").value(""))
+            .andExpect(jsonPath("$.board.permissions.canManage").value(true))
+            .andExpect(jsonPath("$.board.members[0].name").value("Guest"));
+
+        mockMvc.perform(patch("/api/boards/" + boardId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "Renamed board",
+                    "description", "A board with a clearer purpose.",
+                    "visibility", "private",
+                    "version", boardVersion
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.name").value("Renamed board"))
+            .andExpect(jsonPath("$.board.description").value("A board with a clearer purpose."))
+            .andExpect(jsonPath("$.board.visibility").value("private"))
+            .andExpect(jsonPath("$.board.version").value(boardVersion + 1));
+
+        MvcResult duplicated = mockMvc.perform(post("/api/boards/" + boardId + "/duplicate").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.board.name").value("Renamed board copy"))
+            .andExpect(jsonPath("$.board.columns[0].tasks").isArray())
+            .andReturn();
+        String duplicatedId = objectMapper.readTree(duplicated.getResponse().getContentAsString())
+            .path("board").path("id").asText();
+
+        Map<String, Object> recurring = new HashMap<>();
+        recurring.put("workspaceId", workspaceId);
+        recurring.put("boardId", boardId);
+        recurring.put("columnId", todo);
+        recurring.put("title", "Recurring smoke");
+        recurring.put("dueDate", "2026-11-01");
+        recurring.put("dueAllDay", true);
+        recurring.put("assigneeId", userId);
+        recurring.put("recurrenceRule", "FREQ=DAILY;INTERVAL=1");
+        recurring.put("labels", List.of("repeat"));
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(recurring)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.task.assignee.id").value(userId))
+            .andExpect(jsonPath("$.task.recurrenceRule").value("FREQ=DAILY;INTERVAL=1"))
+            .andReturn();
+        JsonNode task = objectMapper.readTree(created.getResponse().getContentAsString()).path("task");
+
+        MvcResult completed = mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/complete").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.completed").value(1))
+            .andExpect(jsonPath("$.nextTaskId").isString())
+            .andReturn();
+        String nextTaskId = objectMapper.readTree(completed.getResponse().getContentAsString())
+            .path("nextTaskId").asText();
+
+        MvcResult next = mockMvc.perform(get("/api/tasks/" + nextTaskId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.dueDate").value("2026-11-02"))
+            .andExpect(jsonPath("$.task.completed").value(0))
+            .andExpect(jsonPath("$.task.columnId").value(todo))
+            .andExpect(jsonPath("$.task.recurrenceRule").value("FREQ=DAILY;INTERVAL=1"))
+            .andExpect(jsonPath("$.task.assignee.id").value(userId))
+            .andExpect(jsonPath("$.task.labels[0].name").value("repeat"))
+            .andReturn();
+        JsonNode nextTask = objectMapper.readTree(next.getResponse().getContentAsString()).path("task");
+
+        Map<String, Object> clear = new HashMap<>();
+        clear.put("version", nextTask.path("version").asInt());
+        clear.put("title", "Recurring smoke");
+        clear.put("description", "");
+        clear.put("priority", "none");
+        clear.put("startDate", null);
+        clear.put("dueDate", null);
+        clear.put("dueAllDay", false);
+        clear.put("estimateMinutes", null);
+        clear.put("actualMinutes", null);
+        clear.put("labels", List.of());
+        clear.put("assigneeId", null);
+        clear.put("recurrenceRule", null);
+        clear.put("recurrenceEndsAt", null);
+        mockMvc.perform(patch("/api/tasks/" + nextTaskId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(clear)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.dueDate").value(nullValue()))
+            .andExpect(jsonPath("$.task.assignee").value(nullValue()))
+            .andExpect(jsonPath("$.task.recurrenceRule").value(nullValue()));
+
+        mockMvc.perform(patch("/api/tasks/" + nextTaskId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "version", nextTask.path("version").asInt() + 1,
+                    "assigneeId", "missing-user"
+                ))))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(patch("/api/boards/" + duplicatedId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("archived", true))))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspaces[0].boards[?(@.id == '" + duplicatedId + "')]").isEmpty());
+        mockMvc.perform(patch("/api/boards/" + duplicatedId)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("archived", false))))
+            .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/boards/" + duplicatedId).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.deleted").value(true));
+        mockMvc.perform(get("/api/bootstrap").session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspaces[0].boards[?(@.id == '" + duplicatedId + "')]").isEmpty());
+    }
+
+    @Test
+    void privateBoardsAreHiddenFromOtherMembers() throws Exception {
+        MvcResult ownerGuest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession ownerSession = (MockHttpSession) ownerGuest.getRequest().getSession(false);
+        JsonNode ownerBoot = objectMapper.readTree(ownerGuest.getResponse().getContentAsString());
+        JsonNode workspace = ownerBoot.path("workspaces").get(0);
+        JsonNode board = workspace.path("boards").get(0);
+        String workspaceId = workspace.path("id").asText();
+        String boardId = board.path("id").asText();
+        String todo = board.path("columns").get(0).path("id").asText();
+        int boardVersion = board.path("version").asInt();
+
+        mockMvc.perform(patch("/api/boards/" + boardId)
+                .session(ownerSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "visibility", "private",
+                    "version", boardVersion
+                ))))
+            .andExpect(status().isOk());
+
+        MvcResult created = mockMvc.perform(post("/api/tasks")
+                .session(ownerSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "workspaceId", workspaceId,
+                    "boardId", boardId,
+                    "columnId", todo,
+                    "title", "Private smoke task"
+                ))))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String taskId = objectMapper.readTree(created.getResponse().getContentAsString()).path("task").path("id").asText();
+
+        MvcResult memberGuest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession memberSession = (MockHttpSession) memberGuest.getRequest().getSession(false);
+        String memberId = objectMapper.readTree(memberGuest.getResponse().getContentAsString())
+            .path("user").path("id").asText();
+        jdbc.update("""
+            INSERT INTO membership (user_id, workspace_id, role, joined_at) VALUES (?, ?, 'MEMBER', ?)
+            """, memberId, workspaceId, Instant.now().toString());
+
+        MvcResult memberBoot = mockMvc.perform(get("/api/bootstrap").session(memberSession))
+            .andExpect(status().isOk())
+            .andReturn();
+        assertFalse(memberBoot.getResponse().getContentAsString().contains(boardId));
+
+        mockMvc.perform(get("/api/boards/" + boardId).session(memberSession))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks/" + taskId).session(memberSession))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/tasks").session(memberSession).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Private smoke task"))));
+        mockMvc.perform(get("/api/today").session(memberSession).param("workspaceId", workspaceId))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Private smoke task"))));
     }
 }

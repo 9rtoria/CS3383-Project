@@ -17,7 +17,10 @@ public final class ApiDtos {
         Boolean dueAllDay,
         Integer estimateMinutes,
         Integer actualMinutes,
-        java.util.List<String> labels
+        java.util.List<String> labels,
+        String assigneeId,
+        String recurrenceRule,
+        String recurrenceEndsAt
     ) {
     }
 
@@ -26,12 +29,15 @@ public final class ApiDtos {
         String title,
         String description,
         String priority,
-        String startDate,
-        String dueDate,
+        java.util.Optional<String> startDate,
+        java.util.Optional<String> dueDate,
         Boolean dueAllDay,
-        Integer estimateMinutes,
-        Integer actualMinutes,
-        java.util.List<String> labels
+        java.util.Optional<Integer> estimateMinutes,
+        java.util.Optional<Integer> actualMinutes,
+        java.util.List<String> labels,
+        java.util.Optional<String> assigneeId,
+        java.util.Optional<String> recurrenceRule,
+        java.util.Optional<String> recurrenceEndsAt
     ) {
     }
 
@@ -51,7 +57,18 @@ public final class ApiDtos {
 
     public record BoardCreate(
         String workspaceId,
-        String name
+        String name,
+        String description,
+        String visibility
+    ) {
+    }
+
+    public record BoardUpdate(
+        String name,
+        String description,
+        String visibility,
+        Boolean archived,
+        Integer version
     ) {
     }
 

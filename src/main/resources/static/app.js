@@ -31,6 +31,7 @@
     authMode: "signin",
     settings: null,
     settingsQueue: Promise.resolve(),
+    members: {},
   };
 
   const $ = (id) => document.getElementById(id);
@@ -243,6 +244,58 @@
 
   function currentBoard() {
     return state.board?.board ?? null;
+  }
+
+  const RECURRENCE_LABELS = {
+    "FREQ=DAILY;INTERVAL=1": "Every day",
+    "FREQ=WEEKLY;INTERVAL=1": "Every week",
+    "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR": "Every weekday",
+    "FREQ=MONTHLY;INTERVAL=1": "Every month",
+  };
+
+  function describeRecurrence(rule) {
+    if (!rule) return "";
+    if (RECURRENCE_LABELS[rule]) return t(RECURRENCE_LABELS[rule]);
+    const fields = {};
+    for (const part of String(rule).split(";")) {
+      const [key, value] = part.split("=");
+      if (key && value) fields[key.trim().toUpperCase()] = value.trim().toUpperCase();
+    }
+    const interval = Math.max(1, Math.min(52, Number(fields.INTERVAL || 1) || 1));
+    if (fields.FREQ === "DAILY") return interval === 1 ? t("Every day") : t("Every {{count}} days", { count: interval });
+    if (fields.FREQ === "MONTHLY") return interval === 1 ? t("Every month") : t("Every {{count}} months", { count: interval });
+    if (fields.FREQ === "WEEKLY") {
+      if (fields.BYDAY) {
+        const names = { SU: "Sun", MO: "Mon", TU: "Tue", WE: "Wed", TH: "Thu", FR: "Fri", SA: "Sat" };
+        const days = fields.BYDAY.split(",").map((code) => t(names[code.trim()] || code.trim())).filter(Boolean);
+        return days.length ? t("Every {{days}}", { days: days.join(", ") }) : t("Every week");
+      }
+      return interval === 1 ? t("Every week") : t("Every {{count}} weeks", { count: interval });
+    }
+    return t("Repeats");
+  }
+
+  function initials(name) {
+    const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return "?";
+    return (words.length === 1 ? words[0].slice(0, 2) : words[0][0] + words[words.length - 1][0]).toUpperCase();
+  }
+
+  async function ensureMembers(force = false) {
+    const current = workspace();
+    if (!current) return [];
+    if (!force && state.members[current.id]) return state.members[current.id];
+    const result = await request(`/api/workspaces/${encodeURIComponent(current.id)}/members`);
+    state.members[current.id] = result.members ?? [];
+    return state.members[current.id];
+  }
+
+  async function refreshBootstrap() {
+    state.boot = await request("/api/bootstrap");
+    window.DriftOffline?.cacheBootstrap(state.boot);
+    renderAccount();
+    renderSidebar();
+    return state.boot;
   }
 
   function allTasks() {
@@ -662,21 +715,129 @@
     setView("board");
   }
 
-  async function createBoard() {
-    const name = window.prompt("Board name");
-    if (!name || !name.trim()) return;
+  function openNewBoardModal() {
+    $("boardCreateName").value = "";
+    $("boardCreateDescription").value = "";
+    $("boardCreateVisibility").value = "workspace";
+    $("boardCreateModal").classList.remove("hidden");
+    window.setTimeout(() => $("boardCreateName").focus(), 20);
+  }
+
+  async function createBoard(event) {
+    event.preventDefault();
+    const name = $("boardCreateName").value.trim();
+    if (!name) return;
+    const button = $("submitBoardCreate");
+    button.disabled = true;
     try {
       const result = await request("/api/boards", {
         method: "POST",
-        body: { workspaceId: workspace().id, name: name.trim() },
+        body: {
+          workspaceId: workspace().id,
+          name,
+          description: $("boardCreateDescription").value.trim(),
+          visibility: $("boardCreateVisibility").value,
+        },
       });
-      state.boot = await request("/api/bootstrap");
-      window.DriftOffline?.cacheBootstrap(state.boot);
+      $("boardCreateModal").classList.add("hidden");
+      await refreshBootstrap();
       state.currentBoardId = result.board.id;
-      renderSidebar();
       await loadBoard(result.board.id);
       setView("board");
-      showToast("Board created.");
+      showToast(t("Board created."));
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function openBoardSettings() {
+    const board = currentBoard();
+    if (!board) return;
+    $("boardSettingsName").value = board.name ?? "";
+    $("boardSettingsDescription").value = board.description ?? "";
+    $("boardSettingsVisibility").value = board.visibility ?? "workspace";
+    $("boardSettingsModal").classList.remove("hidden");
+    window.setTimeout(() => $("boardSettingsName").focus(), 20);
+  }
+
+  async function saveBoardSettings(event) {
+    event.preventDefault();
+    const board = currentBoard();
+    if (!board) return;
+    const name = $("boardSettingsName").value.trim();
+    if (!name) return;
+    const button = $("saveBoardSettings");
+    button.disabled = true;
+    try {
+      await request(`/api/boards/${encodeURIComponent(board.id)}`, {
+        method: "PATCH",
+        body: {
+          name,
+          description: $("boardSettingsDescription").value.trim(),
+          visibility: $("boardSettingsVisibility").value,
+          version: board.version,
+        },
+      });
+      $("boardSettingsModal").classList.add("hidden");
+      await refreshBootstrap();
+      await loadBoard(board.id);
+      showToast(t("Board updated."));
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function duplicateBoard() {
+    const board = currentBoard();
+    if (!board) return;
+    try {
+      const result = await request(`/api/boards/${encodeURIComponent(board.id)}/duplicate`, { method: "POST" });
+      await refreshBootstrap();
+      state.currentBoardId = result.board.id;
+      await loadBoard(result.board.id);
+      setView("board");
+      showToast(t("Board duplicated."));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function archiveBoard() {
+    const board = currentBoard();
+    if (!board) return;
+    if (!window.confirm(t("Archive \"{{name}}\"? You can restore it later.", { name: board.name }))) return;
+    try {
+      await request(`/api/boards/${encodeURIComponent(board.id)}`, {
+        method: "PATCH",
+        body: { archived: true, version: board.version },
+      });
+      await refreshBootstrap();
+      const next = boards()[0] ?? null;
+      state.currentBoardId = next?.id ?? null;
+      if (next) await loadBoard(next.id);
+      setView("board");
+      showToast(t("Board archived."));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function deleteCurrentBoard() {
+    const board = currentBoard();
+    if (!board) return;
+    if (!window.confirm(t("Delete \"{{name}}\"? This cannot be undone here.", { name: board.name }))) return;
+    try {
+      await request(`/api/boards/${encodeURIComponent(board.id)}`, { method: "DELETE" });
+      await refreshBootstrap();
+      const next = boards()[0] ?? null;
+      state.currentBoardId = next?.id ?? null;
+      if (next) await loadBoard(next.id);
+      setView("board");
+      showToast(t("Board deleted."));
     } catch (error) {
       showToast(error.message);
     }
@@ -689,6 +850,7 @@
       workspaceSelect.add(new Option(item.name, item.id));
     }
     if (workspace()) workspaceSelect.value = workspace().id;
+    $("newBoardButton").classList.toggle("hidden", !["OWNER", "ADMIN", "MEMBER"].includes(workspace()?.role));
 
     const list = $("boardList");
     list.replaceChildren();
@@ -807,6 +969,19 @@
     const board = currentBoard();
     if (!board) return;
     $("viewTitle").textContent = board.name;
+    $("boardTitle").textContent = board.name;
+    $("boardDescription").textContent = board.description || t("A quiet place to move work forward.");
+    $("boardVisibility").textContent = board.visibility === "private" ? t("Private board") : t("Shared with workspace");
+    const flatTasks = (board.columns ?? []).flatMap((column) => column.tasks ?? []);
+    const openCount = flatTasks.filter((task) => Number(task.completed) !== 1).length;
+    const doneCount = flatTasks.length - openCount;
+    $("boardMeta").textContent = doneCount
+      ? t("{{open}} open · {{done}} done", { open: openCount, done: doneCount })
+      : t("{{open}} open", { open: openCount });
+    $("boardSettingsButton").disabled = !(board.permissions?.canEdit ?? true);
+    $("boardDuplicateButton").disabled = !(board.permissions?.canEdit ?? true);
+    $("boardArchiveButton").disabled = !(board.permissions?.canEdit ?? true);
+    $("boardDeleteButton").classList.toggle("hidden", !(board.permissions?.canManage ?? true));
     for (const column of board.columns ?? []) {
       const columnNode = element("section", "column");
       columnNode.dataset.columnId = column.id;
@@ -846,6 +1021,7 @@
           }
           await loadBoard(state.currentBoardId);
           window.DriftSound?.play("move");
+          if (result?.nextTaskId) showToast(t("Next occurrence created."));
         } catch (error) {
           showToast(error.message);
         }
@@ -884,6 +1060,16 @@
     if (task.actualMinutes) meta.append(element("span", "pill", `${task.actualMinutes}m tracked`));
     if (task.startDate) meta.append(element("span", "pill", `starts ${task.startDate.slice(0, 10)}`));
     if (task.dueDate) meta.append(element("span", "pill", `due ${task.dueDate.slice(0, 10)}`));
+    if (task.recurrenceRule) {
+      const repeat = element("span", "pill pill-repeat", `↻ ${describeRecurrence(task.recurrenceRule)}`);
+      repeat.title = t("Repeats");
+      meta.append(repeat);
+    }
+    if (task.assignee) {
+      const avatar = element("span", "avatar-sm", initials(task.assignee.name));
+      avatar.title = task.assignee.name || task.assignee.email || "";
+      meta.append(avatar);
+    }
     if (meta.childElementCount) card.append(meta);
     return card;
   }
@@ -1545,7 +1731,8 @@
       renderFocus();
       await loadToday();
       if (state.currentBoardId) await loadBoard(state.currentBoardId);
-      showToast(t("Focus complete — {{minutes}}m tracked.", { minutes }));
+      showToast(t("Focus complete — {{minutes}}m tracked.", { minutes })
+        + (result.nextTaskId ? ` ${t("Next occurrence created.")}` : ""));
     } catch (error) {
       focus.busy = false;
       focus.error = error.message;
@@ -1640,6 +1827,43 @@
     });
 
     const today = localDateKey();
+    const recurrenceWeekdays = {
+      sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2,
+      wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4,
+      friday: 5, fri: 5, saturday: 6, sat: 6,
+    };
+    let recurrenceRule = null;
+    let recurrenceDate = null;
+    text = text.replace(/\s(?:every|each)\s+weekday\b/gi, () => {
+      recurrenceRule = "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR";
+      const weekday = new Date(`${today}T12:00:00`).getDay();
+      recurrenceDate = weekday >= 1 && weekday <= 5 ? today : nextWeekdayKey(today, 1, false);
+      return " ";
+    });
+    text = text.replace(/\s(?:every|each)\s+other\s+(day|week|month)\b/gi, (_, unit) => {
+      const frequency = unit.toLowerCase().startsWith("d") ? "DAILY" : unit.toLowerCase().startsWith("w") ? "WEEKLY" : "MONTHLY";
+      recurrenceRule = `FREQ=${frequency};INTERVAL=2`;
+      return " ";
+    });
+    text = text.replace(/\s(?:every|each)\s+(\d+)\s*(day|days|week|weeks|month|months)\b/gi, (_, amount, unit) => {
+      const frequency = unit.toLowerCase().startsWith("d") ? "DAILY" : unit.toLowerCase().startsWith("w") ? "WEEKLY" : "MONTHLY";
+      const interval = Math.max(1, Math.min(52, Number(amount) || 1));
+      recurrenceRule = `FREQ=${frequency};INTERVAL=${interval}`;
+      return " ";
+    });
+    text = text.replace(/\s(?:every|each)\s+(day|week|month)\b/gi, (_, unit) => {
+      const frequency = unit.toLowerCase().startsWith("d") ? "DAILY" : unit.toLowerCase().startsWith("w") ? "WEEKLY" : "MONTHLY";
+      recurrenceRule = `FREQ=${frequency};INTERVAL=1`;
+      return " ";
+    });
+    text = text.replace(/\s(?:every|each)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\b/gi, (_, day) => {
+      const index = recurrenceWeekdays[day.toLowerCase()];
+      const codes = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+      recurrenceRule = `FREQ=WEEKLY;INTERVAL=1;BYDAY=${codes[index]}`;
+      recurrenceDate = nextWeekdayKey(today, index, false);
+      return " ";
+    });
+
     let date = null;
     let time = null;
     text = text.replace(/\s(?:on\s+|by\s+|due\s+)?(\d{4})-(\d{2})-(\d{2})(?!\d)/i, (_, year, month, day) => {
@@ -1691,6 +1915,7 @@
         text = text.replace(bareTime[0], " ");
       }
     }
+    if (recurrenceRule && !date) date = recurrenceDate || today;
     const dueAllDay = !time;
     const dueDate = date
       ? (time ? `${date}T${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}:00` : date)
@@ -1700,7 +1925,7 @@
       .replace(/\s+([,.;:!?])/g, "$1")
       .replace(/\s+(?:at|on|by|due)\s*$/i, "")
       .trim();
-    return { title, priority, labels, estimateMinutes, dueDate, dueAllDay };
+    return { title, priority, labels, estimateMinutes, dueDate, dueAllDay, recurrenceRule };
   }
 
   function captureDueLabel(parsed) {
@@ -1800,6 +2025,7 @@
     if (parsed.priority !== "none") container.append(makeBadge(t(parsed.priority), "rose"));
     for (const label of parsed.labels) container.append(makeBadge(`#${label}`, "moss"));
     if (parsed.estimateMinutes) container.append(makeBadge(`${parsed.estimateMinutes}m`, "slate"));
+    if (parsed.recurrenceRule) container.append(makeBadge(`↻ ${describeRecurrence(parsed.recurrenceRule)}`, "violet"));
   }
 
   function toggleCaptureVoice() {
@@ -1892,6 +2118,7 @@
       estimateMinutes: parsed.estimateMinutes,
       actualMinutes: null,
       labels: parsed.labels,
+      recurrenceRule: parsed.recurrenceRule,
     };
     const button = $("captureAddButton");
     state.captureSaving = true;
@@ -1955,6 +2182,33 @@
     $("taskDue").value = task?.dueDate ? String(task.dueDate).slice(0, 10) : "";
     $("taskDueAllDay").checked = task ? Number(task.dueAllDay) === 1 : true;
     $("taskActual").value = task?.actualMinutes ?? "";
+    const recurrenceSelect = $("taskRecurrence");
+    recurrenceSelect.replaceChildren(new Option(t("Does not repeat"), ""));
+    for (const [value, label] of Object.entries(RECURRENCE_LABELS)) recurrenceSelect.add(new Option(t(label), value));
+    const recurrenceRule = task?.recurrenceRule ?? "";
+    if (recurrenceRule && !RECURRENCE_LABELS[recurrenceRule]) {
+      recurrenceSelect.add(new Option(describeRecurrence(recurrenceRule), recurrenceRule));
+    }
+    recurrenceSelect.value = recurrenceRule;
+    const assigneeSelect = $("taskAssignee");
+    const selectedAssignee = task?.assigneeId ?? "";
+    assigneeSelect.replaceChildren(new Option(t("Unassigned"), ""));
+    if (selectedAssignee) {
+      const currentAssignee = task?.assignee?.name || selectedAssignee;
+      assigneeSelect.add(new Option(currentAssignee, selectedAssignee));
+      assigneeSelect.value = selectedAssignee;
+    }
+    ensureMembers()
+      .then((members) => {
+        if (!$("taskModal").classList.contains("hidden")) {
+          assigneeSelect.replaceChildren(new Option(t("Unassigned"), ""));
+          for (const member of members) {
+            assigneeSelect.add(new Option(member.name || member.email, member.userId || member.id));
+          }
+          assigneeSelect.value = selectedAssignee;
+        }
+      })
+      .catch(() => undefined);
     $("taskColumn").replaceChildren();
     for (const column of columns) $("taskColumn").add(new Option(column.name, column.id));
     if (columnId) $("taskColumn").value = columnId;
@@ -2220,6 +2474,7 @@
     save.disabled = true;
     try {
       const task = state.editing;
+      const recurrenceRule = $("taskRecurrence").value || null;
       const body = {
         title: $("taskTitle").value.trim(),
         description: $("taskDescription").value.trim(),
@@ -2230,6 +2485,9 @@
         startDate: $("taskStart").value || null,
         dueDate: $("taskDue").value || null,
         dueAllDay: $("taskDueAllDay").checked,
+        assigneeId: $("taskAssignee").value || null,
+        recurrenceRule,
+        ...(recurrenceRule ? {} : { recurrenceEndsAt: null }),
       };
       if (task) {
         const result = await requestOrQueue(
@@ -2290,6 +2548,7 @@
       await loadBoard(state.currentBoardId);
       await loadToday();
       window.DriftSound?.play(completed ? "complete" : "tap");
+      if (result?.nextTaskId) showToast(t("Next occurrence created."));
     } catch (error) {
       showToast(error.message);
     }
@@ -3218,7 +3477,23 @@
       state.draggingTaskId = null;
       if (taskId) await todayAction("dismiss", taskId);
     });
-    $("newBoardButton").addEventListener("click", createBoard);
+    $("newBoardButton").addEventListener("click", openNewBoardModal);
+    $("boardCreateForm").addEventListener("submit", createBoard);
+    $("closeBoardCreate").addEventListener("click", () => $("boardCreateModal").classList.add("hidden"));
+    $("cancelBoardCreate").addEventListener("click", () => $("boardCreateModal").classList.add("hidden"));
+    $("boardCreateModal").addEventListener("click", (event) => {
+      if (event.target === $("boardCreateModal")) $("boardCreateModal").classList.add("hidden");
+    });
+    $("boardSettingsButton").addEventListener("click", openBoardSettings);
+    $("boardSettingsForm").addEventListener("submit", saveBoardSettings);
+    $("closeBoardSettings").addEventListener("click", () => $("boardSettingsModal").classList.add("hidden"));
+    $("cancelBoardSettings").addEventListener("click", () => $("boardSettingsModal").classList.add("hidden"));
+    $("boardSettingsModal").addEventListener("click", (event) => {
+      if (event.target === $("boardSettingsModal")) $("boardSettingsModal").classList.add("hidden");
+    });
+    $("boardDuplicateButton").addEventListener("click", duplicateBoard);
+    $("boardArchiveButton").addEventListener("click", archiveBoard);
+    $("boardDeleteButton").addEventListener("click", deleteCurrentBoard);
     $("newWorkspaceButton").addEventListener("click", createWorkspace);
     $("autoPlanButton").addEventListener("click", openAutoPlan);
     $("closeAutoPlanModal").addEventListener("click", () => $("autoPlanModal").classList.add("hidden"));
