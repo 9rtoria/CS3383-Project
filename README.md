@@ -54,6 +54,7 @@ Implemented:
 - Account and workspace deletion with ownership guards, credential anonymization, session/token revocation, audit, and local-cache clearing
 - TOTP two-factor authentication with QR setup, encrypted secrets, one-time backup codes, sign-in challenge, and disable guard
 - Versioned workspace policies for required MFA, automations, attachments, public sharing, archived-task retention, and audit retention, with MFA and attachment enforcement
+- Organization SSO through OIDC discovery/callback with encrypted client secrets, domain allowlists, guest account linking, and MFA handoff
 - Auto-plan safe/full/delegated modes, background refresh, task-change invalidation, stale-task archive cleanup, and archive visibility
 - Calendar month view, task search, basic Insights, Archive/Upcoming views, and ICS download
 - Personal Settings workspace: account display name/timezone, appearance, language/region, planning, auto-plan, focus/capture, notifications, features, autosave, and per-section defaults
@@ -63,7 +64,6 @@ Implemented:
 Not implemented yet:
 
 - Full Insights and visual parity
-- SSO (OIDC)
 - Full accessibility, E2E, performance, and final parity sign-off
 
 The current Phase 0 parity matrix is at:
@@ -112,6 +112,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | POST | `/api/auth/signin` | Sign in with email/password |
 | DELETE | `/api/auth/signout` | Invalidate the session |
 | POST | `/api/auth/mfa/challenge` | Complete a sign-in challenge with TOTP or a backup code |
+| GET | `/api/auth/sso/{workspaceId}` | Start organization OIDC sign-in |
+| GET | `/api/auth/sso/{workspaceId}/callback` | OIDC callback, linking, and MFA handoff |
 | GET | `/api/security/mfa` | MFA status and active-session list |
 | POST | `/api/security/mfa` | Setup, enable, or disable TOTP |
 | DELETE | `/api/security/mfa` | Revoke another session record |
@@ -122,6 +124,9 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | GET | `/api/workspaces/{id}` | Workspace details, policies, role, and board count |
 | PATCH | `/api/workspaces/{id}` | Versioned workspace policy update |
 | DELETE | `/api/workspaces/{id}` | Soft-delete an owner workspace |
+| GET | `/api/workspaces/{id}/sso` | Organization SSO configuration |
+| PUT | `/api/workspaces/{id}/sso` | Save/enable/disable organization OIDC config |
+| DELETE | `/api/workspaces/{id}/sso` | Remove organization SSO |
 | GET | `/api/workspaces/{id}/members` | List workspace members |
 | POST | `/api/workspaces/{id}/invites` | Create an invite link |
 | PATCH | `/api/workspaces/{id}/members/{userId}` | Change a member role |

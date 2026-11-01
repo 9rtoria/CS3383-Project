@@ -1951,6 +1951,117 @@ class ApiSmokeTest {
     }
 
     @Test
+    void ssoConfigAndCallbackWithLocalOidcProvider() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest")).andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        MvcResult team = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "SSO team", "type", "team"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String teamId = objectMapper.readTree(team.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+        mockMvc.perform(putSso(teamId, session, "https://issuer.example.com", "client", "secret", "example.com"))
+            .andExpect(status().isBadRequest());
+
+        MvcResult org = mockMvc.perform(post("/api/workspaces")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "SSO org", "type", "org"))))
+            .andExpect(status().isOk())
+            .andReturn();
+        String orgId = objectMapper.readTree(org.getResponse().getContentAsString())
+            .path("workspace").path("id").asText();
+
+        String ssoEmail = "sso-" + System.nanoTime() + "@example.com";
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
+            new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        String base = "http://127.0.0.1:" + server.getAddress().getPort();
+        server.createContext("/.well-known/openid-configuration", exchange -> {
+            String body = "{\"authorization_endpoint\":\"" + base + "/authorize\","
+                + "\"token_endpoint\":\"" + base + "/token\","
+                + "\"userinfo_endpoint\":\"" + base + "/userinfo\"}";
+            byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.createContext("/token", exchange -> {
+            byte[] bytes = "{\"access_token\":\"test-token\",\"token_type\":\"Bearer\"}"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.createContext("/userinfo", exchange -> {
+            byte[] bytes = ("{\"email\":\"" + ssoEmail + "\",\"email_verified\":true,\"name\":\"SSO User\"}")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            mockMvc.perform(putSso(orgId, session, base, "client-id", "client-secret", "example.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.config.issuer").value(base))
+                .andExpect(jsonPath("$.config.clientId").value("client-id"))
+                .andExpect(jsonPath("$.config.enabled").value(true));
+            mockMvc.perform(get("/api/workspaces/" + orgId + "/sso").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.configured").value(true))
+                .andExpect(jsonPath("$.config.clientId").value("client-id"));
+
+            MvcResult started = mockMvc.perform(get("/api/auth/sso/" + orgId).session(session))
+                .andExpect(status().isFound())
+                .andReturn();
+            String location = started.getResponse().getRedirectedUrl();
+            if (location == null || !location.startsWith(base + "/authorize")) {
+                throw new AssertionError("SSO start did not redirect to the provider.");
+            }
+            String state = null;
+            for (String part : location.substring(location.indexOf('?') + 1).split("&")) {
+                if (part.startsWith("state=")) state = java.net.URLDecoder.decode(part.substring(6),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            }
+            if (state == null) throw new AssertionError("SSO state was missing.");
+
+            mockMvc.perform(get("/api/auth/sso/" + orgId + "/callback")
+                    .session(session)
+                    .param("code", "test-code")
+                    .param("state", state))
+                .andExpect(status().isFound());
+            mockMvc.perform(get("/api/bootstrap").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.email").value(ssoEmail))
+                .andExpect(jsonPath("$.workspaces[?(@.id == '" + orgId + "')]").isNotEmpty());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder putSso(
+        String workspaceId, MockHttpSession session, String issuer, String clientId,
+        String clientSecret, String allowedDomains) throws Exception {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+            .put("/api/workspaces/" + workspaceId + "/sso")
+            .session(session)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(Map.of(
+                "issuer", issuer,
+                "clientId", clientId,
+                "clientSecret", clientSecret,
+                "allowedDomains", allowedDomains,
+                "enabled", true,
+                "enforceSso", false
+            )));
+    }
+
+    @Test
     void webhooksDeliverSignedEventsAndCanBeDeleted() throws Exception {
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
             new java.net.InetSocketAddress("127.0.0.1", 0), 0);

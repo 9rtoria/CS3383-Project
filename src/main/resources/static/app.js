@@ -363,6 +363,17 @@
         if (state.currentBoardId) await loadBoard(state.currentBoardId);
         await loadToday();
       }
+      const query = new URLSearchParams(location.search);
+      const ssoMfa = query.get("ssoMfa");
+      if (ssoMfa) {
+        history.replaceState({}, "", "/");
+        promptSsoMfa(ssoMfa);
+      }
+      const ssoError = query.get("ssoError");
+      if (ssoError) {
+        history.replaceState({}, "", "/");
+        showToast(t("SSO sign-in failed: {{reason}}", { reason: ssoError.replaceAll("_", " ") }));
+      }
       state.offline = !navigator.onLine;
       updateOfflineBanner();
       if (navigator.onLine && offlineQueue().length) void syncOfflineQueue(false);
@@ -472,6 +483,63 @@
     } finally {
       submit.disabled = false;
     }
+  }
+
+  function promptSsoMfa(challenge) {
+    const backdrop = element("div", "modal-backdrop");
+    const modal = element("div", "modal");
+    modal.style.width = "min(440px, 100%)";
+    const head = element("div", "modal-head");
+    const headCopy = element("div");
+    headCopy.append(element("p", "eyebrow", t("Single sign-on")), element("h2", "", t("Two-factor verification")));
+    const close = element("button", "btn ghost sm", "×");
+    close.type = "button";
+    close.setAttribute("aria-label", t("Close"));
+    head.append(headCopy, close);
+    const copy = element("p");
+    copy.style.cssText = "font-size:12px;color:var(--muted);line-height:1.6";
+    copy.textContent = t("Enter your authenticator code or a backup code to finish signing in.");
+    const field = element("label", "field");
+    field.style.marginTop = "14px";
+    field.append(element("span", "", t("Six-digit code")));
+    const input = element("input", "input");
+    input.inputMode = "numeric";
+    input.autocomplete = "one-time-code";
+    input.placeholder = "123456";
+    field.append(input);
+    const actions = element("div", "modal-actions");
+    const cancel = element("button", "btn ghost", t("Cancel"));
+    cancel.type = "button";
+    const verify = element("button", "btn primary", t("Verify"));
+    verify.type = "button";
+    actions.append(cancel, verify);
+    modal.append(head, copy, field, actions);
+    backdrop.append(modal);
+    document.body.append(backdrop);
+    const closeModal = () => backdrop.remove();
+    close.addEventListener("click", closeModal);
+    cancel.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) closeModal();
+    });
+    verify.addEventListener("click", async () => {
+      if (!input.value.trim()) {
+        showToast(t("Enter a code to continue."));
+        return;
+      }
+      verify.disabled = true;
+      try {
+        await request("/api/auth/mfa/challenge", {
+          method: "POST",
+          body: { challenge, code: input.value.trim() },
+        });
+        window.location.assign("/");
+      } catch (error) {
+        showToast(error.message);
+        verify.disabled = false;
+      }
+    });
+    input.focus();
   }
 
   function closeAuthModal() {
@@ -728,25 +796,81 @@
     }
   }
 
-  async function createWorkspace() {
-    const name = window.prompt("Team workspace name");
-    if (!name || !name.trim()) return;
-    try {
-      const result = await request("/api/workspaces", {
-        method: "POST",
-        body: { name: name.trim(), type: "team" },
-      });
-      state.boot = await request("/api/bootstrap");
-      window.DriftOffline?.cacheBootstrap(state.boot);
-      state.currentWorkspaceId = result.workspace.id;
-      state.currentBoardId = boards()[0]?.id ?? null;
-      renderSidebar();
-      if (state.currentBoardId) await loadBoard(state.currentBoardId);
-      setView("board");
-      showToast("Team workspace created.");
-    } catch (error) {
-      showToast(error.message);
-    }
+  function createWorkspace() {
+    const backdrop = element("div", "modal-backdrop");
+    const modal = element("div", "modal");
+    modal.style.width = "min(480px, 100%)";
+    const head = element("div", "modal-head");
+    const headCopy = element("div");
+    headCopy.append(element("p", "eyebrow", t("Workspace")), element("h2", "", t("New workspace")));
+    const close = element("button", "btn ghost sm", "×");
+    close.type = "button";
+    close.setAttribute("aria-label", t("Close"));
+    head.append(headCopy, close);
+    const form = element("form", "form-grid");
+    const nameField = element("label", "field");
+    nameField.append(element("span", "", t("Name")));
+    const name = element("input", "input");
+    name.placeholder = t("Studio team");
+    name.maxLength = 80;
+    nameField.append(name);
+    const typeField = element("label", "field");
+    typeField.append(element("span", "", t("Type")));
+    const type = element("select", "select");
+    type.add(new Option(t("Team"), "team"));
+    type.add(new Option(t("Organization"), "org"));
+    typeField.append(type);
+    const actions = element("div", "modal-actions");
+    const cancel = element("button", "btn ghost", t("Cancel"));
+    cancel.type = "button";
+    const submit = element("button", "btn primary", t("Create workspace"));
+    submit.type = "submit";
+    submit.disabled = true;
+    actions.append(cancel, submit);
+    form.append(nameField, typeField);
+    modal.append(head, form, actions);
+    backdrop.append(modal);
+    document.body.append(backdrop);
+    const closeModal = () => {
+      document.removeEventListener("keydown", onKeydown);
+      backdrop.remove();
+    };
+    const onKeydown = (event) => {
+      if (event.key === "Escape") closeModal();
+    };
+    document.addEventListener("keydown", onKeydown);
+    close.addEventListener("click", closeModal);
+    cancel.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) closeModal();
+    });
+    name.addEventListener("input", () => {
+      submit.disabled = !name.value.trim();
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!name.value.trim()) return;
+      submit.disabled = true;
+      try {
+        const result = await request("/api/workspaces", {
+          method: "POST",
+          body: { name: name.value.trim(), type: type.value },
+        });
+        state.boot = await request("/api/bootstrap");
+        window.DriftOffline?.cacheBootstrap(state.boot);
+        state.currentWorkspaceId = result.workspace.id;
+        state.currentBoardId = boards()[0]?.id ?? null;
+        renderSidebar();
+        if (state.currentBoardId) await loadBoard(state.currentBoardId);
+        setView("board");
+        closeModal();
+        showToast(t("Workspace created."));
+      } catch (error) {
+        showToast(error.message);
+        submit.disabled = false;
+      }
+    });
+    name.focus();
   }
 
   async function switchWorkspace(workspaceId) {
@@ -4811,12 +4935,131 @@
       }
     });
 
+    let ssoWrap = null;
+    let ssoState = null;
+    if ((workspace()?.type ?? "personal") === "org") {
+      ssoWrap = element("div");
+      ssoWrap.style.marginTop = "24px";
+      section.append(ssoWrap);
+    }
+    const renderSso = () => {
+      if (!ssoWrap) return;
+      ssoWrap.replaceChildren();
+      const configured = Boolean(ssoState?.configured);
+      const config = ssoState?.config ?? {};
+      const head = element("div", "section-head");
+      const headCopy = element("div");
+      headCopy.append(element("h3", "section-title", t("Single sign-on")));
+      headCopy.append(element("p", "section-subtitle", t("OIDC for organization workspaces. Client secrets are encrypted at rest.")));
+      head.append(headCopy, makeBadge(configured ? t("Configured") : t("Not configured"), configured ? "moss" : "slate"));
+      const ssoCard = element("div", "settings-card");
+      const form = element("form", "form-grid");
+      const issuerField = element("label", "field");
+      issuerField.append(element("span", "", t("Issuer URL")));
+      const issuer = element("input", "input");
+      issuer.placeholder = "https://login.example.com";
+      issuer.value = config.issuer ?? "";
+      issuerField.append(issuer);
+      const clientField = element("label", "field");
+      clientField.append(element("span", "", t("Client ID")));
+      const clientId = element("input", "input");
+      clientId.value = config.clientId ?? "";
+      clientField.append(clientId);
+      const secretField = element("label", "field");
+      secretField.append(element("span", "", t("Client secret")));
+      const secret = element("input", "input");
+      secret.type = "password";
+      secret.autocomplete = "new-password";
+      secret.placeholder = configured ? t("Leave blank to keep the current secret") : "";
+      secretField.append(secret);
+      const domainsField = element("label", "field");
+      domainsField.append(element("span", "", t("Allowed email domains")));
+      const domains = element("input", "input");
+      domains.placeholder = "example.com, example.org";
+      domains.value = config.allowedDomains ?? "";
+      domainsField.append(domains);
+      const enabled = config.enabled !== false;
+      const enforceSso = Boolean(config.enforceSso);
+      let enabledValue = enabled;
+      let enforceValue = enforceSso;
+      const actions = element("div", "inline");
+      const save = element("button", "btn primary", t("Save SSO"));
+      save.type = "submit";
+      const remove = configured ? element("button", "btn danger", t("Remove SSO")) : null;
+      if (remove) {
+        remove.type = "button";
+        remove.addEventListener("click", async () => {
+          if (!window.confirm(t("Remove the SSO configuration?"))) return;
+          try {
+            await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/sso`, { method: "DELETE" });
+            showToast(t("SSO configuration removed."));
+            await loadSso();
+          } catch (error) {
+            showToast(error.message);
+          }
+        });
+      }
+      const startLink = configured ? element("a", "btn ghost", t("Try SSO")) : null;
+      if (startLink) {
+        startLink.href = `/api/auth/sso/${encodeURIComponent(workspace().id)}`;
+      }
+      actions.append(save);
+      if (startLink) actions.append(startLink);
+      if (remove) actions.append(remove);
+      form.append(issuerField, clientField, secretField, domainsField,
+        settingsRow(form, t("Enable SSO"), t("Show the organization sign-in entry point."),
+          makeToggle(enabledValue, t("Enable SSO"), (next) => { enabledValue = next; })),
+        settingsRow(form, t("Require SSO"), t("Mark password sign-in as restricted for this organization."),
+          makeToggle(enforceValue, t("Require SSO"), (next) => { enforceValue = next; })),
+        actions);
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!issuer.value.trim() || !clientId.value.trim() || !domains.value.trim()) {
+          showToast(t("Issuer, client ID, and allowed domains are required."));
+          return;
+        }
+        save.disabled = true;
+        try {
+          const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/sso`, {
+            method: "PUT",
+            body: {
+              issuer: issuer.value.trim(),
+              clientId: clientId.value.trim(),
+              clientSecret: secret.value.trim(),
+              allowedDomains: domains.value.trim(),
+              enabled: enabledValue,
+              enforceSso: enforceValue,
+            },
+          });
+          ssoState = { configured: true, config: result?.config ?? null };
+          showToast(t("SSO configuration saved."));
+          renderSso();
+        } catch (error) {
+          showToast(error.message);
+          save.disabled = false;
+        }
+      });
+      ssoCard.append(form);
+      ssoWrap.append(head, ssoCard);
+    };
+    const loadSso = async () => {
+      if (!ssoWrap) return;
+      try {
+        ssoState = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/sso`);
+      } catch (error) {
+        ssoState = { configured: false, config: null };
+      }
+      renderSso();
+    };
+
     section.refreshSettingsSection = () => {
       void refresh();
       void refreshHooks();
+      if (ssoWrap) void loadSso();
     };
     void refresh();
     void refreshHooks();
+    if (ssoWrap) void loadSso();
     return section;
   }
 

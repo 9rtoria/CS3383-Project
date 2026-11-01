@@ -164,6 +164,16 @@ public final class ApiDtos {
     ) {
     }
 
+    public record SsoConfigRequest(
+        String issuer,
+        String clientId,
+        String clientSecret,
+        String allowedDomains,
+        Boolean enabled,
+        Boolean enforceSso
+    ) {
+    }
+
     public record WorkspaceUpdate(
         Integer retentionDays,
         Integer auditRetentionDays,

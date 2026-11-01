@@ -33,8 +33,8 @@ Status key:
 | `/api/auth/signin` | DONE | Password sign-in |
 | `/api/auth/signout` | DONE | Session invalidate |
 | `/api/auth/signup` | DONE | Guest claim supported |
-| `/api/auth/sso/{workspaceId}` | MISSING | |
-| `/api/auth/sso/{workspaceId}/callback` | MISSING | |
+| `/api/auth/sso/{workspaceId}` | DONE | OIDC discovery, state/nonce redirect for enabled org configs |
+| `/api/auth/sso/{workspaceId}/callback` | DONE | State validation, code exchange, userinfo, domain check, account linking, MFA handoff |
 | `/api/auto-plan` | PARTIAL | Settings-aware preview/apply/clear, safe mode, delegated stale cleanup, refresh/invalidation, undo; exact reference recompute/UI pending |
 | `/api/automations` | DONE | Admin rule list with runs and preview; create with audit |
 | `/api/automations/preview` | DONE | Side-effect-free draft diff with skipped reasons |
@@ -84,7 +84,7 @@ Status key:
 | `/api/workspaces/{id}` | DONE | GET workspace/policies, versioned PATCH policies, and DELETE owner workspace with the only-workspace guard |
 | `/api/workspaces/{id}/invites` | DONE | Create invite |
 | `/api/workspaces/{id}/members` | DONE | List/change role/remove |
-| `/api/workspaces/{id}/sso` | MISSING | Schema only |
+| `/api/workspaces/{id}/sso` | DONE | Admin GET/PUT/DELETE for org OIDC config with encrypted client secret and audit |
 
 ### Extra Project3383 endpoints
 
@@ -131,7 +131,7 @@ Status key:
 | TodaySelection | DONE | Rewrite-specific per-user selection table; reference uses shared `Task.focusDate` |
 | MagicLinkToken | SCHEMA | |
 | Invite | DONE | |
-| OidcConfig | SCHEMA | SSO not implemented |
+| OidcConfig | DONE | Issuer, client ID/secret, domains, enable/enforce, encrypted secret, audit |
 | ApiToken | DONE | Bearer auth, workspace scope, expiry, revocation, audit |
 | Webhook | DONE | Kind, URL, enable/disable, event subscriptions, HMAC signing secret |
 | WebhookDelivery | DONE | Persisted payload/status/response, async delivery, retry at 5/15/45 min |
@@ -178,7 +178,7 @@ Status key:
 | Automations | DONE | Admin rules for created/moved/completed with priority/column/label/due-date conditions; priority, label, column, and notify actions; dry-run diff, run history, activity/audit, and undo |
 | MFA | DONE | TOTP setup with QR, encrypted secret, one-time backup codes, sign-in challenge, disable guard, session list |
 | Workspace policies | DONE | Versioned require-MFA, assistant, automations, attachments, sharing, retention, and audit-retention controls; policy enforcement in access/attachment paths |
-| SSO | MISSING | OIDC schema only |
+| SSO | DONE | Organization OIDC config with discovery, state/nonce, domain allowlist, encrypted secret, guest linking, MFA handoff, and local fake-provider test |
 | API tokens | DONE | Admin create/list/revoke, bearer auth, workspace scope, expiry |
 | Audit / Retention | DONE | Core task/board/member/token audit events, admin feed, configurable retention |
 | Notifications / Reminders | DONE | In-app only |
@@ -195,7 +195,7 @@ Status key:
 - Today rebalance/applyPlan are implemented; exact reference ranking and visual parity still need comparison.
 - Auto-plan is settings-aware, mode-aware, refreshable, delegated-cleanup capable, and undoable; safe/delegated recomputation is an approximation of the reference and exact UI parity is still pending.
 - UI is functionally close but not pixel-parity with ProjectA2.
-- No live SMTP, OAuth/SSO, or production deployment verification.
+- No live SMTP or live external OIDC provider verification; SSO is covered by a local fake-provider test.
 
 ## 5. Phase gate
 
@@ -229,6 +229,7 @@ Status key:
 - [x] Account and workspace deletion with ownership guards, anonymization, access revocation, and audit
 - [x] TOTP MFA with QR setup, encrypted secrets, one-time backup codes, sign-in challenge, disable guard, and audit-ready fields
 - [x] Versioned workspace policies with MFA access guard and attachment-policy enforcement
+- [x] Organization SSO via OIDC discovery/callback with encrypted client secret and MFA handoff
 - [x] Complete model table inventory (37 mapped)
 - [x] Session/authorization interceptor and guest/auth flow
 - [x] Origin-based CSRF protection for cookie mutations (token-based CSRF remains hardening)
@@ -256,5 +257,5 @@ Status key:
 4. Auto-plan exact safe/delegated recompute; manual task archive actions and retention cleanup.
 5. Calendar, Search, Insights.
 6. Phase 2 board/task gaps are closed; proceed to Phase 4.
-7. SSO (OIDC).
+7. Live-provider SSO verification and deployment hardening.
 8. Full E2E, screenshots, performance, and final parity sign-off.

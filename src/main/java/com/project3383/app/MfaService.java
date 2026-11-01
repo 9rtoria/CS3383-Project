@@ -359,6 +359,14 @@ public class MfaService {
         }
     }
 
+    public String encryptSecret(String plaintext) {
+        return encrypt(plaintext);
+    }
+
+    public String decryptSecret(String payload) {
+        return decrypt(payload);
+    }
+
     private String encrypt(String plaintext) {
         try {
             byte[] iv = new byte[12];

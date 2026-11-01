@@ -328,7 +328,11 @@ public class AppService {
     @Transactional
     public Map<String, Object> createWorkspace(String userId, ApiDtos.WorkspaceCreate input) {
         if (input == null || blank(input.name())) throw ApiException.badRequest("Workspace name is required.");
-        String type = "team".equals(input.type()) ? "team" : "personal";
+        String type = switch (input.type() == null ? "" : input.type()) {
+            case "team" -> "team";
+            case "org" -> "org";
+            default -> "personal";
+        };
         if ("personal".equals(type)) {
             Integer personal = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM workspace w JOIN membership m ON m.workspace_id = w.id
