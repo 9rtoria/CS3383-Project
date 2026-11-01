@@ -30,8 +30,12 @@
       </div>
 
       <div class="sidebar-footer">
-        Local SQLite · Spring Boot<br>
-        <button type="button" id="signOutButton" class="btn ghost sm" style="padding-left:0">Sign out</button>
+        <div class="small muted">Local SQLite · Spring Boot</div>
+        <div id="accountName" class="small" style="margin-top:6px">Guest</div>
+        <div class="inline" style="display:flex;gap:6px;margin-top:6px">
+          <button type="button" id="authButton" class="btn ghost sm" style="padding-left:0">Sign in</button>
+          <button type="button" id="signOutButton" class="btn ghost sm hidden" style="padding-left:0">Sign out</button>
+        </div>
       </div>
     </aside>
 
@@ -68,6 +72,36 @@
         <div id="board" class="board"></div>
       </section>
     </main>
+  </div>
+
+  <div id="authModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Account</p>
+          <h2 id="authTitle">Sign in</h2>
+        </div>
+        <button type="button" id="closeAuthModal" class="btn ghost sm" aria-label="Close">Close</button>
+      </div>
+      <form id="authForm">
+        <div class="field hidden" id="authNameField">
+          <label for="authName">Name</label>
+          <input id="authName" class="input" maxlength="80" autocomplete="name" placeholder="Your name">
+        </div>
+        <div class="field">
+          <label for="authEmail">Email</label>
+          <input id="authEmail" class="input" type="email" required autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="authPassword">Password</label>
+          <input id="authPassword" class="input" type="password" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters">
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="authModeButton" class="btn spacer">Create account</button>
+          <button type="submit" id="authSubmit" class="btn primary">Sign in</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <div id="taskModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
@@ -115,6 +149,28 @@
             <select id="taskColumn" name="columnId" class="select"></select>
           </div>
         </div>
+        <div id="taskDetail" class="hidden">
+          <div class="detail-section">
+            <div class="section-head">
+              <h3>Checklist</h3>
+              <span id="subtaskProgress" class="muted small"></span>
+            </div>
+            <div id="subtaskList" class="detail-list"></div>
+            <div id="subtaskForm" class="comment-compose">
+              <input id="subtaskTitle" class="input" maxlength="300" placeholder="Add a checklist item" aria-label="New checklist item">
+              <button type="button" id="subtaskAddButton" class="btn sm">Add</button>
+            </div>
+          </div>
+          <div class="detail-section">
+            <h3>Comments</h3>
+            <div id="commentList" class="detail-list"></div>
+            <div id="commentForm" class="comment-compose">
+              <textarea id="commentBody" class="textarea" maxlength="10000" placeholder="Write a comment" aria-label="New comment"></textarea>
+              <button type="button" id="commentAddButton" class="btn sm">Comment</button>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button type="button" id="deleteTaskButton" class="btn danger spacer hidden">Delete</button>
           <button type="button" id="cancelModal" class="btn">Cancel</button>

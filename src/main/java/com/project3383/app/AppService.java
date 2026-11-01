@@ -4,6 +4,7 @@ import com.project3383.api.ApiDtos;
 import com.project3383.api.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,25 +22,97 @@ public class AppService {
 
     private static final Set<String> PRIORITIES = Set.of("none", "low", "medium", "high", "urgent");
     private final JdbcTemplate jdbc;
+    private final PasswordEncoder passwordEncoder;
 
-    public AppService(JdbcTemplate jdbc) {
+    public AppService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder) {
         this.jdbc = jdbc;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
     public Map<String, Object> createGuest() {
         String userId = id();
-        String workspaceId = id();
-        String boardId = id();
         String now = Instant.now().toString();
         jdbc.update("""
             INSERT INTO app_user (id, email, display_name, is_guest, timezone, created_at)
             VALUES (?, NULL, ?, 1, 'Asia/Hong_Kong', ?)
             """, userId, "Guest", now);
+        createStarterWorkspace(userId, "My workspace");
+        return bootstrap(userId);
+    }
+
+    @Transactional
+    public AuthResult signup(String currentUserId, ApiDtos.Signup input) {
+        if (input == null || blank(input.email()) || blank(input.password())) {
+            throw ApiException.badRequest("Email and password are required.");
+        }
+        String email = input.email().trim().toLowerCase();
+        if (!email.contains("@") || email.length() > 254) throw ApiException.badRequest("Enter a valid email address.");
+        if (input.password().length() < 8) throw ApiException.badRequest("Password must be at least 8 characters.");
+        String name = blank(input.name()) ? email.substring(0, email.indexOf('@')) : input.name().trim();
+        String timezone = blank(input.timezone()) ? "Asia/Hong_Kong" : input.timezone();
+        String hash = passwordEncoder.encode(input.password());
+        String userId;
+
+        if (currentUserId != null) {
+            Map<String, Object> current = userRow(currentUserId);
+            if (!((Number) current.get("isGuest")).equals(1)) {
+                throw new ApiException(HttpStatus.CONFLICT, "ALREADY_SIGNED_IN", "This session already belongs to an account.");
+            }
+            Map<String, Object> existing = jdbc.queryForList("SELECT id FROM app_user WHERE email = ?", email)
+                .stream().findFirst().orElse(null);
+            if (existing != null && !currentUserId.equals(existing.get("id"))) {
+                throw new ApiException(HttpStatus.CONFLICT, "EMAIL_IN_USE", "An account already uses this email.");
+            }
+            jdbc.update("""
+                UPDATE app_user SET email = ?, display_name = ?, password_hash = ?, is_guest = 0, timezone = ?
+                WHERE id = ?
+                """, email, name, hash, timezone, currentUserId);
+            userId = currentUserId;
+        } else {
+            Map<String, Object> existing = jdbc.queryForList("SELECT id FROM app_user WHERE email = ?", email)
+                .stream().findFirst().orElse(null);
+            if (existing != null) {
+                throw new ApiException(HttpStatus.CONFLICT, "EMAIL_IN_USE", "An account already uses this email.");
+            }
+            userId = id();
+            jdbc.update("""
+                INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
+                VALUES (?, ?, ?, ?, 0, ?, ?)
+                """, userId, email, name, hash, timezone, Instant.now().toString());
+            createStarterWorkspace(userId, name + "'s workspace");
+        }
+        return new AuthResult(userId, bootstrap(userId));
+    }
+
+    public AuthResult signin(ApiDtos.Signin input) {
+        if (input == null || blank(input.email()) || blank(input.password())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
+        }
+        Map<String, Object> row = jdbc.queryForList("""
+            SELECT id, password_hash AS passwordHash, is_guest AS isGuest
+            FROM app_user WHERE email = ?
+            """, input.email().trim().toLowerCase()).stream().findFirst()
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect."));
+        String hash = (String) row.get("passwordHash");
+        if (hash == null || !passwordEncoder.matches(input.password(), hash)) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Email or password is incorrect.");
+        }
+        String userId = row.get("id").toString();
+        return new AuthResult(userId, bootstrap(userId));
+    }
+
+    public record AuthResult(String userId, Map<String, Object> bootstrap) {
+    }
+
+    private void createStarterWorkspace(String userId, String workspaceName) {
+        String workspaceId = id();
+        String boardId = id();
+        String now = Instant.now().toString();
         jdbc.update("""
             INSERT INTO workspace (id, name, type, created_by, created_at)
             VALUES (?, ?, 'personal', ?, ?)
-            """, workspaceId, "My workspace", userId, now);
+            """, workspaceId, workspaceName, userId, now);
         jdbc.update("""
             INSERT INTO membership (user_id, workspace_id, role, joined_at)
             VALUES (?, ?, 'OWNER', ?)
@@ -55,7 +128,14 @@ public class AppService {
                 VALUES (?, ?, ?, ?, ?)
                 """, id(), boardId, columns[i], i, i == columns.length - 1 ? 1 : 0);
         }
-        return bootstrap(userId);
+    }
+
+    private Map<String, Object> userRow(String userId) {
+        return jdbc.queryForList("""
+            SELECT id, email, display_name AS name, is_guest AS isGuest
+            FROM app_user WHERE id = ?
+            """, userId).stream().findFirst()
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Session user not found."));
     }
 
     public Map<String, Object> bootstrap(String userId) {
@@ -201,6 +281,73 @@ public class AppService {
             input.description() == null ? "" : input.description(), priority, input.dueDate(),
             normalizeEstimate(input.estimateMinutes()), position, userId, now, now);
         return linked(Map.of("task", task(userId, taskId)));
+    }
+
+    public Map<String, Object> taskDetail(String userId, String taskId) {
+        Map<String, Object> task = task(userId, taskId);
+        task.put("comments", jdbc.queryForList("""
+            SELECT c.id, c.body, c.created_at AS createdAt, c.author_id AS authorId,
+                   u.display_name AS authorName
+            FROM task_comment c JOIN app_user u ON u.id = c.author_id
+            WHERE c.task_id = ? ORDER BY c.created_at ASC
+            """, taskId));
+        task.put("subtasks", jdbc.queryForList("""
+            SELECT id, title, completed, position
+            FROM subtask WHERE task_id = ? ORDER BY position, created_at
+            """, taskId));
+        return linked(Map.of("task", task));
+    }
+
+    public Map<String, Object> addComment(String userId, String taskId, ApiDtos.CommentCreate input) {
+        Map<String, Object> task = taskRow(taskId);
+        requireMembership(userId, (String) task.get("workspaceId"));
+        if (input == null || blank(input.body())) throw ApiException.badRequest("Comment text is required.");
+        String commentId = id();
+        jdbc.update("""
+            INSERT INTO task_comment (id, task_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)
+            """, commentId, taskId, userId, input.body().trim(), Instant.now().toString());
+        return linked(Map.of("comment", jdbc.queryForList("""
+            SELECT c.id, c.body, c.created_at AS createdAt, c.author_id AS authorId,
+                   u.display_name AS authorName
+            FROM task_comment c JOIN app_user u ON u.id = c.author_id
+            WHERE c.id = ?
+            """, commentId).stream().findFirst().orElseThrow()));
+    }
+
+    public Map<String, Object> addSubtask(String userId, String taskId, ApiDtos.SubtaskCreate input) {
+        Map<String, Object> task = taskRow(taskId);
+        requireMembership(userId, (String) task.get("workspaceId"));
+        if (input == null || blank(input.title())) throw ApiException.badRequest("Checklist title is required.");
+        int position = jdbc.queryForObject("""
+            SELECT COALESCE(MAX(position), -1) + 1 FROM subtask WHERE task_id = ?
+            """, Integer.class, taskId);
+        String subtaskId = id();
+        jdbc.update("""
+            INSERT INTO subtask (id, task_id, title, completed, position, created_at)
+            VALUES (?, ?, ?, 0, ?, ?)
+            """, subtaskId, taskId, input.title().trim(), position, Instant.now().toString());
+        return linked(Map.of("subtask", subtaskRow(subtaskId)));
+    }
+
+    public Map<String, Object> updateSubtask(String userId, String subtaskId, ApiDtos.SubtaskUpdate input) {
+        Map<String, Object> subtask = subtaskRow(subtaskId);
+        Map<String, Object> task = taskRow((String) subtask.get("taskId"));
+        requireMembership(userId, (String) task.get("workspaceId"));
+        String title = input == null || input.title() == null ? (String) subtask.get("title") : input.title().trim();
+        if (blank(title)) throw ApiException.badRequest("Checklist title is required.");
+        boolean completed = input != null && input.completed() != null
+            ? input.completed() : ((Number) subtask.get("completed")).intValue() == 1;
+        jdbc.update("UPDATE subtask SET title = ?, completed = ? WHERE id = ?",
+            title, completed ? 1 : 0, subtaskId);
+        return linked(Map.of("subtask", subtaskRow(subtaskId)));
+    }
+
+    private Map<String, Object> subtaskRow(String subtaskId) {
+        return jdbc.queryForList("""
+            SELECT id, task_id AS taskId, title, completed, position
+            FROM subtask WHERE id = ?
+            """, subtaskId).stream().findFirst()
+            .orElseThrow(() -> ApiException.notFound("Checklist item not found."));
     }
 
     public Map<String, Object> updateTask(String userId, String taskId, ApiDtos.TaskUpdate input) {

@@ -189,6 +189,17 @@ h1 { margin: 0; font-family: Georgia, "Noto Serif TC", serif; font-size: clamp(2
 }
 .textarea { min-height: 100px; resize: vertical; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.detail-section { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 16px; }
+.detail-section h3 { margin: 0 0 10px; font-size: 13px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.detail-list { display: grid; gap: 7px; margin-bottom: 9px; }
+.detail-item { display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-size: 13px; }
+.detail-item .grow { flex: 1; min-width: 0; }
+.detail-item p { margin: 4px 0 0; white-space: pre-wrap; color: var(--muted); }
+.detail-item.done .grow { text-decoration: line-through; color: var(--muted); }
+.comment-compose { display: flex; gap: 7px; align-items: flex-end; }
+.comment-compose .textarea { min-height: 64px; }
+.comment-compose .input { flex: 1; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .modal-actions .spacer { margin-right: auto; }
 .hidden { display: none !important; }

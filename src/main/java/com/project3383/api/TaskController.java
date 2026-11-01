@@ -5,6 +5,7 @@ import com.project3383.auth.CurrentUser;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,23 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> create(HttpSession session, @RequestBody ApiDtos.TaskCreate input) {
         return appService.createTask(CurrentUser.id(session), input);
+    }
+
+    @GetMapping("/{id}")
+    public Map<String, Object> detail(HttpSession session, @PathVariable String id) {
+        return appService.taskDetail(CurrentUser.id(session), id);
+    }
+
+    @PostMapping("/{id}/comments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Object> comment(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.CommentCreate input) {
+        return appService.addComment(CurrentUser.id(session), id, input);
+    }
+
+    @PostMapping("/{id}/subtasks")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Object> subtask(HttpSession session, @PathVariable String id, @RequestBody ApiDtos.SubtaskCreate input) {
+        return appService.addSubtask(CurrentUser.id(session), id, input);
     }
 
     @PatchMapping("/{id}")

@@ -30,6 +30,36 @@ class ApiSmokeTest {
     private ObjectMapper objectMapper;
 
     @Test
+    void guestCanClaimAnAccountAndSignInAgain() throws Exception {
+        MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
+            .andExpect(status().isOk())
+            .andReturn();
+        MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
+        String email = "claim-" + System.nanoTime() + "@example.com";
+
+        mockMvc.perform(post("/api/auth/signup")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "name", "Smoke User",
+                    "email", email,
+                    "password", "Password123"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email))
+            .andExpect(jsonPath("$.user.isGuest").value(0));
+
+        mockMvc.perform(post("/api/auth/signin")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                    "email", email,
+                    "password", "Password123"
+                ))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value(email));
+    }
+
+    @Test
     void guestCanCreateAndMoveATask() throws Exception {
         MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
             .andExpect(status().isOk())
@@ -73,6 +103,25 @@ class ApiSmokeTest {
                 ))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.columnId").value(doing));
+
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/comments")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("body", "First comment"))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.comment.body").value("First comment"));
+
+        mockMvc.perform(post("/api/tasks/" + task.path("id").asText() + "/subtasks")
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("title", "First step"))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.subtask.title").value("First step"));
+
+        mockMvc.perform(get("/api/tasks/" + task.path("id").asText()).session(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.task.comments[0].body").value("First comment"))
+            .andExpect(jsonPath("$.task.subtasks[0].title").value("First step"));
 
         mockMvc.perform(get("/api/today").session(session))
             .andExpect(status().isOk())

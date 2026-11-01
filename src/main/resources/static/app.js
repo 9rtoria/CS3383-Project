@@ -8,6 +8,8 @@
     view: "today",
     currentBoardId: null,
     editing: null,
+    detail: null,
+    authMode: "signin",
   };
 
   const $ = (id) => document.getElementById(id);
@@ -74,6 +76,7 @@
       state.boot = boot;
       state.currentBoardId = boards()[0]?.id ?? null;
       $("workspaceName").textContent = workspace()?.name ?? "Workspace";
+      renderAccount();
       $("dateChip").textContent = new Intl.DateTimeFormat(undefined, {
         weekday: "short",
         month: "short",
@@ -86,6 +89,71 @@
     } catch (error) {
       showToast(error.message || "Could not start the app.");
     }
+  }
+
+  function renderAccount() {
+    const user = state.boot?.user;
+    const guest = !user || user.isGuest === 1 || user.isGuest === true;
+    $("accountName").textContent = guest ? "Guest workspace" : (user.email || user.name || "Account");
+    $("authButton").classList.toggle("hidden", !guest);
+    $("signOutButton").classList.toggle("hidden", guest);
+  }
+
+  function openAuthModal() {
+    state.authMode = "signin";
+    $("authTitle").textContent = "Sign in";
+    $("authModeButton").textContent = "Create account";
+    $("authSubmit").textContent = "Sign in";
+    $("authNameField").classList.add("hidden");
+    $("authPassword").autocomplete = "current-password";
+    $("authModal").classList.remove("hidden");
+    window.setTimeout(() => $("authEmail").focus(), 20);
+  }
+
+  function setAuthMode(mode) {
+    state.authMode = mode;
+    const signup = mode === "signup";
+    $("authTitle").textContent = signup ? "Create account" : "Sign in";
+    $("authModeButton").textContent = signup ? "Sign in instead" : "Create account";
+    $("authSubmit").textContent = signup ? "Create account" : "Sign in";
+    $("authNameField").classList.toggle("hidden", !signup);
+    $("authPassword").autocomplete = signup ? "new-password" : "current-password";
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    const submit = $("authSubmit");
+    submit.disabled = true;
+    try {
+      const signup = state.authMode === "signup";
+      const body = {
+        email: $("authEmail").value.trim(),
+        password: $("authPassword").value,
+      };
+      if (signup) body.name = $("authName").value.trim();
+      const result = await request(signup ? "/api/auth/signup" : "/api/auth/signin", {
+        method: "POST",
+        body,
+      });
+      if (!result) throw new Error("Email or password is incorrect.");
+      state.boot = result;
+      state.currentBoardId = boards()[0]?.id ?? null;
+      closeAuthModal();
+      $("workspaceName").textContent = workspace()?.name ?? "Workspace";
+      renderAccount();
+      renderSidebar();
+      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      await loadToday();
+      showToast(signup ? "Account created." : "Signed in.");
+    } catch (error) {
+      showToast(error.message || "Could not sign in.");
+    } finally {
+      submit.disabled = false;
+    }
+  }
+
+  function closeAuthModal() {
+    $("authModal").classList.add("hidden");
   }
 
   function renderSidebar() {
@@ -268,6 +336,11 @@
 
   function openTaskModal(task, columnId = null) {
     state.editing = task;
+    state.detail = null;
+    $("taskDetail").classList.toggle("hidden", !task);
+    $("subtaskList").replaceChildren();
+    $("commentList").replaceChildren();
+    $("subtaskProgress").textContent = "";
     const board = currentBoard();
     const columns = board?.columns ?? [];
     $("taskModalTitle").textContent = task ? "Edit task" : "New task";
@@ -285,11 +358,98 @@
     $("deleteTaskButton").classList.toggle("hidden", !task);
     $("taskModal").classList.remove("hidden");
     window.setTimeout(() => $("taskTitle").focus(), 20);
+    if (task) void loadTaskDetail(task.id);
+  }
+
+  async function loadTaskDetail(taskId) {
+    try {
+      state.detail = await request(`/api/tasks/${encodeURIComponent(taskId)}`);
+      renderTaskDetail();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function renderTaskDetail() {
+    const task = state.detail?.task;
+    if (!task) return;
+    const subtasks = task.subtasks ?? [];
+    const completed = subtasks.filter((item) => Number(item.completed) === 1).length;
+    $("subtaskProgress").textContent = subtasks.length ? `${completed}/${subtasks.length}` : "";
+    const list = $("subtaskList");
+    list.replaceChildren();
+    if (!subtasks.length) list.append(element("div", "empty", "No checklist items yet."));
+    for (const subtask of subtasks) {
+      const row = element("label", `detail-item${Number(subtask.completed) === 1 ? " done" : ""}`);
+      const checkbox = element("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = Number(subtask.completed) === 1;
+      checkbox.addEventListener("change", () => toggleSubtask(subtask.id, checkbox.checked));
+      const title = element("span", "grow", subtask.title);
+      row.append(checkbox, title);
+      list.append(row);
+    }
+
+    const comments = task.comments ?? [];
+    const commentsList = $("commentList");
+    commentsList.replaceChildren();
+    if (!comments.length) commentsList.append(element("div", "empty", "No comments yet."));
+    for (const comment of comments) {
+      const row = element("div", "detail-item");
+      const grow = element("div", "grow");
+      grow.append(element("strong", "", comment.authorName || "Someone"));
+      grow.append(element("p", "", comment.body));
+      row.append(grow);
+      commentsList.append(row);
+    }
+  }
+
+  async function toggleSubtask(subtaskId, completed) {
+    try {
+      await request(`/api/subtasks/${encodeURIComponent(subtaskId)}`, {
+        method: "PATCH",
+        body: { completed },
+      });
+      if (state.editing) await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function addSubtask() {
+    const title = $("subtaskTitle").value.trim();
+    if (!title || !state.editing) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/subtasks`, {
+        method: "POST",
+        body: { title },
+      });
+      $("subtaskTitle").value = "";
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function addComment() {
+    const body = $("commentBody").value.trim();
+    if (!body || !state.editing) return;
+    try {
+      await request(`/api/tasks/${encodeURIComponent(state.editing.id)}/comments`, {
+        method: "POST",
+        body: { body },
+      });
+      $("commentBody").value = "";
+      await loadTaskDetail(state.editing.id);
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   function closeModal() {
     $("taskModal").classList.add("hidden");
     state.editing = null;
+    state.detail = null;
   }
 
   async function saveTask(event) {
@@ -358,7 +518,19 @@
     $("closeModal").addEventListener("click", closeModal);
     $("cancelModal").addEventListener("click", closeModal);
     $("taskForm").addEventListener("submit", saveTask);
+    $("subtaskAddButton").addEventListener("click", addSubtask);
+    $("commentAddButton").addEventListener("click", addComment);
+    $("subtaskTitle").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); void addSubtask(); }
+    });
     $("deleteTaskButton").addEventListener("click", deleteTask);
+    $("authButton").addEventListener("click", openAuthModal);
+    $("closeAuthModal").addEventListener("click", closeAuthModal);
+    $("authModeButton").addEventListener("click", () => setAuthMode(state.authMode === "signin" ? "signup" : "signin"));
+    $("authForm").addEventListener("submit", submitAuth);
+    $("authModal").addEventListener("click", (event) => {
+      if (event.target === $("authModal")) closeAuthModal();
+    });
     $("taskModal").addEventListener("click", (event) => {
       if (event.target === $("taskModal")) closeModal();
     });

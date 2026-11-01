@@ -70,6 +70,29 @@ CREATE TABLE IF NOT EXISTS task (
     FOREIGN KEY (created_by) REFERENCES app_user(id)
 );
 
+CREATE TABLE IF NOT EXISTS task_comment (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    author_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES app_user(id)
+);
+
+CREATE TABLE IF NOT EXISTS subtask (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES task(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comment_task ON task_comment(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_subtask_task ON subtask(task_id, position);
+
 CREATE TABLE IF NOT EXISTS today_dismissal (
     user_id TEXT NOT NULL,
     task_id TEXT NOT NULL,

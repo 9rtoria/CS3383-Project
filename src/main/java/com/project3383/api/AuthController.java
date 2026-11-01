@@ -2,10 +2,12 @@ package com.project3383.api;
 
 import com.project3383.app.AppService;
 import com.project3383.auth.AuthInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,6 +34,25 @@ public class AuthController {
         Map<String, Object> user = (Map<String, Object>) boot.get("user");
         session.setAttribute(AuthInterceptor.SESSION_USER, user.get("id"));
         return boot;
+    }
+
+    @PostMapping("/signup")
+    public Map<String, Object> signup(HttpServletRequest request, HttpSession session, @RequestBody ApiDtos.Signup input) {
+        Object current = session.getAttribute(AuthInterceptor.SESSION_USER);
+        AppService.AuthResult result = appService.signup(current == null ? null : current.toString(), input);
+        if (request.getSession(false) != null) request.changeSessionId();
+        session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
+        return result.bootstrap();
+    }
+
+    @PostMapping("/signin")
+    public Map<String, Object> signin(HttpServletRequest request, @RequestBody ApiDtos.Signin input) {
+        AppService.AuthResult result = appService.signin(input);
+        HttpSession old = request.getSession(false);
+        if (old != null) old.invalidate();
+        HttpSession session = request.getSession(true);
+        session.setAttribute(AuthInterceptor.SESSION_USER, result.userId());
+        return result.bootstrap();
     }
 
     @GetMapping("/me")

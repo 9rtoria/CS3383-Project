@@ -11,9 +11,11 @@ Implemented:
 - Spring Boot 3.5 application on port `3383`
 - SQLite schema and automatic initialization
 - Guest session creation (`POST /api/auth/guest`)
+- Email/password sign-up, sign-in, guest claim, and sign-out
 - Bootstrap payload with workspace, board, and columns
 - Board read API
 - Task create / update / move / soft-delete APIs
+- Task detail API with comments and checklist items
 - Version-based 409 conflict handling
 - Today list with capacity and accept/dismiss actions
 - Plain HTML/CSS/JS UI:
@@ -27,9 +29,8 @@ Implemented:
 
 Not implemented yet:
 
-- Password sign-up/sign-in and guest claim
 - Multiple workspaces / invites / roles
-- Task drawer parity (comments, subtasks, labels, attachments, dependencies, reminders)
+- Task drawer parity (labels, attachments, dependencies, reminders)
 - Day Flow / Smart Plan / Auto-plan
 - Calendar, Search, Archive, Insights
 - SSO/MFA/API tokens/Webhooks/Automations
@@ -74,6 +75,8 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/auth/guest` | Create/resume a guest session |
+| POST | `/api/auth/signup` | Create an account or claim the current guest |
+| POST | `/api/auth/signin` | Sign in with email/password |
 | DELETE | `/api/auth/signout` | Invalidate the session |
 | GET | `/api/health` | Health check |
 | GET | `/api/bootstrap` | User/workspace/board bootstrap |
@@ -81,9 +84,13 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 | GET | `/api/today` | Open-task list with capacity |
 | POST | `/api/today` | Accept or dismiss a task for today |
 | POST | `/api/tasks` | Create a task |
+| GET | `/api/tasks/{id}` | Task detail with comments and checklist |
 | PATCH | `/api/tasks/{id}` | Update a task with version check |
 | PATCH | `/api/tasks/{id}/move` | Move a task to another column |
 | DELETE | `/api/tasks/{id}` | Soft-delete a task |
+| POST | `/api/tasks/{id}/comments` | Add a comment |
+| POST | `/api/tasks/{id}/subtasks` | Add a checklist item |
+| PATCH | `/api/subtasks/{id}` | Update a checklist item |
 
 ## Guardrails
 

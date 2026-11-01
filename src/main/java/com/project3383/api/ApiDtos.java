@@ -38,4 +38,34 @@ public final class ApiDtos {
         String taskId
     ) {
     }
+
+    public record Signup(
+        String name,
+        String email,
+        String password,
+        String timezone
+    ) {
+    }
+
+    public record Signin(
+        String email,
+        String password
+    ) {
+    }
+
+    public record CommentCreate(
+        String body
+    ) {
+    }
+
+    public record SubtaskCreate(
+        String title
+    ) {
+    }
+
+    public record SubtaskUpdate(
+        String title,
+        Boolean completed
+    ) {
+    }
 }
