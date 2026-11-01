@@ -20,12 +20,16 @@ public class MfaGuard {
     }
 
     public void requireSatisfied(String userId, String workspaceId) {
+        if (!satisfied(userId, workspaceId)) throw mfaRequired();
+    }
+
+    public boolean satisfied(String userId, String workspaceId) {
         Integer required = jdbc.queryForObject("""
             SELECT require_mfa FROM workspace WHERE id = ? AND deleted_at IS NULL
             """, Integer.class, workspaceId);
-        if (required == null || required == 0) return;
+        if (required == null || required == 0) return true;
         if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
-            throw mfaRequired();
+            return false;
         }
         HttpServletRequest request = attributes.getRequest();
         Object tokenUser = request.getAttribute(AuthInterceptor.TOKEN_USER);
@@ -33,13 +37,11 @@ public class MfaGuard {
             Integer enabled = jdbc.queryForObject("""
                 SELECT mfa_enabled FROM app_user WHERE id = ? AND deleted_at IS NULL
                 """, Integer.class, userId);
-            if (enabled != null && enabled == 1) return;
-            throw mfaRequired();
+            return enabled != null && enabled == 1;
         }
         HttpSession session = request.getSession(false);
         Object verified = session == null ? null : session.getAttribute(AuthInterceptor.MFA_VERIFIED);
-        if (Boolean.TRUE.equals(verified)) return;
-        throw mfaRequired();
+        return Boolean.TRUE.equals(verified);
     }
 
     private ApiException mfaRequired() {

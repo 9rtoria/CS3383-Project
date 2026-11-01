@@ -863,7 +863,8 @@ public class AppService {
     public Map<String, Object> bootstrap(String userId) {
         Map<String, Object> user = user(userId);
         List<Map<String, Object>> memberships = jdbc.queryForList("""
-            SELECT w.id, w.name, w.type, m.role
+            SELECT w.id, w.name, w.type, m.role, w.require_mfa AS requireMfa,
+                   (SELECT COUNT(*) FROM membership m2 WHERE m2.workspace_id = w.id) AS memberCount
             FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND w.deleted_at IS NULL
             ORDER BY m.joined_at
@@ -871,6 +872,9 @@ public class AppService {
         List<Map<String, Object>> workspaces = new ArrayList<>();
         for (Map<String, Object> membership : memberships) {
             Map<String, Object> workspace = linked(membership);
+            boolean requireMfa = number(membership.get("requireMfa")) == 1;
+            workspace.put("requireMfa", requireMfa);
+            workspace.put("mfaLocked", requireMfa && !mfaGuard.satisfied(userId, String.valueOf(membership.get("id"))));
             workspace.put("boards", boards(userId, (String) membership.get("id")));
             workspace.put("labels", jdbc.queryForList("""
                 SELECT id, name, color FROM label WHERE workspace_id = ? ORDER BY name
@@ -1834,7 +1838,7 @@ public class AppService {
                    t.assignee_id AS assigneeId, t.recurrence_rule AS recurrenceRule,
                    t.recurrence_ends_at AS recurrenceEndsAt,
                    u.display_name AS assigneeName, u.email AS assigneeEmail,
-                   CASE WHEN s.task_id IS NULL THEN 0 ELSE 1 END AS selectedFlag,
+                   CASE WHEN s.task_id IS NULL AND (t.focus_date IS NULL OR t.focus_date <> ?) THEN 0 ELSE 1 END AS selectedFlag,
                    (SELECT COUNT(*)
                     FROM task_dependency td
                     JOIN task dep ON dep.id = td.depends_on_task_id
@@ -1852,13 +1856,13 @@ public class AppService {
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL AND c.is_done = 0
               AND b.workspace_id = t.workspace_id
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
-              AND (d.task_id IS NULL OR s.task_id IS NOT NULL)
+              AND (d.task_id IS NULL OR s.task_id IS NOT NULL OR t.focus_date = ?)
             ORDER BY selectedFlag DESC,
                      CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1
                                      WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
                      t.due_date IS NULL, t.due_date, t.position
             LIMIT 100
-            """, userId, today, userId, today, scopedWorkspaceId, userId, canSeePrivate);
+            """, today, userId, today, userId, today, scopedWorkspaceId, userId, canSeePrivate, today);
         List<Map<String, Object>> suggestions = new ArrayList<>();
         int selectedMinutes = 0;
         int selectedCount = 0;

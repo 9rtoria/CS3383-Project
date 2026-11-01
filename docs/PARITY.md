@@ -270,3 +270,39 @@ Status key:
 2. Live OAuth, SMTP, and external OIDC provider verification with real credentials.
 3. Terminate TLS at the reverse proxy; the `prod` profile already supplies `Secure` cookies, forwarded headers, HSTS, compression, and static caching.
 4. Perform manual NVDA/VoiceOver verification; automated axe checks are clean, and all static Traditional Chinese strings are translated.
+
+## 7. Live side-by-side comparison (2026-11-02)
+
+Ran the reference app (`ProjectA2`, port 3000) and this build (port 3383) side by side
+with the same demo account. The comparison covered Today, Board (board/list), Calendar,
+Upcoming, Search, Archive, Insights, Settings, Auth, quick capture, task drawer, command
+palette, notifications, account menu, and Focus mode, plus console-error checks.
+
+Fixed during the pass:
+
+- Sidebar width and content offsets, topbar controls, notification dot, and brand/skip links.
+- Auth split layout, quote measure, form rhythm, and vertical centering.
+- Board column width, list column order (Task/Status/Due/Priority), compact priority badges,
+  hover-only "Add a task", board menu labels, and quick-capture entry points from Board,
+  Calendar, Upcoming, and Insights.
+- Task drawer compact property grid, field/accessibility names, Notes/Checklist/Waiting On/
+  Attachments/Comments/Activity order, autosave, footer actions, and overflow menu.
+- Command palette commands, labels, shortcuts, icons, and board hints.
+- Calendar side-panel headings, Upcoming single-line rows and Change range, Insights data
+  source/order/unscheduled filtering, Search result badges and compact priority text.
+- Settings brand/user footer, theme toggle, nav links, Account spacing, and workspace creation.
+- Focus mode action icons and task context icon.
+- Demo seed now mirrors the reference workspace, labels, two boards, WIP limits, tasks,
+  checklists, comments, view, automation, and notifications.
+
+The remaining visible differences are **state/time drift, not missing UI or behavior**:
+
+- The reference demo was seeded on 2026-10-29; this demo is seeded on 2026-11-02. Due labels,
+  overdue counts, Today suggestions, and calendar placement therefore differ.
+- The reference database contains six already-applied auto-plan blocks from earlier evaluation;
+  a fresh seed starts with no plan blocks until the evaluator applies a plan.
+- Today's automatically selected minutes and suggestion count can differ by one when dates move.
+- Notification timestamps reflect each database's seed time.
+
+Live third-party OAuth/SMTP/OIDC verification and manual screen-reader sign-off remain
+environmental checks as listed above.
