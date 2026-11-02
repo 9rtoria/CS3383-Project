@@ -1269,6 +1269,11 @@
     "PDF, image and plain-text files up to 10 MB. Scanner is not configured; only upload trusted files.": "PDF、圖片與純文字檔，單檔上限 10 MB。未設定掃描器；請只上傳信任的檔案。",
     "{{count}} open dependencies": "{{count}} 個未完成依賴",
     "{{count}} minutes tracked in Focus": "專注已記錄 {{count}} 分鐘",
+    "A realistic spread with space between blocks.": "在區塊之間留出空間的務實分配。",
+    "Protect the hardest work early and let the rest follow.": "先保護最困難的工作，其餘再跟上。",
+    "Only the work that truly needs to happen now.": "只安排真正現在必須完成的工作。",
+    "Nothing changes until you apply. Undo stays available for five minutes.": "在你套用之前不會改變。撤銷會保留五分鐘。",
+    "No plan is available yet.": "尚未有可用的方案。",
   });
 
   let currentLocale = "en";

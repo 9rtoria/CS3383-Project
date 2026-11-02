@@ -339,6 +339,78 @@ async function responsiveAudit(appPage, appBase) {
   await appPage.setViewportSize({ width: 1440, height: 1000 });
 }
 
+async function captureAudit(appPage, appBase) {
+  const entryPoints = [
+    ["today", "#captureButton"],
+    ["today", "#todayCaptureButton"],
+    ["board", "#boardNewTaskButton"],
+    ["upcoming", "#upcomingNewTaskButton"],
+    ["calendar", "#calendarNewTaskButton"],
+    ["insights", "#insightsNewTaskButton"],
+  ];
+  for (const [view, selector] of entryPoints) {
+    await gotoView(appPage, appBase, view);
+    await appPage.click(selector);
+    await appPage.waitForTimeout(250);
+    const data = await appPage.evaluate(() => {
+      const input = document.querySelector("#captureInput");
+      const style = getComputedStyle(input);
+      return {
+        visible: !document.querySelector("#captureModal").classList.contains("hidden"),
+        board: document.querySelector("#captureBoard")?.value || "",
+        column: document.querySelector("#captureColumn")?.value || "",
+        boardCount: document.querySelector("#captureBoard")?.options.length || 0,
+        columnCount: document.querySelector("#captureColumn")?.options.length || 0,
+        borderWidth: parseFloat(style.borderTopWidth),
+        background: style.backgroundColor,
+      };
+    });
+    if (!data.visible) fail("capture", `${view} ${selector}: quick capture did not open`);
+    if (!data.board || !data.column) fail("capture", `${view} ${selector}: default board/column missing`, data);
+    if (data.borderWidth < 1) fail("capture", `${view} ${selector}: input has no visible border`, data);
+    if (!data.background || data.background === "rgba(0, 0, 0, 0)") {
+      fail("capture", `${view} ${selector}: input has no visible background`, data);
+    }
+    await appPage.keyboard.press("Escape");
+    await appPage.waitForTimeout(150);
+  }
+}
+
+async function autoPlanAudit(appPage, appBase) {
+  await gotoView(appPage, appBase, "today");
+  const review = appPage.locator("#todayPlanReview");
+  if (!(await review.count())) {
+    warn("auto-plan", "Today review control is not present");
+    return;
+  }
+  await review.click();
+  await appPage.waitForTimeout(900);
+  const data = await appPage.evaluate(() => {
+    const modal = document.querySelector(".auto-plan-modal");
+    const text = document.querySelector("#autoPlanPreview")?.innerText || "";
+    return {
+      visible: !document.querySelector("#autoPlanModal").classList.contains("hidden"),
+      width: modal ? Math.round(modal.getBoundingClientRect().width) : 0,
+      options: document.querySelectorAll(".auto-plan-options .auto-plan-option").length,
+      detail: Boolean(document.querySelector(".auto-plan-detail")),
+      sideBlocks: document.querySelectorAll(".auto-plan-side-block").length,
+      footer: document.querySelector("#autoPlanFooterNote")?.textContent?.trim() || "",
+      hasIsoDate: /\b\d{4}-\d{2}-\d{2}\b/.test(text),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  if (!data.visible) fail("auto-plan", "Auto-plan modal did not open");
+  if (data.width < 900) fail("auto-plan", "Auto-plan modal is not using the reference width", data);
+  if (data.options !== 3) fail("auto-plan", "Auto-plan option cards missing", data);
+  if (!data.detail) fail("auto-plan", "Auto-plan detail pane missing");
+  if (!data.sideBlocks) fail("auto-plan", "Auto-plan weekly/warning side pane missing");
+  if (!data.footer) fail("auto-plan", "Auto-plan footer note missing");
+  if (data.hasIsoDate) fail("auto-plan", "Auto-plan is showing raw ISO dates");
+  if (data.overflow > 0) fail("auto-plan", "Auto-plan causes horizontal overflow", data);
+  await appPage.keyboard.press("Escape");
+  await appPage.waitForTimeout(150);
+}
+
 async function completedTransition(appPage, appBase) {
   const setup = await appPage.evaluate(async () => {
     const boot = await (await fetch("/api/bootstrap")).json();
@@ -622,6 +694,8 @@ async function main() {
     if (refDark !== appDark) fail("styles", "dark completed title color differs", { reference: refDark, app: appDark });
 
     await overlayAudit(refPage, appPage, APP_BASE);
+    await captureAudit(appPage, APP_BASE);
+    await autoPlanAudit(appPage, APP_BASE);
     await responsiveAudit(appPage, APP_BASE);
     await completedTransition(appPage, APP_BASE);
     if (appErrors.length) fail("console", "app console errors during interaction audit", [...new Set(appErrors)]);

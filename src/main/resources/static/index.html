@@ -612,18 +612,19 @@
   </nav>
 
   <div id="autoPlanModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="autoPlanTitle">
-    <div class="modal" style="max-width:640px">
+    <div class="modal auto-plan-modal">
       <div class="modal-head">
         <div>
-          <p class="eyebrow">Local rules</p>
+          <p class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-capture"/></svg><span id="autoPlanEyebrow">Local scheduling · no model call</span></p>
           <h2 id="autoPlanTitle">Auto-plan</h2>
         </div>
-        <button type="button" id="closeAutoPlanModal" class="btn ghost sm" aria-label="Close">Close</button>
+        <button type="button" id="closeAutoPlanModal" class="icon-btn" aria-label="Close dialog"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
-      <div id="autoPlanPreview" class="detail-list" data-i18n-skip></div>
-      <div class="modal-actions">
-        <button type="button" id="clearAutoPlanButton" class="btn spacer">Clear plan</button>
-        <button type="button" id="applyAutoPlanButton" class="btn primary">Apply this plan</button>
+      <div id="autoPlanPreview" class="auto-plan-content" data-i18n-skip></div>
+      <div class="modal-actions auto-plan-actions">
+        <span class="field-hint auto-plan-footer-note" id="autoPlanFooterNote">Nothing changes until you apply. Undo stays available for five minutes.</span>
+        <button type="button" id="cancelAutoPlanButton" class="btn ghost">Cancel</button>
+        <button type="button" id="applyAutoPlanButton" class="btn primary"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span id="applyAutoPlanLabel">Apply this plan</span></button>
       </div>
     </div>
   </div>

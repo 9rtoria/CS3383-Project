@@ -618,17 +618,22 @@ h1 { margin: 0; font-family: var(--font-display); font-size: clamp(30px, 3.2vw, 
 .capture-input {
   width: 100%;
   min-height: 80px;
-  padding: 0;
-  border: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   outline: none;
   resize: none;
-  background: transparent;
+  background: var(--surface-2);
   color: var(--text);
   font-family: var(--font-display);
   font-size: 23px;
   line-height: 1.35;
   letter-spacing: -0.4px;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
+.capture-input::placeholder { color: var(--faint); }
+.capture-input:hover { border-color: var(--border-strong); }
+.capture-input:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); }
 .capture-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-height: 24px; margin-top: 10px; }
 .capture-meta { color: var(--muted); font-size: 11px; }
 .capture-options { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -1550,6 +1555,55 @@ body[data-view="settings"] .main { padding: 0; }
   .auto-plan-card-head { flex-direction: column; gap: 10px; }
   .auto-plan-card-actions { width: 100%; flex-wrap: wrap; }
   .auto-plan-card-actions .btn { flex: 1; justify-content: center; }
+}
+
+/* ---- Auto-plan preview modal ---- */
+.auto-plan-modal { width: min(980px, calc(100vw - 32px)); max-width: 980px; padding: 0; }
+.auto-plan-modal .modal-head { padding: 20px 22px 0; margin: 0; align-items: flex-start; }
+.auto-plan-modal .modal-head .eyebrow { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; }
+.auto-plan-modal .modal-head .eyebrow .icon { width: 12px; height: 12px; }
+.auto-plan-content { max-height: min(620px, calc(100vh - 180px)); overflow: auto; padding: 20px 22px; }
+.auto-plan-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 16px; }
+.auto-plan-modal .auto-plan-option { display: flex; flex-direction: column; text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 11px; padding: 12px; color: var(--text); cursor: pointer; }
+.auto-plan-modal .auto-plan-option:hover { border-color: var(--border-strong); }
+.auto-plan-modal .auto-plan-option.active { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 1px var(--accent); }
+.auto-plan-option-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.auto-plan-option-head strong { font-size: 12px; }
+.auto-plan-option-head .icon { width: 13px; height: 13px; }
+.auto-plan-option-summary { display: block; color: var(--muted); font-size: 10.5px; line-height: 1.45; margin: 6px 0 10px; }
+.auto-plan-option-stats { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--faint); font-size: 10px; }
+.auto-plan-option-stats .badge { min-height: 16px; padding: 1px 6px; font-size: 8.5px; }
+.auto-plan-detail { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; }
+.auto-plan-day-list { display: grid; gap: 13px; align-content: start; }
+.auto-plan-day { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.auto-plan-day:last-child { border-bottom: 0; }
+.auto-plan-day h4 { margin: 0 0 6px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.auto-plan-block-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 0; border-bottom: 1px dashed color-mix(in srgb, var(--border) 70%, transparent); font-size: 11px; }
+.auto-plan-block-row:last-child { border-bottom: 0; }
+.auto-plan-block-time { display: inline-flex; align-items: center; gap: 4px; min-width: 84px; color: var(--muted); }
+.auto-plan-block-time .icon { width: 10px; height: 10px; }
+.auto-plan-block-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auto-plan-block-row .pill { min-height: 16px; padding: 1px 6px; font-size: 8.5px; }
+.auto-plan-side { display: grid; align-content: start; gap: 12px; }
+.auto-plan-side-block { padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.auto-plan-side-block .eyebrow { margin: 0 0 7px; font-size: 9.5px; }
+.auto-plan-modal .auto-plan-week { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; color: var(--muted); font-size: 10.5px; }
+.auto-plan-modal .auto-plan-week strong { color: var(--text); font-size: 10.5px; }
+.auto-plan-modal .auto-plan-week strong.field-error { color: var(--danger); }
+.auto-plan-unscheduled { display: grid; gap: 2px; margin-top: 8px; font-size: 10.5px; }
+.auto-plan-unscheduled span { color: var(--faint); font-size: 10px; }
+.auto-plan-side-block .field-hint { margin: 5px 0 0; font-size: 10px; }
+.auto-plan-note { display: flex; align-items: center; gap: 5px; margin: 12px 0 0; font-size: 10.5px; }
+.auto-plan-note .icon { width: 11px; height: 11px; flex: none; }
+.auto-plan-actions { align-items: center; gap: 8px; margin: 0; padding: 14px 22px; border-top: 1px solid var(--border); }
+.auto-plan-footer-note { margin-right: auto; }
+.auto-plan-actions .btn.primary { display: inline-flex; align-items: center; gap: 6px; }
+.auto-plan-actions .btn.primary .icon { width: 13px; height: 13px; }
+@media (max-width: 720px) {
+  .auto-plan-options { grid-template-columns: 1fr; }
+  .auto-plan-detail { grid-template-columns: 1fr; }
+  .auto-plan-actions { flex-wrap: wrap; }
+  .auto-plan-footer-note { flex-basis: 100%; margin-right: 0; }
 }
 
 /* ---- Calendar and shared page head ---- */

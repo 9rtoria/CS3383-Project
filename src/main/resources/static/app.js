@@ -3218,6 +3218,36 @@
     }
   }
 
+  function autoPlanOptionSummary(id) {
+    if (id === "focus") return t("Protect the hardest work early and let the rest follow.");
+    if (id === "light") return t("Only the work that truly needs to happen now.");
+    return t("A realistic spread with space between blocks.");
+  }
+
+  function autoPlanDateLabel(dateKey) {
+    try {
+      return new Intl.DateTimeFormat(state.settings?.locale || undefined, {
+        weekday: "long", month: "short", day: "numeric",
+      }).format(new Date(`${dateKey}T12:00:00`));
+    } catch {
+      return dateKey;
+    }
+  }
+
+  function autoPlanMonthDay(dateKey) {
+    try {
+      return new Intl.DateTimeFormat(state.settings?.locale || undefined, {
+        month: "short", day: "numeric",
+      }).format(new Date(`${dateKey}T12:00:00`));
+    } catch {
+      return dateKey;
+    }
+  }
+
+  function autoPlanBlockTime(block) {
+    return `${dayFlowClock(block.startMinute)}–${dayFlowClock(block.startMinute + block.minutes)}`;
+  }
+
   function renderAutoPlan() {
     const container = $("autoPlanPreview");
     container.replaceChildren();
@@ -3226,53 +3256,109 @@
     if (!options.length) {
       container.append(element("div", "empty", t("Auto-plan is turned off in Settings.")));
     }
+
+    const optionGrid = element("div", "auto-plan-options");
     for (const option of options) {
-      const panel = element("div", `detail-section auto-plan-option${selected?.id === option.id ? " active" : ""}`);
-      panel.tabIndex = 0;
-      panel.setAttribute("role", "button");
-      panel.setAttribute("aria-pressed", String(selected?.id === option.id));
-      const head = element("div", "section-head");
-      head.append(element("h3", "", t(option.label)));
-      head.append(element("span", "muted small", `${option.blocks?.length ?? 0} ${t("blocks")} · ${option.scheduledMinutes ?? 0} ${t("min")}`));
-      panel.append(head);
-      for (const block of (option.blocks ?? []).slice(0, 8)) {
-        const row = element("div", "detail-item");
-        row.append(element("span", "grow", `${block.date} ${minutesLabel(block.startMinute)}–${minutesLabel(block.startMinute + block.minutes)} · ${block.title}`));
-        panel.append(row);
+      const active = selected?.id === option.id;
+      const panel = element("button", `auto-plan-option${active ? " active" : ""}`);
+      panel.type = "button";
+      panel.setAttribute("aria-pressed", String(active));
+      const head = element("span", "auto-plan-option-head");
+      head.append(element("strong", "", t(option.label)));
+      if (active) head.append(icon("check"));
+      const summary = element("span", "auto-plan-option-summary", autoPlanOptionSummary(option.id));
+      const stats = element("span", "auto-plan-option-stats");
+      stats.append(
+        element("span", "", `${option.blocks?.length ?? 0} ${t("blocks")}`),
+        element("span", "", durationLabel(option.scheduledMinutes ?? 0)),
+      );
+      if ((option.weeks ?? []).some((week) => week.over)) {
+        stats.append(makeBadge(t("over limit"), "amber"));
       }
-      if ((option.unscheduled ?? []).length) {
-        panel.append(element("p", "small muted", `${option.unscheduled.length} ${t("task(s) could not be placed.")}`));
-      }
-      if (option.needsEstimate) {
-        panel.append(element("p", "small muted", `${option.needsEstimate} ${t("task(s) use the default estimate.")}`));
-      }
-      if ((option.warnings ?? []).length) {
-        panel.append(element("p", "small field-error", option.warnings[0]));
-      }
-      if (option.overCap) {
-        panel.append(element("p", "small field-error", t("This plan exceeds the weekly capacity.")));
-      }
-      const choose = () => {
+      panel.append(head, summary, stats);
+      panel.addEventListener("click", () => {
         state.autoPlanSelection = option.id;
         renderAutoPlan();
-      };
-      panel.addEventListener("click", choose);
-      panel.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          choose();
-        }
       });
-      container.append(panel);
+      optionGrid.append(panel);
     }
+    if (options.length) container.append(optionGrid);
+
+    if (selected) {
+      const detail = element("div", "auto-plan-detail");
+      const dayList = element("div", "auto-plan-day-list");
+      const byDate = new Map();
+      for (const block of selected.blocks ?? []) {
+        if (!byDate.has(block.date)) byDate.set(block.date, []);
+        byDate.get(block.date).push(block);
+      }
+      for (const [date, dateBlocks] of [...byDate.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+        const day = element("section", "auto-plan-day");
+        day.append(element("h4", "", autoPlanDateLabel(date)));
+        for (const block of [...dateBlocks].sort((left, right) => left.startMinute - right.startMinute)) {
+          const row = element("div", "auto-plan-block-row");
+          const time = element("span", "auto-plan-block-time");
+          time.append(icon("clock3"), document.createTextNode(autoPlanBlockTime(block)));
+          const title = element("span", "auto-plan-block-title", block.title || block.taskId);
+          row.append(time, title);
+          if (block.priority && block.priority !== "none") {
+            row.append(element("span", `pill priority-${block.priority}`, priorityLabel(block.priority)));
+          }
+          row.append(element("span", "field-hint", `${Number(block.minutes || 0)}m`));
+          day.append(row);
+        }
+        dayList.append(day);
+      }
+      if (!byDate.size) dayList.append(element("p", "plan-empty", t("Nothing fits in this plan yet.")));
+
+      const side = element("div", "auto-plan-side");
+      const weekly = element("div", "auto-plan-side-block");
+      weekly.append(element("span", "eyebrow", t("Weekly load")));
+      for (const week of selected.weeks ?? []) {
+        const row = element("div", "auto-plan-week");
+        row.append(element("span", "", autoPlanMonthDay(week.weekStart)));
+        const used = element("strong", week.over ? "field-error" : "",
+          `${durationLabel(Number(week.actualMinutes || 0) + Number(week.plannedMinutes || 0))} / ${durationLabel(week.capMinutes || 0)}`);
+        row.append(used);
+        weekly.append(row);
+      }
+      side.append(weekly);
+      if ((selected.unscheduled ?? []).length) {
+        const unscheduled = element("div", "auto-plan-side-block");
+        unscheduled.append(element("span", "eyebrow", t("Not placed")));
+        for (const task of selected.unscheduled.slice(0, 8)) {
+          const row = element("div", "auto-plan-unscheduled");
+          row.append(element("strong", "", task.title), element("span", "", task.reason));
+          unscheduled.append(row);
+        }
+        side.append(unscheduled);
+      }
+      if ((selected.warnings ?? []).length) {
+        const warnings = element("div", "auto-plan-side-block");
+        warnings.append(element("span", "eyebrow", t("Warnings")));
+        for (const warning of selected.warnings) {
+          warnings.append(element("p", "field-hint", warning));
+        }
+        side.append(warnings);
+      }
+      detail.append(dayList, side);
+      container.append(detail);
+      const note = element("p", "field-hint auto-plan-note");
+      note.append(icon("calendar-days"), document.createTextNode(t("Due dates and completed work are never changed. Only flexible plan blocks move.")));
+      container.append(note);
+    }
+
+    const label = $("applyAutoPlanLabel");
+    if (label) label.textContent = t("Apply this plan");
     const button = $("applyAutoPlanButton");
-    button.textContent = t("Apply this plan");
     button.disabled = !selected || !(selected.blocks ?? []).length;
   }
 
   async function applyAutoPlan() {
     const button = $("applyAutoPlanButton");
+    const label = $("applyAutoPlanLabel");
     button.disabled = true;
+    if (label) label.textContent = t("Applying…");
     try {
       const result = await request("/api/auto-plan", {
         method: "POST",
@@ -3295,6 +3381,7 @@
       showToast(error.message);
     } finally {
       button.disabled = false;
+      if (label) label.textContent = t("Apply this plan");
     }
   }
 
@@ -3913,10 +4000,15 @@
     if (button) button.disabled = state.captureSaving || !$("captureInput").value.trim();
   }
 
-  function populateCaptureColumns() {
+  function populateCaptureColumns(preferredColumnId = null) {
     const board = boards().find((item) => item.id === $("captureBoard").value) ?? boards()[0];
+    const columns = board?.columns ?? [];
     $("captureColumn").replaceChildren();
-    for (const column of board?.columns ?? []) $("captureColumn").add(new Option(column.name, column.id));
+    for (const column of columns) $("captureColumn").add(new Option(column.name, column.id));
+    const selected = preferredColumnId && columns.some((column) => column.id === preferredColumnId)
+      ? preferredColumnId
+      : columns[0]?.id;
+    $("captureColumn").value = selected ?? "";
   }
 
   function openCapture(columnId = null) {
@@ -3929,8 +4021,7 @@
     $("captureBoard").replaceChildren();
     for (const board of boardList) $("captureBoard").add(new Option(board.name, board.id));
     $("captureBoard").value = preferred?.id ?? "";
-    populateCaptureColumns();
-    if (columnId) $("captureColumn").value = columnId;
+    populateCaptureColumns(columnId);
     $("captureInput").value = "";
     $("captureVoiceError").classList.add("hidden");
     $("captureHeard").classList.add("hidden");
@@ -8219,7 +8310,7 @@
       showToast(prefs.enabled ? t("Sound muted.") : t("Sound on."));
     });
     updateSoundButton();
-    $("newTaskButton").addEventListener("click", () => openTaskModal(null));
+    $("newTaskButton").addEventListener("click", () => openCapture());
     $("paletteButton").addEventListener("click", openPalette);
     $("shortcutsButton").addEventListener("click", openShortcuts);
     $("paletteModal").addEventListener("click", (event) => {
@@ -8447,8 +8538,8 @@
     $("workspaceMenu").addEventListener("click", (event) => event.stopPropagation());
     $("autoPlanButton").addEventListener("click", openAutoPlan);
     $("closeAutoPlanModal").addEventListener("click", () => $("autoPlanModal").classList.add("hidden"));
+    $("cancelAutoPlanButton").addEventListener("click", () => $("autoPlanModal").classList.add("hidden"));
     $("applyAutoPlanButton").addEventListener("click", applyAutoPlan);
-    $("clearAutoPlanButton").addEventListener("click", clearAutoPlan);
     $("autoPlanModal").addEventListener("click", (event) => {
       if (event.target === $("autoPlanModal")) $("autoPlanModal").classList.add("hidden");
     });

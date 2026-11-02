@@ -471,10 +471,21 @@ Frontend and interaction changes in this pass:
 - The "Add a task" control matches the reference dimensions, transparent border, 11.5px type,
   bottom-only radius, and hover reveal. The "Add column" dashed column uses the reference's
   14px label and top-left inline alignment instead of centring it in the full-height column.
+- Quick Capture always selects a default board and first column, including the topbar, Today,
+  Board, Upcoming, Calendar, Insights, sidebar and keyboard entry points. Board-column entry
+  points still preselect the clicked column.
+- Quick Capture's primary text field now has a visible border, subtle surface fill, placeholder
+  colour, and a clearer focus ring. This is a deliberate new-version usability improvement;
+  the reference leaves the field borderless until focus.
+- The Auto-plan preview modal was rebuilt to the reference structure: 980px dialog, three
+  horizontal option cards with check/active state and summaries, grouped day rows with local
+  dates and time ranges, duration labels, priority pills, a right-hand Weekly load / Not placed
+  / Warnings stack, and the reference footer note plus Cancel/Apply actions. Raw ISO dates and
+  duplicated default-estimate warnings were removed.
 - `scripts/parity-audit.cjs` now provides a repeatable cross-application audit: static IDs/SVG/
   i18n, every main view, card and list-row geometry/state, completed transitions, light/dark
-  completed colors, task drawer, palette, capture, settings, and responsive widths. Any
-  mismatch exits non-zero.
+  completed colors, task drawer, palette, capture defaults/field styling, auto-plan structure,
+  settings, and responsive widths. Any mismatch exits non-zero.
 - New guest workspaces now use the reference defaults: user "You", workspace "Personal",
   starter board description "A calm place for everything on your plate.", and Personal/Work
   labels. V13 normalises existing guest starter data.
@@ -492,7 +503,7 @@ Frontend and interaction changes in this pass:
 - Bulk selection remains a rewrite-only desktop capability and now appears on hover instead
   of being permanently hidden.
 - The task drawer uses theme surfaces in dark mode, and Chinese translations cover the new UI
-  strings (`i18n` audit: 749 keys, 0 missing).
+  strings (`i18n` audit: 755 keys, 0 missing).
 
 Verification for this pass: `mvnw test` 36/36, `mvnw package -DskipTests`, JavaScript syntax
 checks, static ID/SVG audits (0 missing), i18n audit (0 missing), API pagination/rate-limit/
