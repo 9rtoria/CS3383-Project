@@ -493,16 +493,30 @@ Frontend and interaction changes in this pass:
   across views, Settings, Auto-plan, and the task drawer.
 - Escape now closes Auto-plan, board creation, board settings, and column dialogs; this is
   covered by the audit instead of being left to manual testing.
+- Settings > Account now exposes the current session directly: a visible Sign out action for
+  members and Sign in for guests, instead of relying only on the moon-icon account menu.
+  Sign out also clears cached bootstrap/board/Today/settings data and the remembered workspace
+  before returning to `/auth`, matching the reference's offline-data cleanup.
+- The workspace menu restores the plus icon beside Create a team workspace and verifies that
+  the item opens `/settings#workspace` with the create form in view. The Workspace settings
+  section explains that an account has one personal workspace while team and organization
+  workspaces can be added freely, and its Create workspace action is translated in Chinese.
+- Board and Calendar now fit the desktop viewport instead of leaving a small forced scroll:
+  the board working area no longer overhangs by 42px, and calendar day cells use a 72–108px
+  responsive minimum with the reference 28px bottom padding. Upcoming, Archive, Board, and
+  Calendar stay on one page at 1440×1000, 1440×900, 1366×768, and 1024×900. Content-heavy
+  views (Today, Search, Insights, Settings) continue to scroll normally.
 - `scripts/parity-audit.cjs` now provides a repeatable cross-application audit: static IDs/SVG/
   i18n, every main view, card and list-row geometry/state, completed transitions, light/dark
   completed colors, task drawer, palette, capture defaults/field styling, auto-plan structure,
-  settings/modal widths, translation regressions, and responsive widths. Any mismatch exits
+  settings/modal widths, workspace-menu landing, guest sign-in, sign-out cache cleanup,
+  one-page vertical fit, translation regressions, and responsive widths. Any mismatch exits
   non-zero.
 - New guest workspaces now use the reference defaults: user "You", workspace "Personal",
   starter board description "A calm place for everything on your plate.", and Personal/Work
   labels. V13 normalises existing guest starter data.
-- The service worker cache version advanced to v5; static assets remain network-first with an
-  offline cache fallback.
+- The service worker cache version advanced to v6 for the account/workspace navigation changes;
+  static assets remain network-first with an offline cache fallback.
 - Search gained Reset, cursor pagination with Load more, stale-response protection, and stable
   paging; the command palette gained Keyboard shortcuts, theme toggle, Settings, and board
   commands; board filters gained Assigned to me / Unassigned and label chips in list view.
@@ -515,7 +529,7 @@ Frontend and interaction changes in this pass:
 - Bulk selection remains a rewrite-only desktop capability and now appears on hover instead
   of being permanently hidden.
 - The task drawer uses theme surfaces in dark mode, and Chinese translations cover the new UI
-  strings (`i18n` audit: 767 keys, 0 missing).
+  strings (`i18n` audit: 771 keys, 0 missing).
 
 Verification for this pass: `mvnw test` 36/36, `mvnw package -DskipTests`, JavaScript syntax
 checks, static ID/SVG audits (0 missing), i18n audit (0 missing), API pagination/rate-limit/

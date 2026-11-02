@@ -1290,6 +1290,9 @@ body[data-view="settings"] .main { padding: 0; }
 .notifications-panel > .menu-item { align-items: center; padding: 8px 9px; }
 .notifications-panel > .menu-item .icon { width: 13px; height: 13px; color: var(--muted); flex: none; }
 #todayView, #boardView, #calendarView, #upcomingView, #archiveView, #searchView, #insightsView, #mfaLockView { padding: 28px 28px 56px; }
+@media (min-width: 901px) {
+  #calendarView { padding-bottom: 28px; }
+}
 .mfa-lock { max-width: 640px; margin: 8vh auto 0; text-align: center; }
 .mfa-lock .page-title { margin: 6px 0 10px; font-size: clamp(30px, 4vw, 40px); }
 .mfa-lock .page-sub { margin: 0 auto 20px; max-width: 440px; }
@@ -1473,9 +1476,9 @@ body[data-view="settings"] .main { padding: 0; }
 }
 
 /* ---- Board cards ---- */
-.board { display: flex; gap: 14px; align-items: stretch; overflow-x: auto; padding: 2px 2px 20px; min-height: calc(100vh - 250px); scrollbar-width: thin; }
+.board { display: flex; gap: 14px; align-items: stretch; overflow-x: auto; padding: 2px 2px 20px; min-height: calc(100vh - 292px); scrollbar-width: thin; }
 #boardView { padding: 22px 26px 28px; }
-.column { flex: 0 0 302px; width: 302px; min-height: calc(100vh - 286px); padding: 0; border-radius: var(--radius); background: var(--surface-2); }
+.column { flex: 0 0 302px; width: 302px; min-height: calc(100vh - 328px); padding: 0; border-radius: var(--radius); background: var(--surface-2); }
 .column-head { display: flex; align-items: center; gap: 8px; padding: 11px 11px 9px; margin-bottom: 0; }
 .column-title { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; color: var(--text-soft); }
 .column-head .count { background: none; border-radius: 0; padding: 0; color: var(--faint); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -1626,7 +1629,7 @@ body[data-view="settings"] .main { padding: 0; }
 .calendar-weekdays span { color: var(--faint); letter-spacing: .08em; text-transform: uppercase; padding: 7px 8px; font-size: 9.5px; font-weight: 700; border-right: 1px solid var(--border); }
 .calendar-weekdays span:last-child { border-right: 0; }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; background: var(--border); }
-.calendar-day { min-height: 108px; padding: 8px; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; background: var(--surface); box-shadow: none; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.calendar-day { min-height: clamp(72px, calc((100vh - 334px) / 6), 108px); padding: 8px; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; background: var(--surface); box-shadow: none; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
 .calendar-day:nth-child(7n) { border-right: 0; }
 .calendar-day:hover { box-shadow: inset 0 0 0 1px var(--accent); }
 .calendar-day.other { background: color-mix(in srgb, var(--surface-2) 62%, var(--surface)); color: var(--faint); opacity: 1; }

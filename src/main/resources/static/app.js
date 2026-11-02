@@ -553,6 +553,21 @@
     renderAccountMenu(guest, name);
   }
 
+  async function signOut() {
+    try {
+      await request("/api/auth/signout", { method: "DELETE" });
+    } catch {
+      // The session is cleared locally even if the revoke call races the network.
+    }
+    window.DriftOffline?.clearCachedAccountData?.();
+    try {
+      window.localStorage.removeItem(WORKSPACE_KEY);
+    } catch {
+      // Storage may be unavailable in private windows.
+    }
+    window.location.assign("/auth");
+  }
+
   function renderAccountMenu(guest, name) {
     const menu = $("themeAccountMenu");
     menu.replaceChildren();
@@ -579,21 +594,14 @@
       const signIn = element("button", "menu-item");
       signIn.type = "button";
       signIn.append(icon("user"), document.createTextNode(t("Sign in")));
-      signIn.addEventListener("click", () => window.location.assign("/auth"));
+      signIn.addEventListener("click", () => window.location.assign("/auth?mode=signin"));
       menu.append(signIn);
     } else {
-      const signOut = element("button", "menu-item danger");
-      signOut.type = "button";
-      signOut.append(icon("logout"), document.createTextNode(t("Sign out")));
-      signOut.addEventListener("click", async () => {
-        try {
-          await request("/api/auth/signout", { method: "DELETE" });
-        } catch {
-          // The session is cleared locally even if the revoke call races the network.
-        }
-        window.location.assign("/auth");
-      });
-      menu.append(signOut);
+      const signOutButton = element("button", "menu-item danger");
+      signOutButton.type = "button";
+      signOutButton.append(icon("logout"), document.createTextNode(t("Sign out")));
+      signOutButton.addEventListener("click", () => void signOut());
+      menu.append(signOutButton);
     }
   }
 
@@ -2118,8 +2126,9 @@
       workspaceMenu.append(button);
     }
     workspaceMenu.append(element("div", "menu-sep"));
-    const create = element("button", "menu-item", t("Create a team workspace"));
+    const create = element("button", "menu-item");
     create.type = "button";
+    create.append(icon("plus"), document.createTextNode(t("Create a team workspace")));
     create.addEventListener("click", () => window.location.assign("/settings#workspace"));
     workspaceMenu.append(create);
 
@@ -5513,6 +5522,23 @@
     const status = element("div", "inline");
     status.append(makeBadge(guest ? "Guest" : "Account", guest ? "amber" : "accent"), save);
     settingsRow(card, "Account status", `${guest ? t("Guest, not yet claimable across devices.") : t("Verified account.")} ${user.mfaEnabled ? t("Two-factor is on.") : t("Two-factor is off.")}`, status);
+
+    const sessionAction = element("button", guest ? "btn sm primary" : "btn danger sm");
+    sessionAction.type = "button";
+    sessionAction.append(icon(guest ? "user" : "logout"), document.createTextNode(guest ? ` ${t("Sign in")}` : ` ${t("Sign out")}`));
+    if (guest) {
+      sessionAction.addEventListener("click", () => window.location.assign("/auth?mode=signin"));
+    } else {
+      sessionAction.addEventListener("click", () => void signOut());
+    }
+    settingsRow(
+      card,
+      t("Session"),
+      guest
+        ? t("You are using a guest workspace. Sign in to keep it across devices.")
+        : t("You are signed in. Sign out of this browser when you are finished."),
+      sessionAction
+    );
     return section;
   }
 
@@ -6359,6 +6385,7 @@
     const createHeadCopy = element("div");
     createHeadCopy.append(element("h3", "section-title", t("Create a workspace")));
     createHeadCopy.append(element("p", "section-subtitle", t("A fresh team space with a starter board. You will be the owner.")));
+    createHeadCopy.append(element("p", "section-subtitle", t("Each account includes one personal workspace. Add as many team and organization workspaces as you need.")));
     createHead.append(createHeadCopy);
     const createCard = element("div", "settings-card");
     const createName = makeTextInput("", "New workspace name", () => {}, "Acme product");
@@ -6373,7 +6400,7 @@
     const createButton = element("button", "btn primary sm");
     createButton.type = "button";
     createButton.disabled = true;
-    createButton.append(icon("plus"), document.createTextNode(" Create workspace"));
+    createButton.append(icon("plus"), document.createTextNode(` ${t("Create workspace")}`));
     createName.addEventListener("input", () => {
       createButton.disabled = createName.value.trim().length < 2;
     });

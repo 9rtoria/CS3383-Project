@@ -1324,6 +1324,10 @@
     "ok": "正常",
     "error": "錯誤",
     "{{latency}} ms database latency · v{{version}}": "資料庫延遲 {{latency}} 毫秒 · v{{version}}",
+    "Session": "工作階段",
+    "You are using a guest workspace. Sign in to keep it across devices.": "你正在使用訪客工作區。登入後即可跨裝置保留。",
+    "You are signed in. Sign out of this browser when you are finished.": "你已登入。使用完畢後請登出此瀏覽器。",
+    "Each account includes one personal workspace. Add as many team and organization workspaces as you need.": "每個帳號包含一個個人工作區。可依需求建立多個團隊與組織工作區。",
   });
 
   let currentLocale = "en";

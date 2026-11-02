@@ -2,7 +2,7 @@
  * a cache fallback for offline use. Authenticated API responses are never
  * cached. Offline writes live in localStorage and are replayed by the browser
  * app. Bump VERSION whenever the shell changes. */
-const VERSION = "project3383-v5";
+const VERSION = "project3383-v6";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const PRECACHE = [

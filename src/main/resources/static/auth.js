@@ -293,10 +293,11 @@
       const guest = boot?.user?.isGuest === 1 || boot?.user?.isGuest === true;
       state.signupAvailable = Boolean(guest);
       if (guest && !state.challenge) {
-        state.claim = true;
-        state.mode = query.get("mode") === "magic" ? "magic" : query.get("mode") === "signin" ? "signin" : "signup";
+        const requestedMode = query.get("mode");
+        state.claim = requestedMode !== "signin";
+        state.mode = requestedMode === "magic" ? "magic" : requestedMode === "signin" ? "signin" : "signup";
         const nameInput = $("signupForm").querySelector("[data-auth-name]");
-        if (boot?.user?.name && boot.user.name !== "Guest") nameInput.value = boot.user.name;
+        if (state.claim && boot?.user?.name && boot.user.name !== "Guest") nameInput.value = boot.user.name;
       } else if (boot && !guest && !state.challenge) {
         goHome();
         return;

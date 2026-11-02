@@ -13,7 +13,7 @@ Date: 2026-11-02
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
 | Flyway migrations | V1 to V13 validated and applied, including MFA pending secret, email attempts, task completed_at, and guest starter defaults |
 | Static audit | 426 HTML ids / 329 JS id references, 0 missing; 72 SVG symbols, 0 missing |
-| i18n audit | 767 keys, 0 missing |
+| i18n audit | 771 keys, 0 missing |
 | Cross-app parity audit | `node scripts/parity-audit.cjs`: 0 failures, 0 warnings |
 | Git | Clean working tree at the acceptance commit |
 
@@ -64,13 +64,25 @@ all were fixed before the passing run. It now also checks every Quick Capture en
 a default board and first column, verifies the capture field has a visible border/background,
 and opens Auto-plan to assert the 980px reference layout, three option cards, detail pane,
 weekly/warning side stack, footer note, local dates, and no raw ISO dates. The latest run
-reports 426 HTML ids / 329 JS id references and 767 zh-TW keys, all resolved.
+reports 426 HTML ids / 329 JS id references and 771 zh-TW keys, all resolved.
 
 A dedicated Chinese-mode pass now scans every main view, Settings, Auto-plan, and the task
 drawer for known untranslated UI phrases. It verifies the Settings descriptions, dynamic
 capacity/time examples, audit actions, webhook event labels, Today's "now" marker, Upcoming's
 "7 days" label, and backend Auto-plan reasons/warnings. Escape-to-close is asserted for
 Auto-plan, board creation, board settings, and column dialogs.
+
+The account/workspace navigation pass additionally verifies that the workspace menu's Create
+a team workspace action keeps its plus icon, opens `/settings#workspace`, and lands with the
+create form in view. It checks the guest Sign in path opens the auth form, that Settings >
+Account exposes Sign out, and that signing out returns to `/auth` after clearing cached
+bootstrap, board, Today, and settings data.
+
+A one-page layout pass now asserts that Upcoming, Archive, Board, and Calendar need no vertical
+page scroll at 1440×1000, 1440×900, 1366×768, and 1024×900. The board column overhang was
+removed and calendar day rows scale between 72px and 108px with the reference 28px bottom
+padding. Today, Search, Insights, Settings, and other content-heavy views are intentionally
+left scrollable rather than being compressed.
 
 Browser checks in this pass: all seven main views plus Settings, the drawer, command palette,
 and quick capture rendered with zero horizontal overflow, zero unnamed visible controls, no
@@ -82,7 +94,7 @@ black circular control in the reference remains the Next.js dev-tools indicator
 (`#devtools-indicator` inside `nextjs-portal`), not Drift UI, so it is intentionally absent. Search Reset/pagination, board drag and
 keyboard move, bulk move, duplicate/archive/restore board, URL refresh, comments, dependencies,
 attachment actions, dark drawer, and Chinese locale were exercised. Static ID/SVG audits report
-zero missing references; the translation audit reports 767 keys with zero missing.
+zero missing references; the translation audit reports 771 keys with zero missing.
 
 Honest residuals are recorded in `PARITY.md`: live OAuth/SMTP/OIDC credentials are still
 required for final provider checks, the legacy single `focus_date` field remains for old API
@@ -112,7 +124,7 @@ Playwright browser runs verified:
 - Restored rewrite-only capabilities: API-token created/expires/last-used metadata and copy, webhook event selection, one-time signing secret with copy, pause/resume, delivery metadata and URL copy; SSO configured badge, enable/require toggles, persistence after reload and removal; invite-link copy, member joined dates, shortcut-sheet entry point, and automation board scope.
 - Workspace settings gating: guest/personal Owner/Admin workspaces show Workspace, Automations, Integrations, and Audit log; the team Owner/Admin workspace keeps the full six-item group. The added sections render, scrollspy includes them, and the mobile picker matches on both desktop and 390 px layouts.
 - Settings workspace avatar: uses the soft `workspace-avatar` treatment, matching the main sidebar and the reference light-mint avatar instead of the dark brand mark. Computed colors and dimensions were checked in light and dark themes; account and member avatars remain unchanged.
-- Favicon/PWA icon: `/icon.svg?v=2` and `/icon-maskable.svg` now serve the reference Drift swirl mark instead of the new “D” glyph. The service-worker cache advanced to `project3383-v5`; the icon was fetched and rendered in-browser with no console errors.
+- Favicon/PWA icon: `/icon.svg?v=2` and `/icon-maskable.svg` now serve the reference Drift swirl mark instead of the new “D” glyph. The service-worker cache advanced to `project3383-v6`; the icon was fetched and rendered in-browser with no console errors.
 - Notifications anchored dropdown (unread styling, relative timestamps, Mark read, settings link), account menu with icons/theme/sign-out, and Escape/outside-click closing.
 - Keyboard shortcut sheet card layout, scroll clipping, row labels, single-key toggle, and close button.
 - Board list view with relative due labels, compact priority tones, and mobile toolbar grouping.

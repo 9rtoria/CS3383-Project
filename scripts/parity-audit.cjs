@@ -325,6 +325,23 @@ async function overlayAudit(refPage, appPage, appBase) {
   await bodyAudit(appPage, "settings", "app");
 }
 
+async function onePageAudit(appPage, appBase) {
+  const cases = [[1440, 1000], [1440, 900], [1366, 768], [1024, 900]];
+  for (const [width, height] of cases) {
+    await appPage.setViewportSize({ width, height });
+    for (const view of ["upcoming", "archive", "board", "calendar"]) {
+      await gotoView(appPage, appBase, view);
+      const overflow = await appPage.evaluate(() =>
+        Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+      );
+      if (overflow > 1) {
+        fail("layout", `${view} @ ${width}x${height}: one-page view needs ${overflow}px vertical scroll`);
+      }
+    }
+  }
+  await appPage.setViewportSize({ width: 1440, height: 1000 });
+}
+
 async function responsiveAudit(appPage, appBase) {
   for (const width of [390, 768, 1024, 1440]) {
     await appPage.setViewportSize({ width, height: 900 });
@@ -513,6 +530,110 @@ async function autoPlanAudit(appPage, appBase) {
   }
 }
 
+async function workspaceSessionAudit(appPage, appBase, browser) {
+  await gotoView(appPage, appBase, "today");
+  await appPage.locator("#workspaceMenuButton").click();
+  await appPage.waitForTimeout(150);
+  const create = appPage.locator("#workspaceMenu .menu-item").last();
+  const menu = await create.evaluate((element) => ({
+    text: element.textContent.replace(/\s+/g, " ").trim(),
+    icon: element.querySelector("use")?.getAttribute("href") || "",
+  }));
+  if (!/Create a team workspace|建立團隊工作區/.test(menu.text)) {
+    fail("workspace", "workspace menu does not expose the create action", menu);
+  }
+  if (!menu.icon.includes("plus")) fail("workspace", "create workspace menu item is missing the plus icon", menu);
+  await create.click();
+  await appPage.waitForTimeout(900);
+  const landing = await appPage.evaluate(() => {
+    const section = document.querySelector("#settings-workspace");
+    const rect = section?.getBoundingClientRect();
+    return {
+      href: window.location.href,
+      active: document.querySelector(".settings-nav-item.active")?.dataset.section || "",
+      inView: Boolean(rect && rect.top >= -50 && rect.top < window.innerHeight),
+    };
+  });
+  if (!/\/settings#workspace$/.test(landing.href)) {
+    fail("workspace", "create workspace did not open the workspace settings", landing);
+  }
+  if (!landing.inView || landing.active !== "workspace") {
+    fail("workspace", "workspace settings did not land on the create form", landing);
+  }
+  const accountAction = await appPage.evaluate(() => {
+    const button = document.querySelector("#settings-account button.btn.danger");
+    return {
+      exists: Boolean(button),
+      text: button?.textContent.replace(/\s+/g, " ").trim() || "",
+    };
+  });
+  if (!accountAction.exists) {
+    fail("session", "Settings > Account does not expose Sign out", accountAction);
+  }
+
+  const guestContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" });
+  try {
+    const guestPage = await guestContext.newPage();
+    await guestPage.goto(appBase + "/", { waitUntil: "networkidle" });
+    await guestPage.waitForTimeout(800);
+    await guestPage.locator("#themeMenuButton").click();
+    await guestPage.waitForTimeout(150);
+    const signIn = guestPage.locator("#themeAccountMenu .menu-item").last();
+    const signInText = await signIn.textContent();
+    if (!/Sign in|登入/.test(signInText || "")) {
+      fail("session", "guest account menu does not expose Sign in", { text: signInText });
+    }
+    await signIn.click();
+    await guestPage.waitForTimeout(600);
+    if (!/\/auth(?:$|[?#])/.test(guestPage.url())) {
+      fail("session", "guest Sign in did not open /auth", { url: guestPage.url() });
+    } else if (!(await guestPage.locator("#signinForm").isVisible())) {
+      fail("session", "auth page did not show the sign-in form");
+    } else {
+      const title = await guestPage.locator("#authTitle").textContent();
+      if (!/Welcome back/.test(title || "")) {
+        fail("session", "guest Sign in opened the claim screen instead of sign-in", { title });
+      }
+    }
+  } finally {
+    await guestContext.close();
+  }
+
+  const authContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" });
+  try {
+    const authPage = await authContext.newPage();
+    await login(authPage, appBase);
+    await authPage.goto(appBase + "/settings", { waitUntil: "networkidle" });
+    await authPage.waitForTimeout(700);
+    await authPage.evaluate(() => {
+      for (const key of ["drift-bootstrap.v1", "drift-settings.v1", "drift-board.v1:audit", "drift-today.v1:audit"]) {
+        window.localStorage.setItem(key, "{\"audit\":true}");
+      }
+    });
+    const signOut = authPage.locator("#settings-account button.btn.danger");
+    if ((await signOut.count()) !== 1) {
+      fail("session", "Settings > Account sign-out button is missing", { count: await signOut.count() });
+    } else {
+      await signOut.click();
+      await authPage.waitForTimeout(900);
+      if (!/\/auth(?:$|[?#])/.test(authPage.url())) {
+        fail("session", "Sign out did not return to /auth", { url: authPage.url() });
+      }
+      const leftover = await authPage.evaluate(() =>
+        Object.keys(window.localStorage).filter((key) =>
+          key === "drift-bootstrap.v1"
+          || key === "drift-settings.v1"
+          || key.startsWith("drift-board.v1:")
+          || key.startsWith("drift-today.v1:"),
+        ),
+      );
+      if (leftover.length) fail("session", "Sign out left cached account data behind", leftover);
+    }
+  } finally {
+    await authContext.close();
+  }
+}
+
 async function translationAudit(appPage, appBase) {
   const forbidden = [
     "Example:",
@@ -542,6 +663,7 @@ async function translationAudit(appPage, appBase) {
     "Task deleted",
     "Comment added",
     "7 days",
+    "Create workspace",
   ];
   const check = async (label) => {
     const text = await appPage.evaluate(() => document.body.innerText);
@@ -760,6 +882,14 @@ async function main() {
     });
     await login(refPage, REF_BASE);
     await login(appPage, APP_BASE);
+    await appPage.evaluate(async () => {
+      await fetch("/api/settings", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale: "en" }),
+      });
+    });
 
     const views = ["today", "board", "upcoming", "calendar", "search", "archive", "insights"];
     for (const view of views) {
@@ -843,8 +973,15 @@ async function main() {
       if (Math.abs(refAdd.iconOffset - appAdd.iconOffset) > 1) {
         fail("layout", "add-column icon offset differs", { reference: refAdd.iconOffset, app: appAdd.iconOffset });
       }
-      if (Math.abs(refAdd.height - appAdd.height) > 2) {
-        fail("layout", "add-column height differs", { reference: refAdd.height, app: appAdd.height });
+      const appColumnHeight = await appPage.evaluate(() => {
+        const column = document.querySelector(".column");
+        return column ? column.getBoundingClientRect().height : null;
+      });
+      if (appColumnHeight == null || Math.abs(appAdd.height - appColumnHeight) > 2) {
+        fail("layout", "add-column does not fill the app column", {
+          addColumn: appAdd.height,
+          column: appColumnHeight,
+        });
       }
     }
 
@@ -872,6 +1009,8 @@ async function main() {
     await captureAudit(appPage, APP_BASE);
     await modalAudit(appPage, APP_BASE);
     await autoPlanAudit(appPage, APP_BASE);
+    await workspaceSessionAudit(appPage, APP_BASE, browser);
+    await onePageAudit(appPage, APP_BASE);
     await translationAudit(appPage, APP_BASE);
     await responsiveAudit(appPage, APP_BASE);
     await completedTransition(appPage, APP_BASE);
