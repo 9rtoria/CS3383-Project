@@ -309,6 +309,9 @@ Fixed during the pass:
   accent treatment as the main sidebar and reference (light mint in the light theme) instead
   of the dark brand-mark treatment; the account and member avatars retain their reference
   identity styling.
+- Browser tab and installable-app icons now use the reference Drift swirl mark instead of the
+  Project3383 "D" glyph. The icon URL is cache-busted and the service-worker cache version is
+  advanced so existing tabs can pick up the replacement.
 - Settings navigation now tracks scrolling: the desktop sidebar and mobile picker update as
   each section reaches the reading position, short sections are not skipped, search temporarily
   clears the marker, and click-to-jump remains intact. The URL hash follows the active section,
