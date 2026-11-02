@@ -486,10 +486,18 @@ Frontend and interaction changes in this pass:
   dates and time ranges, duration labels, priority pills, a right-hand Weekly load / Not placed
   / Warnings stack, and the reference footer note plus Cancel/Apply actions. Raw ISO dates and
   duplicated default-estimate warnings were removed.
+- The Chinese locale pass now translates the previously hardcoded Settings descriptions,
+  Auto-plan settings copy, security/integrations/audit copy, dynamic time/date examples,
+  Today's "now" marker, Upcoming range labels, audit event actions, webhook event labels, and
+  backend Auto-plan warnings/reasons. The audit catches untranslated UI phrases in Chinese mode
+  across views, Settings, Auto-plan, and the task drawer.
+- Escape now closes Auto-plan, board creation, board settings, and column dialogs; this is
+  covered by the audit instead of being left to manual testing.
 - `scripts/parity-audit.cjs` now provides a repeatable cross-application audit: static IDs/SVG/
   i18n, every main view, card and list-row geometry/state, completed transitions, light/dark
   completed colors, task drawer, palette, capture defaults/field styling, auto-plan structure,
-  settings, and responsive widths. Any mismatch exits non-zero.
+  settings/modal widths, translation regressions, and responsive widths. Any mismatch exits
+  non-zero.
 - New guest workspaces now use the reference defaults: user "You", workspace "Personal",
   starter board description "A calm place for everything on your plate.", and Personal/Work
   labels. V13 normalises existing guest starter data.
@@ -507,7 +515,7 @@ Frontend and interaction changes in this pass:
 - Bulk selection remains a rewrite-only desktop capability and now appears on hover instead
   of being permanently hidden.
 - The task drawer uses theme surfaces in dark mode, and Chinese translations cover the new UI
-  strings (`i18n` audit: 757 keys, 0 missing).
+  strings (`i18n` audit: 767 keys, 0 missing).
 
 Verification for this pass: `mvnw test` 36/36, `mvnw package -DskipTests`, JavaScript syntax
 checks, static ID/SVG audits (0 missing), i18n audit (0 missing), API pagination/rate-limit/

@@ -13,7 +13,7 @@ Date: 2026-11-02
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
 | Flyway migrations | V1 to V13 validated and applied, including MFA pending secret, email attempts, task completed_at, and guest starter defaults |
 | Static audit | 426 HTML ids / 329 JS id references, 0 missing; 72 SVG symbols, 0 missing |
-| i18n audit | 757 keys, 0 missing |
+| i18n audit | 767 keys, 0 missing |
 | Cross-app parity audit | `node scripts/parity-audit.cjs`: 0 failures, 0 warnings |
 | Git | Clean working tree at the acceptance commit |
 
@@ -64,7 +64,13 @@ all were fixed before the passing run. It now also checks every Quick Capture en
 a default board and first column, verifies the capture field has a visible border/background,
 and opens Auto-plan to assert the 980px reference layout, three option cards, detail pane,
 weekly/warning side stack, footer note, local dates, and no raw ISO dates. The latest run
-reports 426 HTML ids / 329 JS id references and 757 zh-TW keys, all resolved.
+reports 426 HTML ids / 329 JS id references and 767 zh-TW keys, all resolved.
+
+A dedicated Chinese-mode pass now scans every main view, Settings, Auto-plan, and the task
+drawer for known untranslated UI phrases. It verifies the Settings descriptions, dynamic
+capacity/time examples, audit actions, webhook event labels, Today's "now" marker, Upcoming's
+"7 days" label, and backend Auto-plan reasons/warnings. Escape-to-close is asserted for
+Auto-plan, board creation, board settings, and column dialogs.
 
 Browser checks in this pass: all seven main views plus Settings, the drawer, command palette,
 and quick capture rendered with zero horizontal overflow, zero unnamed visible controls, no
@@ -76,7 +82,7 @@ black circular control in the reference remains the Next.js dev-tools indicator
 (`#devtools-indicator` inside `nextjs-portal`), not Drift UI, so it is intentionally absent. Search Reset/pagination, board drag and
 keyboard move, bulk move, duplicate/archive/restore board, URL refresh, comments, dependencies,
 attachment actions, dark drawer, and Chinese locale were exercised. Static ID/SVG audits report
-zero missing references; the translation audit reports 757 keys with zero missing.
+zero missing references; the translation audit reports 767 keys with zero missing.
 
 Honest residuals are recorded in `PARITY.md`: live OAuth/SMTP/OIDC credentials are still
 required for final provider checks, the legacy single `focus_date` field remains for old API

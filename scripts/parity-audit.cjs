@@ -508,6 +508,82 @@ async function autoPlanAudit(appPage, appBase) {
   if (data.overflow > 0) fail("auto-plan", "Auto-plan causes horizontal overflow", data);
   await appPage.keyboard.press("Escape");
   await appPage.waitForTimeout(150);
+  if (await appPage.locator("#autoPlanModal").isVisible()) {
+    fail("auto-plan", "Escape does not close Auto-plan");
+  }
+}
+
+async function translationAudit(appPage, appBase) {
+  const forbidden = [
+    "Example:",
+    "minutes available to the Today planner",
+    "Generate plans in Today",
+    "Every scheduled block leaves this much space",
+    "Recompute while the app is open",
+    "Long work can be split into sessions",
+    "When a task is longer than the focus block",
+    "Allow Saturday and Sunday",
+    "Used only when a task has no estimate",
+    "Stop scheduling new work",
+    "Reserve a daily break before Auto-plan",
+    "Two-factor authentication is TOTP",
+    "Personal by default. Add a team",
+    "API tokens, webhooks, calendar feed",
+    "Every policy and content mutation",
+    "No blockers. This task can move freely.",
+    "Due time has passed",
+    "Daily capacity reached",
+    "Weekly capacity reached",
+    "tasks used the default estimate",
+    "tasks could not be placed within the horizon",
+    "Task created",
+    "Task moved",
+    "Task completed",
+    "Task deleted",
+    "Comment added",
+    "7 days",
+  ];
+  const check = async (label) => {
+    const text = await appPage.evaluate(() => document.body.innerText);
+    for (const phrase of forbidden) {
+      if (text.includes(phrase)) fail("translation", `${label}: untranslated UI text "${phrase}"`);
+    }
+  };
+  await appPage.goto(appBase + "/?view=today", { waitUntil: "networkidle" });
+  await appPage.evaluate(async () => fetch("/api/settings", {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ locale: "zh-TW" }),
+  }));
+  await appPage.reload({ waitUntil: "networkidle" });
+  await appPage.waitForTimeout(600);
+  for (const view of ["today", "board", "upcoming", "calendar", "search", "archive", "insights"]) {
+    await gotoView(appPage, appBase, view);
+    await check(view);
+  }
+  await appPage.goto(appBase + "/settings", { waitUntil: "networkidle" });
+  await appPage.waitForTimeout(800);
+  await check("settings");
+  await gotoView(appPage, appBase, "today");
+  const review = appPage.locator("#todayPlanReview");
+  if (await review.count()) {
+    await review.click();
+    await appPage.waitForTimeout(700);
+    await check("auto-plan");
+    await appPage.keyboard.press("Escape");
+    await appPage.waitForTimeout(200);
+  }
+  await appPage.locator(".focus-title").first().click();
+  await appPage.waitForTimeout(600);
+  await check("task drawer");
+  await appPage.keyboard.press("Escape");
+  await appPage.evaluate(async () => fetch("/api/settings", {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ locale: "en" }),
+  }));
 }
 
 async function completedTransition(appPage, appBase) {
@@ -796,6 +872,7 @@ async function main() {
     await captureAudit(appPage, APP_BASE);
     await modalAudit(appPage, APP_BASE);
     await autoPlanAudit(appPage, APP_BASE);
+    await translationAudit(appPage, APP_BASE);
     await responsiveAudit(appPage, APP_BASE);
     await completedTransition(appPage, APP_BASE);
     if (appErrors.length) fail("console", "app console errors during interaction audit", [...new Set(appErrors)]);

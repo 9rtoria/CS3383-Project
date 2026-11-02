@@ -3069,7 +3069,7 @@
     grid.append(element("span", "day-flow-night"));
     const nowMarker = element("span", "day-flow-now");
     nowMarker.style.left = `${(nowMinutes / DAY_MINUTES) * 100}%`;
-    nowMarker.append(element("span", "", "now"));
+    nowMarker.append(element("span", "", t("now")));
     grid.append(nowMarker);
 
     rail.querySelectorAll(".day-flow-block").forEach((node) => node.remove());
@@ -3140,8 +3140,10 @@
 
     const hours = $("dayFlowHours");
     hours.replaceChildren();
+    const use24HourClock = settings.timeFormat === "24"
+      || (settings.timeFormat !== "12" && settings.locale === "zh-TW");
     for (const hour of [0, 6, 12, 18, 24]) {
-      const label = element("span", "", hour === 24 ? (settings.timeFormat === "24" ? "24:00" : "12 AM") : dayFlowClock(hour * 60));
+      const label = element("span", "", hour === 24 ? (use24HourClock ? "24:00" : "12 AM") : dayFlowClock(hour * 60));
       label.style.left = `${(hour / 24) * 100}%`;
       hours.append(label);
     }
@@ -3223,6 +3225,26 @@
     if (id === "focus") return t("Protect the hardest work early and let the rest follow.");
     if (id === "light") return t("Only the work that truly needs to happen now.");
     return t("A realistic spread with space between blocks.");
+  }
+
+  function autoPlanText(value) {
+    const text = String(value ?? "");
+    const direct = t(text);
+    if (direct !== text) return direct;
+    let match = text.match(/^Only (\d+) of (\d+) sessions fit before the horizon$/);
+    if (match) return t("Only {{placed}} of {{total}} sessions fit before the horizon", { placed: match[1], total: match[2] });
+    match = text.match(/^(\d+) tasks? used the default estimate\.$/);
+    if (match) return t("{{count}} tasks used the default estimate.", { count: match[1] });
+    match = text.match(/^(\d+) tasks? could not be placed within the horizon\.$/);
+    if (match) return t("{{count}} tasks could not be placed within the horizon.", { count: match[1] });
+    match = text.match(/^Week of (\d{4}-\d{2}-\d{2}) exceeds the weekly capacity by (\d+) minutes\.$/);
+    if (match) {
+      return t("Week of {{week}} exceeds the weekly capacity by {{minutes}} minutes.", {
+        week: autoPlanMonthDay(match[1]),
+        minutes: match[2],
+      });
+    }
+    return text;
   }
 
   function autoPlanDateLabel(dateKey) {
@@ -3329,7 +3351,7 @@
         unscheduled.append(element("span", "eyebrow", t("Not placed")));
         for (const task of selected.unscheduled.slice(0, 8)) {
           const row = element("div", "auto-plan-unscheduled");
-          row.append(element("strong", "", task.title), element("span", "", task.reason));
+          row.append(element("strong", "", task.title), element("span", "", autoPlanText(task.reason)));
           unscheduled.append(row);
         }
         side.append(unscheduled);
@@ -3338,7 +3360,7 @@
         const warnings = element("div", "auto-plan-side-block");
         warnings.append(element("span", "eyebrow", t("Warnings")));
         for (const warning of selected.warnings) {
-          warnings.append(element("p", "field-hint", warning));
+          warnings.append(element("p", "field-hint", autoPlanText(warning)));
         }
         side.append(warnings);
       }
@@ -4444,7 +4466,7 @@
     const dependencies = task.dependencies ?? [];
     const dependencyList = $("dependencyList");
     dependencyList.replaceChildren();
-    if (!dependencies.length) dependencyList.append(element("p", "field-hint", "No blockers. This task can move freely."));
+    if (!dependencies.length) dependencyList.append(element("p", "field-hint", t("No blockers. This task can move freely.")));
     for (const dependency of dependencies) {
       const row = element("div", "dependency-row");
       const dot = element("span", `side-dot${Number(dependency.completed) === 1 ? "" : " over"}`);
@@ -5661,7 +5683,7 @@
     timezoneInput.style.width = "240px";
     timezoneInput.addEventListener("change", () => void saveTimezone(timezoneInput));
     settingsRow(card, "Time zone", "Used for Today, reminders, digests, and recurrence. Commit by leaving the field.", timezoneInput);
-    settingsRow(card, "Time format", `Example: ${formatHour(17)}`, makeSelect([{ value: "auto", label: "Follow language" }, { value: "12", label: "12-hour" }, { value: "24", label: "24-hour" }], settings.timeFormat, "Time format", (value) => updateSettings({ timeFormat: value })));
+    settingsRow(card, "Time format", t("Example: {{time}}", { time: formatHour(17) }), makeSelect([{ value: "auto", label: "Follow language" }, { value: "12", label: "12-hour" }, { value: "24", label: "24-hour" }], settings.timeFormat, "Time format", (value) => updateSettings({ timeFormat: value })));
     settingsRow(card, "Week starts on", "Calendar and weekly rhythms follow this setting.", makeSelect([{ value: 1, label: "Monday" }, { value: 0, label: "Sunday" }, { value: 6, label: "Saturday" }], settings.weekStartsOn, "Week starts on", (value) => updateSettings({ weekStartsOn: Number(value) })));
     settingsRow(card, "Date preview", "A local date, formatted with your language.", datePreview);
     return section;
@@ -5688,7 +5710,7 @@
       updateSettings({ capacityMinutes: value });
     });
     capacityWrap.append(capacityRange, capacityNumber, element("span", "field-hint", "min"));
-    settingsRow(card, "Daily capacity", `${settings.capacityMinutes} minutes available to the Today planner.`, capacityWrap);
+    settingsRow(card, "Daily capacity", t("{{count}} minutes available to the Today planner.", { count: settings.capacityMinutes }), capacityWrap);
 
     settingsRow(card, "Plan buffer", "Keep part of the day empty. Smart Plan will leave this breathing room untouched.", makeRange(settings.planBufferPercent, 0, 40, 5, "Plan buffer", (value) => updateSettings({ planBufferPercent: value }), (value) => `${value}%`));
 
@@ -6626,10 +6648,15 @@
     const loadHealth = async () => {
       try {
         const health = await request("/api/health");
-        runtimeBadge.textContent = health?.status ?? "ok";
-        if (health) healthDesc.textContent = `${health.latencyMs} ms database latency · v${health.version}`;
+        runtimeBadge.textContent = t(health?.status ?? "ok");
+        if (health) {
+          healthDesc.textContent = t("{{latency}} ms database latency · v{{version}}", {
+            latency: health.latencyMs,
+            version: health.version,
+          });
+        }
       } catch {
-        runtimeBadge.textContent = "error";
+        runtimeBadge.textContent = t("error");
       }
     };
     section.refreshSettingsSection = () => void loadHealth();
@@ -7701,7 +7728,7 @@
         for (const event of events) {
           const row = element("div", "settings-row");
           const copy = element("div", "settings-copy");
-          copy.append(element("strong", "", String(event.action).replace(/[._]/g, " ")));
+          copy.append(element("strong", "", t(String(event.action).replace(/[._]/g, " "))));
           const meta = [event.actor?.name || t("System"), event.entityType || "", new Date(event.createdAt).toLocaleString(state.settings?.locale || undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })];
           if (event.metadata) meta.push(JSON.stringify(event.metadata).slice(0, 100));
           copy.append(element("span", "", meta.filter(Boolean).join(" · ")));
@@ -8121,6 +8148,13 @@
       event.preventDefault();
       closeModal();
       return;
+    }
+    for (const id of ["autoPlanModal", "boardCreateModal", "boardSettingsModal", "columnModal"]) {
+      if (event.key === "Escape" && !$(id).classList.contains("hidden")) {
+        event.preventDefault();
+        $(id).classList.add("hidden");
+        return;
+      }
     }
     if (isTypingTarget(event.target)) return;
     if (state.paletteOpen || !$("shortcutsModal").classList.contains("hidden")) return;
