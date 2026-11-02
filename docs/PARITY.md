@@ -172,6 +172,8 @@ Status key:
 | Insights | DONE | Timeline Gantt with 14/30/60-day ranges and a workload view with counts and estimated load |
 | Quick capture / Voice | DONE | Natural-language capture, browser speech with text fallback |
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
+| Settings navigation / scrollspy | DONE | One-page Settings keeps click-to-jump, while the desktop sidebar and mobile section picker follow the section actually in view. Scrollspy pauses during search, updates the URL hash, preserves the active section across re-renders, and keeps short sections (Keyboard, Automations, Audit) selectable. |
+| Restored rewrite-only admin capabilities | DONE | Kept the reference layout while restoring useful rewrite capabilities: token created/expires/last-used metadata and copy; webhook event selection, one-time signing secret with copy, pause/resume, delivery count/last-delivery status, URL copy; SSO configured badge, enable/require toggles, and Try SSO; invite-link copy, member joined dates, shortcut-sheet entry point, and automation board scope. |
 | Offline / PWA | DONE | Service worker, manifest, cached bootstrap/board/today/settings, offline queue with per-write idempotency keys, replay, retry/discard, explicit 409 failures, dedicated `/offline` page |
 | i18n | DONE | English / Traditional Chinese for every statically extracted UI, auth, board, task, calendar, archive, search, settings, and admin string; `t()` audit reports zero missing keys |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
@@ -303,6 +305,14 @@ Fixed during the pass:
 - Settings workspace/user hover states, reset buttons, theme icons, preview block, login-state
   health row, search/empty-state behavior, section heights, and mobile layout with a section
   picker instead of the desktop sidebar.
+- Settings navigation now tracks scrolling: the desktop sidebar and mobile picker update as
+  each section reaches the reading position, short sections are not skipped, search temporarily
+  clears the marker, and click-to-jump remains intact. The URL hash follows the active section,
+  and re-rendering a Settings section keeps the current scroll position.
+- Restored rewrite-only admin capabilities without changing the default reference layout:
+  API-token metadata/copy, webhook event selection and one-time signing secrets, delivery
+  status, pause/resume and URL copy; SSO status, enable/require toggles and Try SSO; invite-link
+  copy, joined dates, shortcut-sheet entry, and automation board scope.
 - Audit records board/task events again, matching the reference’s audit scope and live feed.
 - Task drawer width/padding, header badge row, relative due badge, property grid, Notes,
   Checklist, Waiting On, attachments, footer actions, Escape handling, and autosave.
@@ -322,8 +332,12 @@ Fixed during the pass:
   workspace, labels, two boards, WIP limits, tasks, descriptions, checklists, comments, view,
   and notifications.
 
-The remaining visible differences are **state/data drift and timing, not missing UI or
-behavior**:
+Two intentional rewrite-only additions remain visible in Settings: the Keyboard
+"Shortcut sheet" link row and the collapsed "Events" selector under Webhooks. Both expose
+previously removed capabilities while leaving the rest of the reference layout unchanged.
+
+Apart from the deliberate capability restorations above, the remaining visible differences are
+**state/data drift and timing, not missing UI or behavior**:
 
 - The reference database has additional historical activity (for example, a task created by
   an earlier evaluation and later edited). Search’s “most recently touched” order, the board

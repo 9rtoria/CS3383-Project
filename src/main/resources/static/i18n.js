@@ -1194,6 +1194,21 @@
     "Start focus": "開始專注",
     "Start focus on {{name}}": "開始專注於 {{name}}",
     "Next.js + React + Prisma. SQLite locally; PostgreSQL path documented.": "Next.js + React + Prisma。本機使用 SQLite；PostgreSQL 路徑已記錄於文件。",
+    "Copy failed. Select the URL and copy it manually.": "複製失敗。請選取網址後手動複製。",
+    "Copy failed. Select the token and copy it manually.": "複製失敗。請選取權杖後手動複製。",
+    "Webhook URL copied.": "已複製 Webhook 網址。",
+    "paused": "已暫停",
+    "Copy link": "複製連結",
+    "Invite link ready. Copy it now.": "邀請連結已建立，請立即複製。",
+    "Task created": "任務建立",
+    "Task moved": "任務移動",
+    "Task completed": "任務完成",
+    "Task deleted": "任務刪除",
+    "Comment added": "新增留言",
+    "Choose at least one webhook event.": "請至少選擇一個 Webhook 事件。",
+    "Copy failed. Select the secret and copy it manually.": "複製失敗。請選取密鑰後手動複製。",
+    "Shortcut sheet": "快速鍵一覽",
+    "See every keyboard shortcut in one place.": "在同一個地方查看所有鍵盤快速鍵。",
   });
 
   let currentLocale = "en";

@@ -2083,7 +2083,10 @@
       $("viewEyebrow").textContent = t("Account & workspace");
       $("viewTitle").textContent = t("Settings");
       if (!state.settings) void loadSettings();
+      settingsNavLock = null;
+      settingsNavLockAt = 0;
       window.setTimeout(focusSettingsHash, 30);
+      window.setTimeout(syncSettingsScrollSpy, 70);
     } else {
       $("viewEyebrow").textContent = t("Plan");
       $("viewTitle").textContent = t("Today");
@@ -4501,6 +4504,10 @@
     }
     applySettings();
     renderSettings();
+    if (state.view === "settings") {
+      window.setTimeout(focusSettingsHash, 30);
+      window.setTimeout(syncSettingsScrollSpy, 70);
+    }
     restartAutoPlanScheduler();
     scheduleAutoPlanRefresh(800);
   }
@@ -4744,8 +4751,45 @@
     return { section, card };
   }
 
+  let settingsActiveSection = null;
+  let settingsNavLock = null;
+  let settingsNavLockAt = 0;
+  let settingsSpyFrame = 0;
+
+  function setSettingsActiveSection(id, { updateHash = false } = {}) {
+    const nav = $("settingsNav");
+    if (!nav || !id) return;
+    const button = nav.querySelector(`[data-section="${CSS.escape(id)}"]`);
+    if (!button) return;
+    settingsActiveSection = id;
+    nav.querySelectorAll(".settings-nav-item").forEach((node) => {
+      const isActive = node === button;
+      node.classList.toggle("active", isActive);
+      if (isActive) node.setAttribute("aria-current", "page");
+      else node.removeAttribute("aria-current");
+    });
+    const mobileSelect = $("settingsMobileSection");
+    if (mobileSelect && mobileSelect.value !== id) mobileSelect.value = id;
+    if (updateHash) history.replaceState({}, "", `/settings#${id}`);
+    const sidebar = nav.closest(".settings-nav");
+    if (sidebar) {
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const itemRect = button.getBoundingClientRect();
+      const topBound = sidebarRect.top + 8;
+      const bottomBound = sidebarRect.bottom - 8;
+      if (itemRect.top < topBound) sidebar.scrollTop -= topBound - itemRect.top;
+      else if (itemRect.bottom > bottomBound) sidebar.scrollTop += itemRect.bottom - bottomBound;
+    }
+  }
+
+  function clearSettingsNavLock() {
+    settingsNavLock = null;
+    settingsNavLockAt = 0;
+  }
+
   function renderSettings() {
     if (!state.settings) return;
+    const restoreScroll = state.view === "settings" ? window.scrollY : null;
     const currentWorkspace = workspace();
     $("settingsWorkspaceName").textContent = currentWorkspace?.name ?? "Workspace";
     $("settingsWorkspaceAvatar").textContent = (currentWorkspace?.name ?? "W").trim().slice(0, 2).toUpperCase();
@@ -4795,24 +4839,31 @@
       { id: "data", label: "Data & export", group: "Data", icon: "database", render: renderDataSettings },
       { id: "about", label: "About Drift", group: "Data", icon: "lifebuoy", render: renderAboutSettings },
     );
+    const availableIds = new Set(definitions.map((definition) => definition.id));
+    const hashSection = location.hash.replace(/^#/, "");
+    const initialSection = availableIds.has(settingsActiveSection)
+      ? settingsActiveSection
+      : availableIds.has(hashSection) ? hashSection : definitions[0]?.id ?? null;
+    settingsActiveSection = initialSection;
     let group = null;
-    definitions.forEach((definition, index) => {
+    definitions.forEach((definition) => {
       if (definition.group !== group) {
         group = definition.group;
         nav.append(element("div", "side-label settings-group", t(group)));
       }
-      const button = element("a", `settings-nav-item${index === 0 ? " active" : ""}`);
+      const button = element("a", `settings-nav-item${definition.id === initialSection ? " active" : ""}`);
       button.href = `#${definition.id}`;
       button.dataset.section = definition.id;
+      if (definition.id === initialSection) button.setAttribute("aria-current", "page");
       button.append(icon(definition.icon), element("span", "", t(definition.label)));
       button.addEventListener("click", (event) => {
         event.preventDefault();
-        nav.querySelectorAll(".settings-nav-item").forEach((node) => node.classList.toggle("active", node === button));
-        $("settingsMobileSection").value = definition.id;
+        settingsNavLock = definition.id;
+        settingsNavLockAt = Date.now();
+        setSettingsActiveSection(definition.id, { updateHash: true });
         const target = document.getElementById(`settings-${definition.id}`);
         target?.scrollIntoView({ behavior: "smooth", block: "start" });
         target?.refreshSettingsSection?.();
-        history.replaceState({}, "", `/settings#${definition.id}`);
       });
       nav.append(button);
       container.append(definition.render());
@@ -4831,20 +4882,21 @@
       const option = new Option(t(definition.label), definition.id);
       mobileGroupNode.append(option);
     }
-    mobileSelect.value = location.hash.replace(/^#/, "") || definitions[0]?.id || "";
+    mobileSelect.value = initialSection || "";
     mobileSelect.onchange = () => {
       const id = mobileSelect.value;
+      settingsNavLock = id;
+      settingsNavLockAt = Date.now();
+      setSettingsActiveSection(id, { updateHash: true });
       const target = document.getElementById(`settings-${id}`);
-      const button = nav.querySelector(`[data-section="${id}"]`);
-      nav.querySelectorAll(".settings-nav-item").forEach((node) => node.classList.toggle("active", node === button));
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
       target?.refreshSettingsSection?.();
-      history.replaceState({}, "", `/settings#${id}`);
     };
     window.DriftI18n?.translateSubtree(nav);
     window.DriftI18n?.translateSubtree(container);
     window.DriftI18n?.translateSubtree(mobileSelect);
-    window.setTimeout(focusSettingsHash, 30);
+    if (restoreScroll != null) window.scrollTo(0, restoreScroll);
+    window.setTimeout(syncSettingsScrollSpy, 0);
   }
 
   function focusSettingsHash() {
@@ -4854,10 +4906,52 @@
     const nav = $("settingsNav");
     const button = nav?.querySelector(`[data-section="${hash}"]`);
     if (!target || !button) return;
-    nav.querySelectorAll(".settings-nav-item").forEach((node) => node.classList.toggle("active", node === button));
-    $("settingsMobileSection").value = hash;
+    setSettingsActiveSection(hash);
     target.scrollIntoView({ block: "start" });
     target.refreshSettingsSection?.();
+  }
+
+  function syncSettingsScrollSpy() {
+    if (state.view !== "settings") return;
+    const nav = $("settingsNav");
+    const container = $("settingsSections");
+    if (!nav || !container) return;
+    if ($("settingsSearch")?.value.trim()) return;
+    const sections = [...container.querySelectorAll(":scope > .settings-section")];
+    if (!sections.length) return;
+    if (settingsNavLock) {
+      const locked = sections.find((section) => section.id === `settings-${settingsNavLock}`);
+      const lockedTop = locked?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+      if (locked && (Date.now() - settingsNavLockAt < 900 || (lockedTop > -120 && lockedTop < 320))) {
+        setSettingsActiveSection(settingsNavLock);
+        return;
+      }
+      settingsNavLock = null;
+      settingsNavLockAt = 0;
+    }
+    // A compact threshold keeps short sections (Keyboard, Automations, Audit)
+    // from being skipped by the section that follows them.
+    const threshold = Math.min(140, Math.max(80, window.innerHeight * 0.14));
+    let active = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= threshold) active = section;
+      else break;
+    }
+    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
+      active = sections[sections.length - 1];
+    }
+    const id = active.id.replace(/^settings-/, "");
+    if (settingsActiveSection !== id || location.hash !== `#${id}`) {
+      setSettingsActiveSection(id, { updateHash: true });
+    }
+  }
+
+  function scheduleSettingsScrollSpy() {
+    if (settingsSpyFrame) return;
+    settingsSpyFrame = window.requestAnimationFrame(() => {
+      settingsSpyFrame = 0;
+      syncSettingsScrollSpy();
+    });
   }
 
   function renderAccountSettings() {
@@ -5365,6 +5459,7 @@
           const copy = element("div", "settings-copy");
           copy.append(element("strong", "", rule.name));
           let detail = `${labelFor(AUTOMATION_TRIGGERS, rule.trigger)} → ${labelFor(AUTOMATION_ACTIONS, rule.actionType)}: ${rule.actionValue}`;
+          if (rule.boardId) detail += ` · ${boardName(rule.boardId)}`;
           if (rule.lastRunAt) detail += ` · ${t("last ran")} ${new Date(rule.lastRunAt).toLocaleDateString(state.settings?.locale || undefined, { month: "short", day: "numeric" })}`;
           copy.append(element("span", "", detail));
           const controls = element("div", "settings-control inline");
@@ -5804,6 +5899,7 @@
     inviteButton.type = "submit";
     inviteButton.append(icon("plus"), document.createTextNode(" Invite"));
     inviteForm.append(inviteEmail, inviteRole, inviteButton);
+    const inviteCreated = element("div");
     if (canManage) card.append(inviteForm);
 
     inviteForm.addEventListener("submit", async (event) => {
@@ -5812,13 +5908,32 @@
       if (!email) return;
       inviteButton.disabled = true;
       try {
-        await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites`, {
+        const result = await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/invites`, {
           method: "POST",
           body: { email, role: inviteRole.value },
         });
         inviteEmail.value = "";
         showToast(t("Invite created."));
         await refresh();
+        if (result?.token) {
+          const link = `${location.origin}/invite/${encodeURIComponent(result.token)}`;
+          const box = element("div", "dev-link");
+          box.append(document.createTextNode(`${t("Invite link ready. Copy it now.")} `));
+          box.append(element("code", "", link));
+          const copy = element("button", "btn ghost sm", t("Copy link"));
+          copy.type = "button";
+          copy.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(link);
+              showToast(t("Invite link copied."));
+            } catch {
+              showToast(link);
+            }
+          });
+          box.append(copy);
+          inviteCreated.replaceChildren(box);
+          card.append(inviteCreated);
+        }
       } catch (error) {
         showToast(error.message);
       } finally {
@@ -5862,7 +5977,10 @@
           name.append(document.createTextNode(member.name || member.email || t("Member")));
           if (isSelf) name.append(element("span", "field-hint", ` (${t("you")})`));
           copy.append(name);
-          copy.append(element("span", "", `${member.email || t("No email")} · ${t("joined")}`));
+          const joined = member.joinedAt
+            ? ` · ${t("joined")} ${new Date(member.joinedAt).toLocaleDateString(state.settings?.locale || undefined, { month: "short", day: "numeric" })}`
+            : "";
+          copy.append(element("span", "", `${member.email || t("No email")}${joined}`));
           row.append(avatar, copy);
           if (canManage && !isSelf) {
             const select = element("select", "select");
@@ -5907,6 +6025,7 @@
           card.append(row);
         }
         if (canManage) card.append(inviteForm);
+        if (canManage && inviteCreated.childElementCount) card.append(inviteCreated);
         if (canManage && invites.length) {
           const wrap = element("div");
           wrap.style.cssText = "padding:10px 16px;border-top:1px solid var(--border)";
@@ -5951,6 +6070,10 @@
       "Keyboard-first by default. This setting stays on this device."
     );
     settingsRow(card, t("Single-key shortcuts"), t("Press C to capture, / to search, ? for the shortcut sheet."), makeToggle(state.singleKeyShortcuts, t("Single-key shortcuts"), setSingleKeyShortcuts));
+    const sheet = element("button", "btn ghost sm", t("Shortcut sheet"));
+    sheet.type = "button";
+    sheet.addEventListener("click", openShortcuts);
+    settingsRow(card, t("Shortcut sheet"), t("See every keyboard shortcut in one place."), sheet);
     return section;
   }
 
@@ -6585,6 +6708,14 @@
     return section;
   }
 
+  const WEBHOOK_EVENTS = [
+    ["task.created", "Task created"],
+    ["task.moved", "Task moved"],
+    ["task.completed", "Task completed"],
+    ["task.deleted", "Task deleted"],
+    ["comment.created", "Comment added"],
+  ];
+
   function renderIntegrationSettings() {
     const { section, card } = createSettingsSection(
       "integrations",
@@ -6630,8 +6761,11 @@
           row.style.cssText = "justify-content:space-between;border-top:1px solid var(--border);padding:8px 0;font-size:11px";
           const label = element("span");
           const meta = element("span", "field-hint");
-          const expires = token.expiresAt ? new Date(token.expiresAt).toLocaleDateString(state.settings?.locale || undefined) : t("never");
-          meta.textContent = ` ${token.prefix}… · ${t("expires")} ${expires}`;
+          const dateLabel = (value) => value ? new Date(value).toLocaleDateString(state.settings?.locale || undefined) : t("never");
+          const created = dateLabel(token.createdAt);
+          const expires = dateLabel(token.expiresAt);
+          const lastUsed = token.lastUsedAt ? ` · ${t("Last used")} ${dateLabel(token.lastUsedAt)}` : "";
+          meta.textContent = ` ${token.prefix}… · ${t("Created")} ${created} · ${t("Expires")} ${expires}${lastUsed}`;
           label.append(document.createTextNode(token.name), meta);
           const revoke = element("button", "btn ghost sm", t("Revoke"));
           revoke.type = "button";
@@ -6639,6 +6773,7 @@
             if (!window.confirm(t("Revoke this token? Tools using it will stop working."))) return;
             try {
               await request(`/api/tokens/${encodeURIComponent(token.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
+              tokenCreated.replaceChildren();
               showToast(t("Token revoked."));
               await refreshTokens();
             } catch (error) {
@@ -6670,6 +6805,17 @@
         const box = element("div", "dev-link");
         box.append(document.createTextNode(`${t("Copy now, it will not be shown again:")} `));
         box.append(element("code", "", result.token));
+        const copyToken = element("button", "btn ghost sm", t("Copy"));
+        copyToken.type = "button";
+        copyToken.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(result.token);
+            showToast(t("Token copied."));
+          } catch {
+            showToast(t("Copy failed. Select the token and copy it manually."));
+          }
+        });
+        box.append(copyToken);
         tokenCreated.append(box);
         tokenName.value = "";
         await refreshTokens();
@@ -6702,14 +6848,37 @@
     hookAdd.type = "submit";
     hookAdd.append(icon("plus"), document.createTextNode(" Add"));
     hookForm.append(hookKind, hookUrl, hookAdd);
+
+    const eventDetails = element("details");
+    eventDetails.style.cssText = "margin-top:8px";
+    const eventSummary = element("summary", "field-hint", t("Events"));
+    eventSummary.style.cursor = "pointer";
+    const eventOptions = element("div", "inline");
+    eventOptions.style.cssText = "flex-wrap:wrap;gap:12px;margin-top:6px";
+    const eventInputs = [];
+    for (const [value, label] of WEBHOOK_EVENTS) {
+      const option = element("label", "inline");
+      option.style.cssText = "gap:5px;font-size:11px;color:var(--muted)";
+      const input = element("input");
+      input.type = "checkbox";
+      input.value = value;
+      input.checked = true;
+      eventInputs.push(input);
+      option.append(input, document.createTextNode(t(label)));
+      eventOptions.append(option);
+    }
+    eventDetails.append(eventSummary, eventOptions);
+
+    const hookCreated = element("div");
     const hookList = element("div");
-    hookRow.append(hookCopy, hookForm, hookList);
+    hookRow.append(hookCopy, hookForm, eventDetails, hookCreated, hookList);
     card.append(hookRow);
 
     const refreshHooks = async () => {
       try {
         const result = await request(`/api/webhooks?workspaceId=${encodeURIComponent(workspace().id)}`);
         const hooks = result?.webhooks ?? [];
+        const eventLabel = (value) => t(WEBHOOK_EVENTS.find(([key]) => key === value)?.[1] ?? value);
         hookList.replaceChildren();
         for (const hook of hooks) {
           const row = element("div", "inline");
@@ -6717,21 +6886,57 @@
           const label = element("span");
           const url = hook.url.length > 55 ? `${hook.url.slice(0, 55)}…` : hook.url;
           const status = element("span", "field-hint");
-          status.textContent = ` ${hook.lastStatus ? `${t("last")} ${hook.lastStatus}` : t("not delivered yet")}`;
+          const bits = [
+            hook.enabled === false ? t("paused") : (hook.lastStatus ? `${t("last")} ${hook.lastStatus}` : t("not delivered yet")),
+          ];
+          if (hook.lastDeliveryAt) bits.push(relativeTime(hook.lastDeliveryAt));
+          const deliveryCount = Number(hook.deliveries || 0);
+          if (deliveryCount) bits.push(`${deliveryCount} ${t("deliveries")}`);
+          if ((hook.events ?? []).length) bits.push(`${t("Events")}: ${(hook.events ?? []).map(eventLabel).join(", ")}`);
+          status.textContent = ` ${bits.join(" · ")}`;
           label.append(document.createTextNode(`${hook.kind} · ${url}`), status);
+          const actions = element("span", "inline");
+          const copyHook = element("button", "btn ghost sm", t("Copy"));
+          copyHook.type = "button";
+          copyHook.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(hook.url);
+              showToast(t("Webhook URL copied."));
+            } catch {
+              showToast(t("Copy failed. Select the URL and copy it manually."));
+            }
+          });
+          const toggle = element("button", "btn ghost sm", t(hook.enabled === false ? "Enable" : "Disable"));
+          toggle.type = "button";
+          toggle.addEventListener("click", async () => {
+            toggle.disabled = true;
+            try {
+              await request(`/api/webhooks/${encodeURIComponent(hook.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, {
+                method: "PATCH",
+                body: { enabled: hook.enabled === false },
+              });
+              showToast(t(hook.enabled === false ? "Webhook enabled." : "Webhook disabled."));
+              await refreshHooks();
+            } catch (error) {
+              showToast(error.message);
+              toggle.disabled = false;
+            }
+          });
           const remove = element("button", "btn ghost sm", t("Remove"));
           remove.type = "button";
           remove.addEventListener("click", async () => {
             if (!window.confirm(t("Delete this webhook?"))) return;
             try {
               await request(`/api/webhooks/${encodeURIComponent(hook.id)}?workspaceId=${encodeURIComponent(workspace().id)}`, { method: "DELETE" });
+              hookCreated.replaceChildren();
               showToast(t("Webhook deleted."));
               await refreshHooks();
             } catch (error) {
               showToast(error.message);
             }
           });
-          row.append(label, remove);
+          actions.append(copyHook, toggle, remove);
+          row.append(label, actions);
           hookList.append(row);
         }
       } catch (error) {
@@ -6745,19 +6950,42 @@
         hookUrl.focus();
         return;
       }
+      const events = eventInputs.filter((input) => input.checked).map((input) => input.value);
+      if (!events.length) {
+        showToast(t("Choose at least one webhook event."));
+        return;
+      }
       hookAdd.disabled = true;
       try {
-        await request("/api/webhooks", {
+        const result = await request("/api/webhooks", {
           method: "POST",
           body: {
             workspaceId: workspace().id,
             kind: hookKind.value,
             url: hookUrl.value.trim(),
-            events: ["task.created", "task.moved", "task.completed", "task.deleted"],
+            events,
           },
         });
         hookUrl.value = "";
-        showToast(t("Webhook added."));
+        hookCreated.replaceChildren();
+        if (result?.webhook?.secret) {
+          const box = element("div", "dev-link");
+          box.append(document.createTextNode(`${t("Webhook signing secret")} `));
+          box.append(element("code", "", result.webhook.secret));
+          const copy = element("button", "btn ghost sm", t("Copy"));
+          copy.type = "button";
+          copy.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(result.webhook.secret);
+              showToast(t("Signing secret copied."));
+            } catch {
+              showToast(t("Copy failed. Select the secret and copy it manually."));
+            }
+          });
+          box.append(copy);
+          hookCreated.append(box);
+        }
+        showToast(t("Webhook created. Copy the signing secret now."));
         await refreshHooks();
       } catch (error) {
         showToast(error.message);
@@ -6778,7 +7006,9 @@
       const copy = element("div", "settings-copy");
       copy.append(element("strong", "", t("Single sign-on (OIDC)")));
       copy.append(element("span", "", t("Configuration is encrypted. End-to-end external provider verification requires deployment credentials.")));
-      head.append(copy);
+      const headActions = element("div", "inline");
+      headActions.append(makeBadge(configured ? t("Configured") : t("Not configured"), configured ? "moss" : "slate"));
+      head.append(copy, headActions);
       if (configured) {
         const remove = element("button", "btn danger sm", t("Remove"));
         remove.type = "button";
@@ -6793,7 +7023,7 @@
             showToast(error.message);
           }
         });
-        head.append(remove);
+        headActions.append(remove);
       }
       const form = element("form", "form-grid");
       form.style.marginTop = "12px";
@@ -6826,11 +7056,20 @@
       domains.value = config.allowedDomains ?? "";
       domains.placeholder = "example.com, example.org";
       domainsField.append(domains);
+      const eligibility = element("div", "settings-inline-controls");
+      eligibility.style.marginTop = "4px";
+      const enabledToggle = makeToggle(config.enabled !== false, t("Enable SSO"), () => {});
+      const enabledWrap = element("div", "inline");
+      enabledWrap.append(enabledToggle, element("span", "field-hint", t("Enable SSO")));
+      const enforceToggle = makeToggle(Boolean(config.enforceSso), t("Require SSO"), () => {});
+      const enforceWrap = element("div", "inline");
+      enforceWrap.append(enforceToggle, element("span", "field-hint", t("Require SSO")));
+      eligibility.append(enabledWrap, enforceWrap);
       const actions = element("div");
       const save = element("button", "btn primary sm", t("Save SSO configuration"));
       save.type = "submit";
       actions.append(save);
-      form.append(issuerField, clientField, secretField, domainsField, actions);
+      form.append(issuerField, clientField, secretField, domainsField, eligibility, actions);
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         save.disabled = true;
@@ -6842,8 +7081,8 @@
               clientId: client.value.trim(),
               clientSecret: secret.value,
               allowedDomains: domains.value.trim(),
-              enabled: true,
-              enforceSso: false,
+              enabled: enabledToggle.getAttribute("aria-checked") === "true",
+              enforceSso: enforceToggle.getAttribute("aria-checked") === "true",
             },
           });
           ssoState = { configured: true, config: result?.config ?? null };
@@ -6862,6 +7101,12 @@
         const link = element("a", "", `/api/auth/sso/${workspace().id}`);
         link.href = `/api/auth/sso/${encodeURIComponent(workspace().id)}`;
         hint.append(link, document.createTextNode(`. ${t("Discovery and callback require the provider to allow this redirect URI.")}`));
+        const tryLink = element("a", "btn ghost sm", t("Try SSO"));
+        tryLink.href = `/api/auth/sso/${encodeURIComponent(workspace().id)}`;
+        tryLink.target = "_blank";
+        tryLink.rel = "noreferrer";
+        tryLink.style.marginLeft = "8px";
+        hint.append(tryLink);
         ssoRow.append(hint);
       }
     };
@@ -7426,6 +7671,11 @@
       setView("today");
       history.replaceState({}, "", "/");
     });
+    window.addEventListener("scroll", scheduleSettingsScrollSpy, { passive: true });
+    window.addEventListener("resize", scheduleSettingsScrollSpy, { passive: true });
+    for (const eventName of ["wheel", "touchmove", "pointerdown", "keydown"]) {
+      window.addEventListener(eventName, clearSettingsNavLock, { passive: true });
+    }
     const settingsSearch = $("settingsSearch");
     const settingsSearchEmpty = element("p", "settings-search-empty hidden", t("No settings found."));
     $("settingsNav").before(settingsSearchEmpty);
@@ -7447,6 +7697,14 @@
         if (match && group) group.classList.remove("hidden");
       }
       settingsSearchEmpty.classList.toggle("hidden", !query || matches > 0);
+      if (query) {
+        nav.querySelectorAll(".settings-nav-item.active").forEach((node) => {
+          node.classList.remove("active");
+          node.removeAttribute("aria-current");
+        });
+      } else if (settingsActiveSection) {
+        setSettingsActiveSection(settingsActiveSection);
+      }
     });
     settingsSearch.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
