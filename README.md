@@ -24,7 +24,7 @@ The output should report version 17 or newer.
 Windows PowerShell:
 
 ```powershell
-git clone https://github.com/9rtoria/CS3383-Project.git
+git clone --branch KenV3 https://github.com/9rtoria/CS3383-Project.git
 cd CS3383-Project
 $env:SEED_DEMO="true"
 .\mvnw.cmd spring-boot:run
@@ -33,11 +33,14 @@ $env:SEED_DEMO="true"
 macOS / Linux:
 
 ```bash
-git clone https://github.com/9rtoria/CS3383-Project.git
+git clone --branch KenV3 https://github.com/9rtoria/CS3383-Project.git
 cd CS3383-Project
 chmod +x mvnw
 SEED_DEMO=true ./mvnw spring-boot:run
 ```
+
+The repository contains several disconnected project branches. `KenV3` is the branch for this
+implementation; cloning the repository's default branch will not get this version.
 
 Open <http://localhost:3383> and sign in with:
 
