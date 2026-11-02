@@ -399,6 +399,7 @@
     window.DriftOffline?.cacheBootstrap(state.boot);
     renderAccount();
     renderSidebar();
+    syncIdentityUi();
     return state.boot;
   }
 
@@ -487,7 +488,18 @@
         if (navigator.onLine) void loadNotifications();
       }, 30_000);
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") void loadNotifications();
+        if (document.visibilityState !== "visible") return;
+        void loadNotifications();
+        if (!navigator.onLine) return;
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        const editing = activeTag === "input" || activeTag === "textarea" || activeTag === "select";
+        if (state.view === "settings") {
+          syncIdentityUi();
+          if (!editing) refreshSettingsPanel(settingsActiveSection);
+          scheduleBootstrapRefresh();
+        } else {
+          void refreshVisibleData({ notifications: false, bootstrap: true });
+        }
       });
       if (navigator.onLine && offlineQueue().length) void syncOfflineQueue(false);
     } catch (error) {
@@ -746,6 +758,7 @@
       state.notificationsReady = true;
       state.notifications = notifications;
       setUnreadCount(result.unreadCount);
+      if (!$("notificationsPanel").classList.contains("hidden")) renderNotifications();
     } catch {
       // Notification polling must never interrupt the main workspace flow.
     }
@@ -872,7 +885,11 @@
         method: "PATCH",
         body: { role },
       });
-      renderMembers(result.members ?? []);
+      state.members[workspace().id] = result.members ?? [];
+      renderMembers(state.members[workspace().id]);
+      showToast(t("Role updated."));
+      void refreshSettingsPanel("members");
+      scheduleBootstrapRefresh();
     } catch (error) {
       showToast(error.message);
       await openMembersModal();
@@ -905,10 +922,14 @@
     try {
       const result = await request(`/api/invites/${encodeURIComponent(token)}`, { method: "POST" });
       state.boot = result;
+      state.members = {};
       window.DriftOffline?.cacheBootstrap(result);
       state.currentWorkspaceId = result.workspaces?.at(-1)?.id ?? state.currentWorkspaceId;
+      renderAccount();
+      renderSidebar();
+      syncIdentityUi();
       history.replaceState({}, "", "/");
-      showToast("Invitation accepted.");
+      showToast(t("Invitation accepted."));
     } catch (error) {
       showToast(error.message);
     }
@@ -1662,9 +1683,12 @@
     state.currentBoardId = boards()[0]?.id ?? null;
     state.dayFlowAnchor = null;
     renderSidebar();
+    syncIdentityUi();
+    state.members = {};
     if (state.currentBoardId) await loadBoard(state.currentBoardId);
-    await loadToday();
+    await Promise.all([loadToday(), loadNotifications()]);
     setView("today");
+    showToast(t("Workspace switched."));
   }
 
   function renderBoardTemplates() {
@@ -2094,6 +2118,62 @@
     }
   }
 
+  function syncIdentityUi() {
+    const currentWorkspace = workspace();
+    const user = state.boot?.user ?? {};
+    const displayName = user.name || user.email || t("Account");
+    const workspaceName = currentWorkspace?.name ?? t("Workspace");
+    const role = currentWorkspace?.role ?? "OWNER";
+    const roleText = t(role === "OWNER" ? "Owner" : role === "ADMIN" ? "Admin" : role === "MEMBER" ? "Member" : "Guest");
+    const workspaceInitials = String(workspaceName).trim().slice(0, 2).toUpperCase() || "W";
+    const userInitials = String(displayName).trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "G";
+    const guest = user.isGuest === 1 || user.isGuest === true;
+    if ($("settingsWorkspaceName")) $("settingsWorkspaceName").textContent = workspaceName;
+    if ($("settingsWorkspaceAvatar")) $("settingsWorkspaceAvatar").textContent = workspaceInitials;
+    if ($("settingsWorkspaceRole")) $("settingsWorkspaceRole").textContent = roleText;
+    if ($("settingsUserName")) $("settingsUserName").textContent = displayName;
+    if ($("settingsUserEmail")) $("settingsUserEmail").textContent = guest ? t("Guest session") : (user.email || t("Signed in"));
+    if ($("settingsUserAvatar")) $("settingsUserAvatar").textContent = userInitials;
+  }
+
+  function refreshSettingsPanel(id) {
+    if (!id) return;
+    document.getElementById(`settings-${id}`)?.refreshSettingsSection?.();
+  }
+
+  function refreshSettingsIdentitySections() {
+    refreshSettingsPanel("members");
+    refreshSettingsPanel("audit");
+  }
+
+  let bootstrapRefreshTimer = 0;
+
+  function scheduleBootstrapRefresh() {
+    window.clearTimeout(bootstrapRefreshTimer);
+    bootstrapRefreshTimer = window.setTimeout(async () => {
+      bootstrapRefreshTimer = 0;
+      try {
+        await refreshBootstrap();
+      } catch {
+        // A background freshness pass must not interrupt the current view.
+      }
+    }, 400);
+  }
+
+  async function refreshVisibleData({ board = true, today = true, notifications = true, bootstrap = true } = {}) {
+    const jobs = [];
+    if (board && state.currentBoardId) jobs.push(loadBoard(state.currentBoardId));
+    if (today) jobs.push(loadToday());
+    if (state.view === "calendar") jobs.push(loadCalendar());
+    else if (state.view === "upcoming") jobs.push(loadUpcoming());
+    else if (state.view === "archive") jobs.push(loadArchive());
+    else if (state.view === "search") jobs.push(runSearch());
+    else if (state.view === "insights") jobs.push(loadInsights());
+    if (notifications) jobs.push(loadNotifications());
+    await Promise.allSettled(jobs);
+    if (bootstrap) scheduleBootstrapRefresh();
+  }
+
   function toggleTaskSelection(taskId, selected) {
     if (selected) state.selectedTaskIds.add(taskId);
     else state.selectedTaskIds.delete(taskId);
@@ -2143,8 +2223,7 @@
       if (action === "move") body.columnId = targetColumnId;
       const result = await request("/api/tasks/bulk", { method: "POST", body });
       state.selectedTaskIds.clear();
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData({ notifications: false });
       const messages = {
         complete: taskIds.length === 1 ? "{{count}} task completed." : "{{count}} tasks completed.",
         archive: taskIds.length === 1 ? "{{count}} task archived." : "{{count}} tasks archived.",
@@ -2152,8 +2231,7 @@
         move: taskIds.length === 1 ? "{{count}} task moved." : "{{count}} tasks moved.",
       };
       showToast(t(messages[action], { count: result.affected ?? taskIds.length }), undoToastAction(result.undo, async () => {
-        await loadBoard(state.currentBoardId);
-        await loadToday();
+        await refreshVisibleData({ notifications: false });
         renderBulkToolbar();
       }));
     } catch (error) {
@@ -2350,13 +2428,12 @@
             showToast(t("Saved on this device — will sync when you reconnect."));
             return;
           }
-          await loadBoard(state.currentBoardId);
+          await refreshVisibleData({ notifications: false });
           window.DriftSound?.play("move");
           showToast(
             t("Task moved.") + (result?.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
             undoToastAction(result?.undo, async () => {
-              await loadBoard(state.currentBoardId);
-              await loadToday();
+              await refreshVisibleData({ notifications: false });
             })
           );
         } catch (error) {
@@ -2897,8 +2974,7 @@
       });
       $("autoPlanModal").classList.add("hidden");
       state.lastAutoApplyAt = Date.now();
-      await loadToday();
-      await loadBoard(state.currentBoardId);
+      await refreshVisibleData({ notifications: false });
       const applied = result.appliedBlocks ?? result.applied ?? 0;
       showToast(
         `Auto-plan applied — ${applied} block${applied === 1 ? "" : "s"} scheduled.`,
@@ -2915,8 +2991,7 @@
     try {
       await request(`/api/undo/${encodeURIComponent(undoId)}`, { method: "POST" });
       state.lastAutoApplyAt = Date.now();
-      await loadToday();
-      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      await refreshVisibleData({ notifications: false });
       showToast(t("Previous plan restored."));
     } catch (error) {
       showToast(error.message);
@@ -2970,8 +3045,7 @@
       state.lastAutoApplyAt = Date.now();
       const applied = result.appliedBlocks ?? result.applied ?? 0;
       if (!applied) return;
-      await loadToday();
-      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      await refreshVisibleData({ notifications: false });
       showToast(
         `Auto-plan refreshed — ${applied} block${applied === 1 ? "" : "s"} scheduled.`,
         result.undoId ? { label: t("Undo"), onClick: () => undoAutoPlan(result.undoId) } : null
@@ -2992,7 +3066,7 @@
       });
       $("autoPlanModal").classList.add("hidden");
       state.lastAutoApplyAt = Date.now();
-      await loadToday();
+      await refreshVisibleData({ notifications: false });
       showToast(t("Auto-plan cleared."));
     } catch (error) {
       showToast(error.message);
@@ -3237,13 +3311,11 @@
       focus.busy = false;
       window.DriftSound?.play("complete");
       renderFocus();
-      await loadToday();
-      if (state.currentBoardId) await loadBoard(state.currentBoardId);
+      await refreshVisibleData({ notifications: false });
       showToast(t("Focus complete — {{minutes}}m tracked.", { minutes })
         + (result.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
         undoToastAction(result.undo, async () => {
-          await loadToday();
-          if (state.currentBoardId) await loadBoard(state.currentBoardId);
+          await refreshVisibleData({ notifications: false });
         }));
     } catch (error) {
       focus.busy = false;
@@ -3287,8 +3359,7 @@
     state.focus = null;
     $("focusMode").classList.add("hidden");
     window.DriftSound?.play("tap");
-    await loadToday();
-    if (state.currentBoardId) await loadBoard(state.currentBoardId);
+    await refreshVisibleData({ notifications: false });
   }
 
   function localDateKey(date = new Date()) {
@@ -3686,11 +3757,9 @@
         throw error;
       }
       window.DriftSound?.play("capture");
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData();
       showToast(t("Added to {{board}}", { board: board.name }), undoToastAction(created?.undo, async () => {
-        await loadBoard(state.currentBoardId);
-        await loadToday();
+        await refreshVisibleData({ notifications: false });
       }));
       if (settingOn(state.settings?.captureCloseAfterAdd)) {
         closeCapture();
@@ -4030,6 +4099,7 @@
       });
       $("reminderAt").value = "";
       await loadTaskDetail(state.editing.id);
+      showToast(t("Reminder added."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4040,6 +4110,7 @@
     try {
       await request(`/api/reminders/${encodeURIComponent(id)}`, { method: "DELETE" });
       await loadTaskDetail(state.editing.id);
+      showToast(t("Reminder removed."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4070,6 +4141,7 @@
       }
       input.value = "";
       await loadTaskDetail(state.editing.id);
+      showToast(t("Attachment uploaded."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4080,6 +4152,7 @@
     try {
       await request(`/api/attachments/${encodeURIComponent(id)}`, { method: "DELETE" });
       await loadTaskDetail(state.editing.id);
+      showToast(t("Attachment deleted."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4094,6 +4167,8 @@
         body: { dependsOnTaskId },
       });
       await loadTaskDetail(state.editing.id);
+      await refreshVisibleData({ notifications: false, bootstrap: false });
+      showToast(t("Dependency added."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4106,6 +4181,8 @@
         method: "DELETE",
       });
       await loadTaskDetail(state.editing.id);
+      await refreshVisibleData({ notifications: false, bootstrap: false });
+      showToast(t("Dependency removed."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4118,6 +4195,7 @@
         body: { completed },
       });
       if (state.editing) await loadTaskDetail(state.editing.id);
+      await refreshVisibleData({ notifications: false, bootstrap: false });
     } catch (error) {
       showToast(error.message);
     }
@@ -4128,7 +4206,8 @@
     try {
       await request(`/api/subtasks/${encodeURIComponent(subtask.id)}`, { method: "DELETE" });
       await loadTaskDetail(state.editing.id);
-      await loadBoard(state.currentBoardId);
+      await refreshVisibleData({ notifications: false, bootstrap: false });
+      showToast(t("Checklist item deleted."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4145,6 +4224,8 @@
       $("subtaskTitle").value = "";
       $("subtaskSuggestions").replaceChildren();
       await loadTaskDetail(state.editing.id);
+      await refreshVisibleData({ notifications: false, bootstrap: false });
+      showToast(t("Checklist item added."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4181,6 +4262,7 @@
       });
       $("commentBody").value = "";
       await loadTaskDetail(state.editing.id);
+      showToast(t("Comment posted."));
     } catch (error) {
       showToast(error.message);
     }
@@ -4233,7 +4315,7 @@
         body: { ...body, version: task.version },
       });
       if (saved?.task) state.editing = { ...task, ...saved.task };
-      await Promise.all([loadBoard(state.currentBoardId), loadToday()]);
+      await refreshVisibleData({ notifications: false, bootstrap: false });
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -4286,15 +4368,13 @@
         }
       }
       closeModal();
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData();
       window.DriftSound?.play("capture");
       if (task) {
         showToast(t("Task saved."));
       } else {
         showToast(t("Task created."), undoToastAction(saved?.undo, async () => {
-          await loadBoard(state.currentBoardId);
-          await loadToday();
+          await refreshVisibleData({ notifications: false });
         }));
       }
     } catch (error) {
@@ -4313,7 +4393,7 @@
         body: { version: task.version, columnId },
       });
       state.editing = { ...task, ...result.task };
-      await Promise.all([loadTaskDetail(task.id), loadBoard(state.currentBoardId), loadToday()]);
+      await Promise.all([loadTaskDetail(task.id), refreshVisibleData({ notifications: false, bootstrap: false })]);
       window.DriftSound?.play("move");
       showToast(t("Task moved."));
     } catch (error) {
@@ -4343,8 +4423,7 @@
         body: { archived: true, version: task.version },
       });
       closeModal();
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData();
       showToast(t("Task archived."));
     } catch (error) {
       showToast(error.message);
@@ -4363,7 +4442,7 @@
         state.editing = { ...task, ...result.task };
         state.detail = state.detail ? { ...state.detail, task: { ...state.detail.task, ...result.task } } : state.detail;
       }
-      await Promise.all([loadTaskDetail(task.id), loadBoard(state.currentBoardId), loadToday()]);
+      await Promise.all([loadTaskDetail(task.id), refreshVisibleData({ notifications: false, bootstrap: false })]);
       window.DriftSound?.play(completed ? "complete" : "tap");
       showToast(t(completed ? "Task completed." : "Task reopened."));
     } catch (error) {
@@ -4385,15 +4464,13 @@
         return;
       }
       closeModal();
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData();
       window.DriftSound?.play(completed ? "complete" : "tap");
       showToast(
         t(completed ? "Task completed." : "Task reopened.")
           + (result?.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
         undoToastAction(result?.undo, async () => {
-          await loadBoard(state.currentBoardId);
-          await loadToday();
+          await refreshVisibleData({ notifications: false });
         })
       );
     } catch (error) {
@@ -4407,11 +4484,9 @@
     try {
       const result = await request(`/api/tasks/${encodeURIComponent(task.id)}`, { method: "DELETE" });
       closeModal();
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData();
       showToast(t("Task deleted."), undoToastAction(result?.undo, async () => {
-        await loadBoard(state.currentBoardId);
-        await loadToday();
+        await refreshVisibleData({ notifications: false });
       }));
     } catch (error) {
       showToast(error.message);
@@ -4791,15 +4866,8 @@
     if (!state.settings) return;
     const restoreScroll = state.view === "settings" ? window.scrollY : null;
     const currentWorkspace = workspace();
-    $("settingsWorkspaceName").textContent = currentWorkspace?.name ?? "Workspace";
-    $("settingsWorkspaceAvatar").textContent = (currentWorkspace?.name ?? "W").trim().slice(0, 2).toUpperCase();
     const role = currentWorkspace?.role ?? "OWNER";
-    $("settingsWorkspaceRole").textContent = t(role === "OWNER" ? "Owner" : role === "ADMIN" ? "Admin" : role === "MEMBER" ? "Member" : "Guest");
-    const user = state.boot?.user ?? {};
-    const displayName = user.name || user.email || t("Account");
-    $("settingsUserName").textContent = displayName;
-    $("settingsUserEmail").textContent = user.isGuest ? t("Guest session") : (user.email || t("Signed in"));
-    $("settingsUserAvatar").textContent = String(displayName).trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "G";
+    syncIdentityUi();
     const nav = $("settingsNav");
     const container = $("settingsSections");
     nav.replaceChildren();
@@ -4996,10 +5064,17 @@
         body: { name, ...(timezone ? { timezone } : {}) },
       });
       if (data?.user) state.boot.user = { ...state.boot.user, ...data.user };
+      if (state.boot?.user?.name) nameInput.value = state.boot.user.name;
+      state.members = {};
       window.DriftOffline?.cacheBootstrap(state.boot);
       renderAccount();
+      renderSidebar();
+      syncIdentityUi();
       setSettingsSaveState("saved");
-      showToast("Account updated.");
+      showToast(t("Account updated."));
+      void refreshSettingsIdentitySections();
+      if (state.editing) void loadTaskDetail(state.editing.id);
+      void refreshVisibleData({ notifications: false, bootstrap: false });
     } catch (error) {
       setSettingsSaveState("error");
       showToast(error.message);
@@ -5020,7 +5095,8 @@
         node.value = data?.user?.timezone || timezone;
       });
       setSettingsSaveState("saved");
-      showToast("Time zone updated.");
+      showToast(t("Time zone updated."));
+      void refreshVisibleData({ notifications: false, bootstrap: false });
     } catch (error) {
       setSettingsSaveState("error");
       showToast(error.message);
@@ -5789,8 +5865,11 @@
           if (found) found.name = data.name;
           window.DriftOffline?.cacheBootstrap(state.boot);
           renderSidebar();
+          syncIdentityUi();
+          if (state.board) renderBoard();
           showToast(t("Workspace updated."));
           render();
+          void refreshSettingsPanel("members");
         } catch (error) {
           showToast(error.message);
           await refresh();
@@ -5964,6 +6043,7 @@
         ]);
         const members = memberResult?.members ?? [];
         const invites = inviteResult?.invites ?? [];
+        state.members[workspace().id] = members;
         memberCount = members.length;
         description.textContent = `${memberCount} ${memberCount === 1 ? t("member") : t("members")} in ${workspace()?.name ?? t("this workspace")}. ${t("Roles are workspace-scoped.")}`;
         card.replaceChildren();
@@ -5998,6 +6078,7 @@
                 });
                 showToast(t("Role updated."));
                 await refresh();
+                scheduleBootstrapRefresh();
               } catch (error) {
                 showToast(error.message);
                 await refresh();
@@ -6014,6 +6095,7 @@
                 await request(`/api/workspaces/${encodeURIComponent(workspace().id)}/members/${encodeURIComponent(member.userId || member.id)}`, { method: "DELETE" });
                 showToast(t("Member removed."));
                 await refresh();
+                scheduleBootstrapRefresh();
               } catch (error) {
                 showToast(error.message);
               }
@@ -7518,13 +7600,11 @@
         showToast(t("Saved on this device — will sync when you reconnect."));
         return;
       }
-      await loadBoard(state.currentBoardId);
-      await loadToday();
+      await refreshVisibleData({ notifications: false });
       focusTaskCard(task.id);
       announce(t("Moved {{title}} to {{column}}.", { title: task.title, column: target.name }));
       showToast(t("Task moved."), undoToastAction(result?.undo, async () => {
-        await loadBoard(state.currentBoardId);
-        await loadToday();
+        await refreshVisibleData({ notifications: false });
         focusTaskCard(task.id);
       }));
     } catch (error) {
@@ -7539,11 +7619,11 @@
         body: { direction: direction === "ArrowUp" ? "up" : "down" },
       });
       if (result?.moved === false) return;
-      await loadBoard(state.currentBoardId);
+      await refreshVisibleData({ notifications: false });
       focusTaskCard(task.id);
       announce(t("Reordered {{title}}.", { title: task.title }));
       showToast(t("Task reordered."), undoToastAction(result?.undo, async () => {
-        await loadBoard(state.currentBoardId);
+        await refreshVisibleData({ notifications: false });
         focusTaskCard(task.id);
       }));
     } catch (error) {

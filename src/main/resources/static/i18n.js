@@ -1209,6 +1209,18 @@
     "Copy failed. Select the secret and copy it manually.": "複製失敗。請選取密鑰後手動複製。",
     "Shortcut sheet": "快速鍵一覽",
     "See every keyboard shortcut in one place.": "在同一個地方查看所有鍵盤快速鍵。",
+    "Time zone updated.": "時區已更新。",
+    "Workspace switched.": "已切換工作區。",
+    "Invitation accepted.": "已接受邀請。",
+    "Comment posted.": "留言已發布。",
+    "Checklist item added.": "已新增檢查清單項目。",
+    "Checklist item deleted.": "已刪除檢查清單項目。",
+    "Dependency added.": "已新增相依任務。",
+    "Dependency removed.": "已移除相依任務。",
+    "Reminder added.": "已新增提醒。",
+    "Reminder removed.": "已移除提醒。",
+    "Attachment uploaded.": "附件已上傳。",
+    "Attachment deleted.": "附件已刪除。",
   });
 
   let currentLocale = "en";

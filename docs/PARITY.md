@@ -175,6 +175,7 @@ Status key:
 | Settings navigation / scrollspy | DONE | One-page Settings keeps click-to-jump, while the desktop sidebar and mobile section picker follow the section actually in view. Scrollspy pauses during search, updates the URL hash, preserves the active section across re-renders, and keeps short sections (Keyboard, Automations, Audit) selectable. |
 | Restored rewrite-only admin capabilities | DONE | Kept the reference layout while restoring useful rewrite capabilities: token created/expires/last-used metadata and copy; webhook event selection, one-time signing secret with copy, pause/resume, delivery count/last-delivery status, URL copy; SSO configured badge, enable/require toggles, and Try SSO; invite-link copy, member joined dates, shortcut-sheet entry point, and automation board scope. |
 | Workspace settings visibility | DONE | Personal Owner/Admin workspaces expose the newer four-item group: Workspace, Automations, Integrations, and Audit log. Team/org Owners/Admins keep the full six-item group; team members retain the existing People/Policies/Automations entries; personal non-admins see Workspace only. |
+| Live updates / mutation feedback | DONE | Display-name changes immediately update the topbar, account menu, Settings identity block, People/Audit sections, board/search assignees, and open task drawers. Workspace-name changes update the sidebar, Settings header, People description, and board header. Task/board mutations refresh the current view plus Board and Today, debounce sidebar/workspace counts, and refresh notifications. Returning to a tab refreshes the visible data. Silent checklist, dependency, reminder, attachment, comment, role, workspace-switch, and invitation actions now report success. |
 | Offline / PWA | DONE | Service worker, manifest, cached bootstrap/board/today/settings, offline queue with per-write idempotency keys, replay, retry/discard, explicit 409 failures, dedicated `/offline` page |
 | i18n | DONE | English / Traditional Chinese for every statically extracted UI, auth, board, task, calendar, archive, search, settings, and admin string; `t()` audit reports zero missing keys |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
@@ -320,6 +321,14 @@ Fixed during the pass:
   Automations, Integrations, Audit log). Team/org admins keep the full six items, team members
   keep the existing People/Policies/Automations entries, and personal non-admins see Workspace
   only.
+- Live mutation propagation now updates every visible identity surface. Changing the display
+  name updates the topbar, account menu, Settings header/footer, People and Audit reads, board
+  and search assignees, and an open task drawer; changing the workspace name updates the
+  sidebar, Settings header, People copy, and board header. Task/board mutations refresh the
+  current view as well as Board and Today, with debounced workspace/board counts and
+  notifications. Returning to the tab refreshes visible data, and previously silent checklist,
+  dependency, reminder, attachment, comment, role, workspace-switch, and invitation actions
+  now show success toasts.
 - Restored rewrite-only admin capabilities without changing the default reference layout:
   API-token metadata/copy, webhook event selection and one-time signing secrets, delivery
   status, pause/resume and URL copy; SSO status, enable/require toggles and Try SSO; invite-link

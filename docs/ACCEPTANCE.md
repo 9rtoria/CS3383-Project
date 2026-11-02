@@ -47,6 +47,7 @@ Playwright browser runs verified:
 - Service worker/PWA registration and offline queue render path remain present.
 - No browser console errors were observed across the main views and auth flows.
 - Final scrollspy/feature pass: all Settings sections synced on desktop and at 390 px mobile width, all main views reported zero horizontal overflow, and the token, webhook, SSO, invite-link, joined-date, shortcut-sheet, and workspace-gating flows completed with zero console errors.
+- Live-update pass: changing a display name updated the topbar, Settings header/footer, People member row, board assignee data, task-drawer assignee options, and board filter without a reload. Changing a workspace name updated the Settings header, topbar, sidebar, People description, and board eyebrow. A task title edited in the drawer updated Search results in place; comment and checklist actions showed their success toasts; a simulated external task edit appeared after the tab-visibility refresh. No console errors were observed.
 
 Screenshots are in [`docs/screenshots`](screenshots/):
 
