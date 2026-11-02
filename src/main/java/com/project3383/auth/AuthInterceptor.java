@@ -28,6 +28,22 @@ public class AuthInterceptor implements HandlerInterceptor {
         this.sessionService = sessionService;
     }
 
+    public static String tokenWorkspaceId() {
+        if (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
+            instanceof org.springframework.web.context.request.ServletRequestAttributes attributes) {
+            Object scoped = attributes.getRequest().getAttribute(TOKEN_WORKSPACE);
+            return scoped == null ? null : String.valueOf(scoped);
+        }
+        return null;
+    }
+
+    public static void requireTokenWorkspace(String workspaceId) {
+        String scoped = tokenWorkspaceId();
+        if (scoped != null && workspaceId != null && !scoped.equals(workspaceId)) {
+            throw com.project3383.api.ApiException.forbidden("This API token is scoped to another workspace.");
+        }
+    }
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if ("GET".equals(request.getMethod()) && request.getRequestURI().matches("^/api/invites/[^/]+$")) {
@@ -48,6 +64,18 @@ public class AuthInterceptor implements HandlerInterceptor {
             }
             request.setAttribute(TOKEN_USER, token.get("userId"));
             request.setAttribute(TOKEN_WORKSPACE, token.get("workspaceId"));
+            String requestedWorkspace = request.getHeader("X-Workspace-Id");
+            if (requestedWorkspace == null) requestedWorkspace = request.getParameter("workspaceId");
+            if (requestedWorkspace != null && !requestedWorkspace.equals(String.valueOf(token.get("workspaceId")))) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.setCharacterEncoding("UTF-8");
+                response.getWriter().write(objectMapper.writeValueAsString(Map.of(
+                    "code", "FORBIDDEN",
+                    "message", "This API token is scoped to another workspace."
+                )));
+                return false;
+            }
             return true;
         }
 

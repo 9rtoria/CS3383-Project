@@ -73,6 +73,7 @@
 <symbol id="i-key" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".8" fill="currentColor" stroke="none"/></symbol>
 <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
 <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
 <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
 <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></symbol>
 <symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"/></symbol>
@@ -94,9 +95,9 @@
         <div class="brand-menu-wrap">
           <button type="button" id="sidebarPlusButton" class="icon-btn quiet" title="New board" aria-label="New board" aria-haspopup="menu" aria-expanded="false"><svg class="icon"><use href="#i-plus"/></svg></button>
           <div id="sidebarPlusMenu" class="board-more-menu brand-menu hidden">
-            <button type="button" id="sidebarNewBoard" class="menu-item">New board</button>
-            <button type="button" id="sidebarQuickCapture" class="menu-item">Quick capture</button>
-            <button type="button" id="sidebarWorkspaceSettings" class="menu-item">Workspace settings</button>
+            <button type="button" id="sidebarNewBoard" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-board"/></svg>New board</button>
+            <button type="button" id="sidebarQuickCapture" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-capture"/></svg>Quick capture</button>
+            <button type="button" id="sidebarWorkspaceSettings" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>Workspace settings</button>
           </div>
         </div>
       </div>
@@ -326,12 +327,12 @@
             <button type="button" id="boardNewTaskButton" class="btn primary"><svg class="icon"><use href="#i-plus"/></svg><span>New task</span><kbd class="kbd">C</kbd></button>
             <button type="button" id="boardMoreButton" class="icon-btn" aria-label="Board actions" aria-expanded="false"><svg class="icon"><use href="#i-more"/></svg></button>
             <div id="boardMoreMenu" class="board-more-menu hidden">
-              <button type="button" id="boardSettingsButton" class="menu-item">Board settings</button>
-              <button type="button" id="boardAddColumnButton" class="menu-item">Add column</button>
-              <button type="button" id="boardShareButton" class="menu-item">Share link</button>
-              <button type="button" id="boardDuplicateButton" class="menu-item">Duplicate</button>
-              <button type="button" id="boardArchiveButton" class="menu-item">Archive</button>
-              <button type="button" id="boardDeleteButton" class="menu-item danger">Delete</button>
+              <button type="button" id="boardSettingsButton" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>Board settings</button>
+              <button type="button" id="boardShareButton" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg><span id="boardShareLabel">Share read-only link</span></button>
+              <button type="button" id="boardDuplicateButton" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>Duplicate board</button>
+              <div class="menu-sep"></div>
+              <button type="button" id="boardArchiveButton" class="menu-item"><svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg>Archive board</button>
+              <button type="button" id="boardDeleteButton" class="menu-item danger"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>Delete board</button>
             </div>
           </div>
         </div>
@@ -343,12 +344,12 @@
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
-            <option value="none">None</option>
+            <option value="none">No priority</option>
           </select>
           <select id="boardAssigneeFilter" class="select" aria-label="Filter by assignee">
             <option value="">Everyone</option>
           </select>
-          <button type="button" id="boardClearFiltersButton" class="btn ghost sm hidden">Clear filters</button>
+          <button type="button" id="boardClearFiltersButton" class="btn ghost sm hidden">Clear</button>
           <span class="board-toolbar-end">
             <span id="boardTaskCount" class="board-task-count"></span>
             <button type="button" id="boardAddTaskButton" class="icon-btn" title="Add column" aria-label="Add column"><svg class="icon"><use href="#i-plus"/></svg></button>
@@ -498,12 +499,14 @@
             <select id="searchBoardFilter" class="select" aria-label="Filter by board">
               <option value="">Any board</option>
             </select>
+            <button type="button" id="searchResetButton" class="btn ghost sm hidden"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>Reset</button>
           </div>
           <div class="search-results-head">
             <span id="searchMeta">0 results</span>
             <span id="searchStatusHint"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg> all statuses</span>
           </div>
           <div id="searchResults" class="search-results" data-i18n-skip></div>
+          <button type="button" id="searchLoadMore" class="btn block hidden" style="margin-top:14px">Load more</button>
           <p id="searchScopeHint" class="field-hint search-scope">Search is scoped to this workspace. Private boards only appear if they are yours.</p>
           <button type="button" id="searchOpenBoardButton" class="btn ghost sm search-open-board">Open a board <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></button>
         </div>
@@ -846,7 +849,7 @@
             <div id="commentList" class="detail-list" data-i18n-skip></div>
             <div id="commentForm" class="comment-compose">
               <textarea id="commentBody" class="textarea" maxlength="10000" placeholder="Add context, ask a question, or leave a note for later…" aria-label="New comment"></textarea>
-              <button type="button" id="commentAddButton" class="btn primary sm">Send</button>
+              <button type="button" id="commentAddButton" class="btn primary sm" disabled>Send</button>
             </div>
           </div>
           <div class="detail-section hidden">
@@ -875,8 +878,6 @@
               <button type="button" id="deleteTaskButton" class="menu-item danger">Delete task</button>
             </div>
           </div>
-          <button type="button" id="completeTaskButton" class="btn spacer hidden" style="display:none">Complete</button>
-          <button type="button" id="reopenTaskButton" class="btn spacer hidden" style="display:none">Reopen</button>
           <button type="submit" id="saveTaskButton" class="btn primary hidden">Save</button>
         </div>
       </form>

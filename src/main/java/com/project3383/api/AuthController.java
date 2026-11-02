@@ -5,6 +5,7 @@ import com.project3383.app.SessionService;
 import com.project3383.auth.AuthInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,18 +21,26 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private static final String GUEST_MERGE = "project3383.guestMerge";
+    private static final Map<String, List<Long>> MAGIC_ATTEMPTS = new ConcurrentHashMap<>();
 
     private final AppService appService;
     private final SessionService sessionService;
+
+    @Value("${project3383.dev-email-preview:true}")
+    private boolean devEmailPreview;
 
     public AuthController(AppService appService, SessionService sessionService) {
         this.appService = appService;
@@ -120,6 +129,8 @@ public class AuthController {
     public Map<String, Object> magic(HttpServletRequest request, HttpSession session,
                                      @RequestBody ApiDtos.MagicRequest input) {
         String state = UUID.randomUUID() + "-" + UUID.randomUUID();
+        String email = input == null ? "" : String.valueOf(input.email()).trim().toLowerCase();
+        throttleMagicLink(email, request.getRemoteAddr());
         String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().toUriString();
         AppService.MagicLink link = appService.requestMagicLink(
             input == null ? null : input.email(),
@@ -131,7 +142,7 @@ public class AuthController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("sent", true);
         result.put("message", "If that email can receive mail, a one-time link is on its way.");
-        if (link.devUrl() != null) result.put("devUrl", link.devUrl());
+        if (devEmailPreview && link.devUrl() != null) result.put("devUrl", link.devUrl());
         return result;
     }
 
@@ -170,6 +181,24 @@ public class AuthController {
             return redirect(baseUrl + destination);
         } catch (ApiException exception) {
             return redirect(baseUrl + "/auth?error=magic_invalid");
+        }
+    }
+
+    private void throttleMagicLink(String email, String remoteAddress) {
+        long now = Instant.now().getEpochSecond();
+        long cutoff = now - 15 * 60;
+        String key = (remoteAddress == null ? "unknown" : remoteAddress) + "|" + email;
+        List<Long> attempts = MAGIC_ATTEMPTS.computeIfAbsent(key, ignored -> new ArrayList<>());
+        synchronized (attempts) {
+            attempts.removeIf(value -> value < cutoff);
+            if (attempts.size() >= 5) {
+                throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED",
+                    "Too many sign-in links. Try again in a few minutes.");
+            }
+            attempts.add(now);
+        }
+        if (MAGIC_ATTEMPTS.size() > 10_000) {
+            MAGIC_ATTEMPTS.entrySet().removeIf(entry -> entry.getValue().stream().allMatch(value -> value < cutoff));
         }
     }
 

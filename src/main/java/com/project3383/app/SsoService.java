@@ -189,7 +189,7 @@ public class SsoService {
             if (email == null || email.isBlank()) return Completion.error("email_required");
             email = email.trim().toLowerCase();
             Object verified = profile.get("email_verified");
-            if (verified != null && !Boolean.TRUE.equals(verified) && !"true".equals(String.valueOf(verified))) {
+            if (!Boolean.TRUE.equals(verified) && !"true".equals(String.valueOf(verified))) {
                 return Completion.error("email_unverified");
             }
             List<String> domains = new ArrayList<>();
@@ -214,12 +214,6 @@ public class SsoService {
                 String existingId = String.valueOf(existing.get("id"));
                 if (currentUserId != null && currentUserId.equals(existingId)) {
                     userId = existingId;
-                } else if (guestId != null) {
-                    jdbc.update("""
-                        UPDATE app_user SET email = ?, display_name = COALESCE(NULLIF(?, ''), display_name),
-                                            is_guest = 0 WHERE id = ?
-                        """, email, name == null ? "" : name, guestId);
-                    userId = guestId;
                 } else {
                     return Completion.error("account_link_required");
                 }
@@ -404,6 +398,7 @@ public class SsoService {
     }
 
     private void requireAdmin(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         String role = jdbc.queryForList("""
             SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL

@@ -414,3 +414,80 @@ Apart from the deliberate capability restorations above, the remaining visible d
 
 Live third-party OAuth/SMTP/OIDC verification and manual screen-reader sign-off remain
 environmental checks as listed above.
+
+### Third full-program audit (2026-11-02)
+
+A further end-to-end audit covered every page, the task drawer, quick capture, command palette,
+notifications, account and board menus, auth/invite/share pages, Settings, responsive layouts,
+dark theme, Chinese locale, all API controllers, and the SQLite data paths.
+
+Backend and data-integrity changes in this pass:
+
+- Magic-link development URLs are gated by `project3383.dev-email-preview` and disabled by the
+  production profile; repeated requests are throttled per address and email.
+- API tokens are constrained in the request interceptor and in workspace-scoped services;
+  `bootstrap` and `/api/workspaces` only expose the token's workspace.
+- MFA enforcement requires an actually enrolled factor, not just a session flag. New TOTP
+  setup is staged in a pending secret until the first code is confirmed, so an abandoned reset
+  cannot disable or replace a working factor.
+- Invite creation preserves the `GUEST` role. Pending invites are admin-only. A member can
+  leave a workspace, with last-owner transfer protection.
+- Board visibility changes are limited to the creator or an admin, with optimistic-version
+  conflicts surfaced instead of silently returning another writer's row.
+- Cross-workspace label deletion is rejected. Task labels accept the reference limit of 20
+  labels and enforce the 40-character label name limit.
+- Task create/update/delete/move/complete/focus, comments, Today actions, and data import are
+  transactional. Completion paths consistently clear auto-plan blocks, dispatch completion
+  hooks, and create the next recurrence. Next occurrences now use the post-update task values
+  and copy unsent reminders at the shifted due time.
+- Today selection is per user through `today_selection`; accepted work counts toward capacity,
+  and completed plan blocks are excluded from Today and Calendar.
+- All-day reminders anchor at 17:00 local, matching the reference's all-day convention.
+- ICS output uses valid UTC timestamps and real due times instead of midnight placeholders.
+- Archive is newest-first. Task `completed_at` is persisted and used by Archive, Insights, and
+  Auto-plan instead of treating later edits as completion.
+- Date and date-time inputs are validated as 400 errors; malformed legacy dates no longer
+  throw 500s from Insights or Auto-plan.
+- Private-board assignees must be able to read the board. Attachment download, delete, and
+  upload apply the same private-board check.
+- Webhook signing secrets are encrypted at rest with the local AES-GCM key and decrypted only
+  for signing. Failed email delivery is capped at five attempts.
+- SSO requires an explicit `email_verified: true` claim, rejects account collisions instead of
+  overwriting a guest email, and rotates the session ID on callback.
+- `GET /api/boards?workspaceId=...` now matches the published OpenAPI contract.
+- Imported JSON assignee objects round-trip by email/name.
+
+Frontend and interaction changes in this pass:
+
+- Search gained Reset, cursor pagination with Load more, stale-response protection, and stable
+  paging; the command palette gained Keyboard shortcuts, theme toggle, Settings, and board
+  commands; board filters gained Assigned to me / Unassigned and label chips in list view.
+- Board actions show icons, close after selection, and expose Share read-only link,
+  Duplicate board, Archive board, and Delete board with the reference wording.
+- URL state now tracks view, board, and open task; `?board=` opens Board; refresh restores the
+  same state.
+- Today's empty state, Next 14 days destination, per-day calendar layout, dependency rows,
+  comments, attachment actions, activity Undo, and disabled-state feedback were completed.
+- Bulk selection remains a rewrite-only desktop capability and now appears on hover instead
+  of being permanently hidden.
+- The task drawer uses theme surfaces in dark mode, and Chinese translations cover the new UI
+  strings (`i18n` audit: 747 keys, 0 missing).
+
+Verification for this pass: `mvnw test` 36/36, `mvnw package -DskipTests`, JavaScript syntax
+checks, static ID/SVG audits (0 missing), i18n audit (0 missing), API pagination/rate-limit/
+token-scope/recurrence/reminder/date-validation smoke tests, and Playwright checks across all
+views, Settings, drawer, palette, capture, mobile, tablet, dark theme, and Chinese locale.
+
+Honest remaining limitations:
+
+- OAuth, SMTP, and OIDC still require real external credentials for a final live-provider
+  smoke test; the repository tests use local mock providers and a local SMTP socket.
+- `focus_date` remains as a single legacy field for API compatibility. Today planning reads the
+  per-user `today_selection` table, but an old client that only reads `focusDate` can see the
+  last writer's value in a shared workspace.
+- Cursor pagination is offset-based inside an opaque cursor; concurrent edits can shift a page
+  boundary, although responses never mix stale search generations in the UI.
+- Webhook secret encryption depends on the local MFA key. Rotating that key requires
+  re-entering existing secrets.
+- Browser speech, notifications, and sound remain browser-dependent.
+- Mobile Upcoming intentionally keeps the reference's own horizontal scroll.

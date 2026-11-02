@@ -85,6 +85,7 @@ public class DataService {
         }
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public Map<String, Object> importData(String userId, ApiDtos.ImportRequest input) {
         if (input == null || input.workspaceId() == null || input.boardId() == null) {
             throw ApiException.badRequest("Choose a workspace and a board.");
@@ -150,23 +151,26 @@ public class DataService {
             if (description.length() > 50_000) description = description.substring(0, 50_000);
             DueValue due = parseDue(candidate.get("dueDate"));
             Integer estimate = parseEstimate(candidate.get("estimateMinutes"));
-            String assigneeId = resolveAssignee(input.workspaceId(), stringValue(candidate.get("assignee")));
+            String assigneeId = resolveAssignee(input.workspaceId(), assigneeValue(candidate.get("assignee")));
             Integer lastPosition = jdbc.queryForObject("""
                 SELECT COALESCE(MAX(position), -1) FROM task WHERE column_id = ? AND deleted_at IS NULL
                 """, Integer.class, column.get("id"));
             int position = (lastPosition == null ? -1 : lastPosition) + 1;
             String taskId = UUID.randomUUID().toString();
             String now = Instant.now().toString();
+            String completedAt = number(column.get("isDone")) == 1
+                ? (labelValue == null || labelValue.isBlank() ? now : labelValue.trim())
+                : null;
             try {
                 jdbc.update("""
                     INSERT INTO task (id, workspace_id, board_id, column_id, title, description, priority,
                                       start_date, due_date, due_all_day, estimate_minutes, actual_minutes,
                                       assignee_id, recurrence_rule, recurrence_ends_at, position,
-                                      version, created_by, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, NULL, NULL, ?, 1, ?, ?, ?)
+                                      version, created_by, created_at, updated_at, completed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, ?, NULL, NULL, ?, 1, ?, ?, ?, ?)
                     """, taskId, input.workspaceId(), input.boardId(), column.get("id"), title,
                     description, priority, due == null ? null : due.value(), due == null || due.allDay() ? 1 : 0,
-                    estimate, assigneeId, position, userId, now, now);
+                    estimate, assigneeId, position, userId, now, now, completedAt);
             } catch (Exception exception) {
                 throw ApiException.conflict("Import stopped because a task could not be written.", imported + 1);
             }
@@ -206,7 +210,7 @@ public class DataService {
                    t.estimate_minutes AS estimateMinutes, t.actual_minutes AS actualMinutes,
                    t.archived_at AS archivedAt, t.recurrence_rule AS recurrenceRule,
                    t.recurrence_ends_at AS recurrenceEndsAt, t.position,
-                   t.created_at AS createdAt, t.updated_at AS updatedAt,
+                   t.created_at AS createdAt, t.updated_at AS updatedAt, t.completed_at AS completedAt,
                    c.is_done AS completed,
                    t.assignee_id AS assigneeId, u.display_name AS assigneeName, u.email AS assigneeEmail
             FROM task t
@@ -228,7 +232,7 @@ public class DataService {
             task.put("dueAllDay", number(row.get("dueAllDay")) == 1);
             task.put("estimateMinutes", row.get("estimateMinutes"));
             task.put("actualMinutes", row.get("actualMinutes"));
-            task.put("completedAt", number(row.get("completed")) == 1 ? row.get("updatedAt") : null);
+            task.put("completedAt", number(row.get("completed")) == 1 ? row.get("completedAt") : null);
             task.put("archivedAt", row.get("archivedAt"));
             task.put("recurrenceRule", row.get("recurrenceRule"));
             task.put("recurrenceEndsAt", row.get("recurrenceEndsAt"));
@@ -430,6 +434,14 @@ public class DataService {
         return columns.get(0);
     }
 
+    private String assigneeValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            String email = stringValue(map.get("email"));
+            return email == null || email.isBlank() ? stringValue(map.get("name")) : email;
+        }
+        return stringValue(value);
+    }
+
     private String resolveAssignee(String workspaceId, String value) {
         if (value == null || value.isBlank()) return null;
         String needle = value.trim().toLowerCase();
@@ -496,6 +508,7 @@ public class DataService {
     }
 
     private String roleFor(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         return jdbc.queryForList("""
             SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL

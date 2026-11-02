@@ -42,6 +42,7 @@ public class WebhookService {
     private final ObjectMapper objectMapper;
     private final AuditService auditService;
     private final MfaGuard mfaGuard;
+    private final MfaService mfaService;
     private final boolean allowPrivate;
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))
@@ -53,12 +54,14 @@ public class WebhookService {
         ObjectMapper objectMapper,
         AuditService auditService,
         MfaGuard mfaGuard,
+        MfaService mfaService,
         @Value("${project3383.webhook.allow-private:false}") boolean allowPrivate
     ) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
         this.mfaGuard = mfaGuard;
+        this.mfaService = mfaService;
         this.allowPrivate = allowPrivate;
     }
 
@@ -101,7 +104,7 @@ public class WebhookService {
             INSERT INTO webhook (id, workspace_id, kind, url, secret_enc, enabled, events_json,
                                  created_by, last_status, last_delivery_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL, NULL, ?, ?)
-            """, id, input.workspaceId(), kind, url, secret, json(events),
+            """, id, input.workspaceId(), kind, url, mfaService.encryptSecret(secret), json(events),
             userId, now, now);
         auditService.record(input.workspaceId(), userId, "webhook.created", "webhook", id,
             Map.of("kind", kind));
@@ -238,7 +241,7 @@ public class WebhookService {
                 .header("user-agent", "Drift-Webhook/1.0")
                 .header("x-drift-event", String.valueOf(delivery.get("eventType")))
                 .POST(HttpRequest.BodyPublishers.ofString(String.valueOf(delivery.get("payload"))));
-            String secret = delivery.get("secret") == null ? null : String.valueOf(delivery.get("secret"));
+            String secret = delivery.get("secret") == null ? null : mfaService.decryptSecret(String.valueOf(delivery.get("secret")));
             if (secret != null && !secret.isBlank()) {
                 request.header("x-drift-signature", "sha256=" + hmac(secret, String.valueOf(delivery.get("payload"))));
             }
@@ -400,6 +403,7 @@ public class WebhookService {
     }
 
     private void requireAdmin(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         String role = jdbc.queryForList("""
             SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL

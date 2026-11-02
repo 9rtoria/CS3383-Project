@@ -36,7 +36,8 @@ public class EmailDeliveryService {
         if (sender == null) return;
         List<Map<String, Object>> messages = jdbc.queryForList("""
             SELECT id, recipient, subject, body FROM email_message
-            WHERE status IN ('queued', 'failed') AND created_at < ?
+            WHERE (status = 'queued' OR (status = 'failed' AND attempts < 5))
+              AND created_at < ?
             ORDER BY created_at LIMIT 20
             """, Instant.now().minusSeconds(60).toString());
         for (Map<String, Object> message : messages) {
@@ -55,7 +56,7 @@ public class EmailDeliveryService {
                     : exception.getMessage();
                 if (error.length() > 1000) error = error.substring(0, 1000);
                 jdbc.update("""
-                    UPDATE email_message SET status = 'failed', error = ? WHERE id = ?
+                    UPDATE email_message SET status = 'failed', attempts = attempts + 1, error = ? WHERE id = ?
                     """, error, message.get("id"));
             }
         }

@@ -41,6 +41,12 @@ public class AppController {
         return appService.bootstrap(CurrentUser.id(session));
     }
 
+    @GetMapping("/boards")
+    public Map<String, Object> boards(HttpSession session,
+                                      @RequestParam(required = false) String workspaceId) {
+        return appService.boardList(CurrentUser.id(session), workspaceId);
+    }
+
     @GetMapping("/boards/{id}")
     public Map<String, Object> board(HttpSession session, @PathVariable String id) {
         return appService.board(CurrentUser.id(session), id);
@@ -113,10 +119,12 @@ public class AppController {
         @RequestParam(required = false) String boardId,
         @RequestParam(required = false) String label,
         @RequestParam(required = false) String dateFrom,
-        @RequestParam(required = false) String dateTo
+        @RequestParam(required = false) String dateTo,
+        @RequestParam(required = false) String cursor,
+        @RequestParam(defaultValue = "30") int limit
     ) {
         return appService.search(CurrentUser.id(session), workspaceId, q, status,
-            priority, boardId, label, dateFrom, dateTo);
+            priority, boardId, label, dateFrom, dateTo, cursor, limit);
     }
 
     @GetMapping("/insights")

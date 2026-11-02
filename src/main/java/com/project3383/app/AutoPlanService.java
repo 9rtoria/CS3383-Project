@@ -639,12 +639,12 @@ public class AutoPlanService {
         String end = LocalDate.parse(endDate).plusDays(1).atStartOfDay(zone).toInstant()
             .minusNanos(1).toString();
         for (Map<String, Object> row : jdbc.queryForList("""
-            SELECT t.updated_at AS completedAt, t.actual_minutes AS actualMinutes
+            SELECT t.completed_at AS completedAt, t.actual_minutes AS actualMinutes
             FROM task t JOIN board_column c ON c.id = t.column_id
             JOIN board b ON b.id = t.board_id
             WHERE t.workspace_id = ? AND t.deleted_at IS NULL AND b.deleted_at IS NULL
               AND c.is_done = 1 AND t.actual_minutes IS NOT NULL
-              AND t.updated_at BETWEEN ? AND ?
+              AND t.completed_at BETWEEN ? AND ?
               AND (b.visibility = 'workspace' OR b.created_by = ? OR ? = 1)
             """, workspaceId, start, end, userId, canSeePrivate(userId, workspaceId))) {
             Object actualMinutes = row.get("actualMinutes");
@@ -785,9 +785,13 @@ public class AutoPlanService {
         if (dueDate == null) return 0;
         if (dueDate.compareTo(today) < 0) return 900;
         if (dueDate.equals(today)) return 700;
-        long days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(today), LocalDate.parse(dueDate));
-        if (days <= 2) return 520;
-        if (days <= 7) return 260;
+        try {
+            long days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(today), LocalDate.parse(dueDate));
+            if (days <= 2) return 520;
+            if (days <= 7) return 260;
+        } catch (java.time.DateTimeException ignored) {
+            return 0;
+        }
         return 80;
     }
 
@@ -886,6 +890,7 @@ public class AutoPlanService {
     }
 
     private void requireMembership(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         Integer count = jdbc.queryForObject("""
             SELECT COUNT(*) FROM membership WHERE user_id = ? AND workspace_id = ?
             """, Integer.class, userId, workspaceId);

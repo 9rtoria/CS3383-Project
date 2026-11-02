@@ -189,12 +189,13 @@ public class DemoSeedRunner implements CommandLineRunner {
             String updatedAt = task.completedAt() == null ? now : task.completedAt().toString();
             jdbc.update("""
                 INSERT INTO task (id, workspace_id, board_id, column_id, title, description, priority,
-                                  due_date, due_all_day, estimate_minutes, focus_date, position, version,
-                                  created_by, created_at, updated_at, assignee_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                                  due_date, due_all_day, estimate_minutes, focus_date, position,
+                                  completed_at, version, created_by, created_at, updated_at, assignee_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
                 """, taskId, workspaceId, boardId, columnId, task.title(), task.description(),
                 task.priority(), due, task.allDay() ? 1 : 0, task.estimate(),
                 task.focus() == null ? null : task.focus().toString(), position,
+                task.completedAt() == null ? null : task.completedAt().toString(),
                 userId, now, updatedAt, task.assignee() ? userId : null);
             for (String label : task.labels()) {
                 String labelId = labels.get(label);

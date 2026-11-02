@@ -573,6 +573,7 @@ public class AutomationService {
     }
 
     private void requireAdmin(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         String role = jdbc.queryForList("""
             SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL

@@ -4,6 +4,7 @@ import com.project3383.app.SessionService;
 import com.project3383.app.SsoService;
 import com.project3383.auth.AuthInterceptor;
 import com.project3383.auth.CurrentUser;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -55,7 +56,8 @@ public class SsoController {
     }
 
     @GetMapping("/api/auth/sso/{workspaceId}/callback")
-    public ResponseEntity<Void> callback(HttpSession session, @PathVariable String workspaceId,
+    public ResponseEntity<Void> callback(HttpServletRequest request, HttpSession session,
+                                         @PathVariable String workspaceId,
                                          @RequestParam(required = false) String code,
                                          @RequestParam(required = false) String state,
                                          @RequestParam(required = false) String error) {
@@ -68,9 +70,11 @@ public class SsoController {
         if (completion.mfaChallenge() != null) {
             return redirect(baseUrl + "/?ssoMfa=" + completion.mfaChallenge());
         }
+        sessionService.revokeIfPresent(session);
+        request.changeSessionId();
         session.setAttribute(AuthInterceptor.SESSION_USER, completion.userId());
         session.setAttribute(AuthInterceptor.MFA_VERIFIED, true);
-        sessionService.start(session, completion.userId(), null, true);
+        sessionService.start(session, completion.userId(), request, true);
         return redirect(baseUrl + "/");
     }
 

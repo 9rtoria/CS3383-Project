@@ -179,6 +179,7 @@ public class UndoService {
     }
 
     private void requireMember(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         String role = jdbc.queryForList("""
             SELECT role FROM membership WHERE user_id = ? AND workspace_id = ?
             """, userId, workspaceId).stream().findFirst()

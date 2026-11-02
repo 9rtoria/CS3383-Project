@@ -11,10 +11,52 @@ Date: 2026-11-02
 | `./mvnw test` | 36 tests, 0 failures, 0 errors |
 | `./mvnw -DskipTests package` | Passed; executable jar produced |
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
-| Flyway migrations | V1–V9 validated and applied; schema advances through the column/WIP migration |
+| Flyway migrations | V1 to V12 validated and applied, including MFA pending secret, email attempts, and task completed_at |
+| Static audit | 420 HTML ids / 327 JS id references, 0 missing; 70 SVG symbols, 0 missing |
+| i18n audit | 747 keys, 0 missing |
 | Git | Clean working tree at the acceptance commit |
 
 The API smoke suite covers guest sessions, persistent/revocable sessions, account claim/sign-in and guest-workspace merge, roles and invite preview/acceptance, board templates/columns/WIP/archived boards, task CRUD and field-presence-safe PATCH, create-time reminders, drag/move/conflict handling, checklist deletion, Today selection and rebalancing, recurrence, comments/dependencies/attachments, notification preferences/read state, calendar/upcoming/search/archive/rich insights, labels/views/metrics/OpenAPI/client errors, idempotent replay and key conflicts, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), security headers/origin rejection, OAuth exchange contracts for GitHub, Google, and JWKS-verified Apple profiles including a tampered-signature rejection, and real SMTP socket delivery of a queued digest message.
+
+## Third full-program audit (2026-11-02)
+
+A third pass audited the whole application rather than only the two most recently touched
+views. It covered every main page, Settings, auth/invite/share pages, the task drawer, quick
+capture, command palette, notifications, account and board menus, desktop/tablet/mobile
+layouts, dark theme, Chinese locale, all API controllers, services, and schema migrations.
+
+Verified fixes in this pass:
+
+- Magic-link development URLs are disabled by the production profile and request throttling
+  returns 429 after five attempts while leaving other addresses unaffected.
+- API tokens are rejected on another workspace's `X-Workspace-Id` / `workspaceId` (403), and
+  bootstrap only lists the token's scoped workspace.
+- Task completion records `completed_at`, creates the next recurring occurrence from the
+  post-update values, and copies unsent reminders to the shifted due time.
+- Search cursor pagination returns non-overlapping pages. A 35-result smoke returned 30 then
+  35 rows with Load more disappearing at the end.
+- Invalid due dates return 400 instead of producing a 500 from Insights or Auto-plan.
+- Archive is newest-first; ICS feeds use valid UTC stamps and real due times.
+- MFA setup stages a pending secret instead of disabling an existing factor; SSO requires an
+  explicit verified email claim and rotates the session ID on callback.
+- Private-board assignment and attachment access apply board visibility.
+- Webhook secrets are encrypted at rest; failed email delivery stops after five attempts.
+- Imported JSON assignee objects resolve by email/name; imported completed tasks retain a
+  completion timestamp.
+- `GET /api/boards?workspaceId=...` matches the published OpenAPI contract.
+
+Browser checks in this pass: all seven main views plus Settings, the drawer, command palette,
+and quick capture rendered with zero horizontal overflow, zero unnamed visible controls, no
+undefined/NaN/placeholder text, and no console errors. Search Reset/pagination, board drag and
+keyboard move, bulk move, duplicate/archive/restore board, URL refresh, comments, dependencies,
+attachment actions, dark drawer, and Chinese locale were exercised. Static ID/SVG audits report
+zero missing references; the translation audit reports 747 keys with zero missing.
+
+Honest residuals are recorded in `PARITY.md`: live OAuth/SMTP/OIDC credentials are still
+required for final provider checks, the legacy single `focus_date` field remains for old API
+clients while per-user planning uses `today_selection`, offset cursors can shift under
+concurrent edits, webhook secret rotation requires re-entering secrets, and browser speech/
+notifications/sound remain browser-dependent.
 
 ## Browser acceptance
 

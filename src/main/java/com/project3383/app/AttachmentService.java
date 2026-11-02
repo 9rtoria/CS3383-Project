@@ -61,7 +61,7 @@ public class AttachmentService {
         if (!ALLOWED.contains(mimeType)) throw ApiException.badRequest("That file type is not allowed.");
         Map<String, Object> task = task(taskId);
         String workspaceId = (String) task.get("workspaceId");
-        requireMember(userId, workspaceId);
+        requireTaskAccess(userId, task, true);
         Integer attachmentsEnabled = jdbc.queryForObject("""
             SELECT attachments_enabled FROM workspace WHERE id = ? AND deleted_at IS NULL
             """, Integer.class, workspaceId);
@@ -98,12 +98,13 @@ public class AttachmentService {
     public AttachmentFile download(String userId, String attachmentId) {
         Map<String, Object> row = jdbc.queryForList("""
             SELECT a.id, a.task_id AS taskId, a.name, a.storage_name AS storageName,
-                   a.mime_type AS mimeType, t.workspace_id AS workspaceId
-            FROM attachment a JOIN task t ON t.id = a.task_id
+                   a.mime_type AS mimeType, t.workspace_id AS workspaceId,
+                   b.visibility AS boardVisibility, b.created_by AS boardCreatedBy
+            FROM attachment a JOIN task t ON t.id = a.task_id JOIN board b ON b.id = t.board_id
             WHERE a.id = ? AND a.deleted_at IS NULL AND t.deleted_at IS NULL
             """, attachmentId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Attachment not found."));
-        requireMembership(userId, (String) row.get("workspaceId"));
+        requireTaskAccess(userId, row, false);
         Path path = directory.resolve((String) row.get("storageName")).normalize();
         if (!path.startsWith(directory) || !Files.exists(path)) throw ApiException.notFound("Attachment file not found.");
         String mimeType = (String) row.get("mimeType");
@@ -120,12 +121,13 @@ public class AttachmentService {
 
     public Map<String, Object> delete(String userId, String attachmentId) {
         Map<String, Object> row = jdbc.queryForList("""
-            SELECT a.id, a.task_id AS taskId, a.storage_name AS storageName, t.workspace_id AS workspaceId
-            FROM attachment a JOIN task t ON t.id = a.task_id
+            SELECT a.id, a.task_id AS taskId, a.storage_name AS storageName, t.workspace_id AS workspaceId,
+                   b.visibility AS boardVisibility, b.created_by AS boardCreatedBy
+            FROM attachment a JOIN task t ON t.id = a.task_id JOIN board b ON b.id = t.board_id
             WHERE a.id = ? AND a.deleted_at IS NULL
             """, attachmentId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Attachment not found."));
-        requireMember(userId, (String) row.get("workspaceId"));
+        requireTaskAccess(userId, row, true);
         jdbc.update("UPDATE attachment SET deleted_at = ? WHERE id = ?", Instant.now().toString(), attachmentId);
         jdbc.update("""
             INSERT INTO activity_event (id, workspace_id, task_id, actor_id, action,
@@ -146,12 +148,36 @@ public class AttachmentService {
 
     private Map<String, Object> task(String taskId) {
         return jdbc.queryForList("""
-            SELECT id, workspace_id AS workspaceId FROM task WHERE id = ? AND deleted_at IS NULL
+            SELECT t.id, t.workspace_id AS workspaceId,
+                   b.visibility AS boardVisibility, b.created_by AS boardCreatedBy
+            FROM task t JOIN board b ON b.id = t.board_id
+            WHERE t.id = ? AND t.deleted_at IS NULL AND b.deleted_at IS NULL
             """, taskId).stream().findFirst()
             .orElseThrow(() -> ApiException.notFound("Task not found."));
     }
 
+    private void requireTaskAccess(String userId, Map<String, Object> row, boolean write) {
+        String workspaceId = (String) row.get("workspaceId");
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
+        String role = jdbc.queryForList("""
+            SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
+            WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
+            """, userId, workspaceId).stream().findFirst()
+            .map(item -> String.valueOf(item.get("role")))
+            .orElseThrow(() -> ApiException.notFound("Attachment not found."));
+        if (write && "GUEST".equals(role)) {
+            throw ApiException.forbidden("You do not have permission for this action.");
+        }
+        if ("private".equals(row.get("boardVisibility"))
+            && !userId.equals(String.valueOf(row.get("boardCreatedBy")))
+            && !"OWNER".equals(role) && !"ADMIN".equals(role)) {
+            throw ApiException.notFound("Attachment not found.");
+        }
+        mfaGuard.requireSatisfied(userId, workspaceId);
+    }
+
     private void requireMembership(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         Integer count = jdbc.queryForObject("""
             SELECT COUNT(*) FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL
@@ -161,6 +187,7 @@ public class AttachmentService {
     }
 
     private void requireMember(String userId, String workspaceId) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         String role = jdbc.queryForList("""
             SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL

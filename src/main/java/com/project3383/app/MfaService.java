@@ -97,7 +97,7 @@ public class MfaService {
         }
         String secret = generateSecret();
         jdbc.update("""
-            UPDATE app_user SET mfa_secret_enc = ?, mfa_enabled = 0 WHERE id = ?
+            UPDATE app_user SET mfa_pending_secret_enc = ? WHERE id = ?
             """, encrypt(secret), userId);
         String email = stringValue(user.get("email"));
         String label = email == null || email.isBlank() ? "guest@drift.local" : email;
@@ -116,7 +116,7 @@ public class MfaService {
             throw ApiException.badRequest("Start two-factor setup first.");
         }
         Map<String, Object> user = user(userId);
-        String stored = decrypt(stringValue(user.get("mfaSecret")));
+        String stored = decrypt(stringValue(user.get("mfaPendingSecret")));
         if (stored == null || !stored.equals(input.secret().trim())) {
             throw ApiException.badRequest("The setup secret changed. Start again.");
         }
@@ -127,8 +127,9 @@ public class MfaService {
         List<String> backupCodes = generateBackupCodes();
         List<String> hashed = backupCodes.stream().map(this::hashBackupCode).toList();
         jdbc.update("""
-            UPDATE app_user SET mfa_enabled = 1, mfa_backup_codes_json = ? WHERE id = ?
-            """, json(hashed), userId);
+            UPDATE app_user SET mfa_enabled = 1, mfa_secret_enc = ?, mfa_pending_secret_enc = NULL,
+                                mfa_backup_codes_json = ? WHERE id = ?
+            """, encrypt(stored), json(hashed), userId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("backupCodes", backupCodes);
         return result;
@@ -150,7 +151,8 @@ public class MfaService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "That code is not valid.");
         }
         jdbc.update("""
-            UPDATE app_user SET mfa_enabled = 0, mfa_secret_enc = NULL, mfa_backup_codes_json = NULL
+            UPDATE app_user SET mfa_enabled = 0, mfa_secret_enc = NULL,
+                                mfa_pending_secret_enc = NULL, mfa_backup_codes_json = NULL
             WHERE id = ?
             """, userId);
         Map<String, Object> result = new LinkedHashMap<>();
@@ -220,6 +222,7 @@ public class MfaService {
     private Map<String, Object> user(String userId) {
         return jdbc.queryForList("""
             SELECT id, email, mfa_enabled AS mfaEnabled, mfa_secret_enc AS mfaSecret,
+                   mfa_pending_secret_enc AS mfaPendingSecret,
                    mfa_backup_codes_json AS backupCodes
             FROM app_user WHERE id = ? AND deleted_at IS NULL
             """, userId).stream().findFirst()

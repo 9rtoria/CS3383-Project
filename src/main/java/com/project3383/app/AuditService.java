@@ -47,6 +47,7 @@ public class AuditService {
     }
 
     public Map<String, Object> list(String userId, String workspaceId, int limit, String cursor) {
+        com.project3383.auth.AuthInterceptor.requireTokenWorkspace(workspaceId);
         String role = jdbc.queryForList("""
             SELECT m.role FROM membership m JOIN workspace w ON w.id = m.workspace_id
             WHERE m.user_id = ? AND m.workspace_id = ? AND w.deleted_at IS NULL

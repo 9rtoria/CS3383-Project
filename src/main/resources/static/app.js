@@ -4,6 +4,8 @@
   const state = {
     boot: null,
     board: null,
+    boardLoadSeq: 0,
+    boardFilterScopeId: null,
     today: null,
     view: "today",
     currentWorkspaceId: null,
@@ -59,6 +61,9 @@
     searchPriority: "",
     searchBoard: "",
     searchTimer: null,
+    searchNextCursor: null,
+    searchAppending: false,
+    searchSeq: 0,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -441,7 +446,8 @@
       await Promise.all(initialLoads);
       const query = new URLSearchParams(location.search);
       const requestedBoard = query.get("board");
-      if (requestedBoard && boards().some((item) => item.id === requestedBoard)) {
+      const boardRequested = Boolean(requestedBoard && boards().some((item) => item.id === requestedBoard));
+      if (boardRequested) {
         state.currentBoardId = requestedBoard;
         await loadBoard(requestedBoard);
         renderSidebar();
@@ -453,7 +459,8 @@
         ? "settings"
         : allowedViews.includes(requestedView)
           ? requestedView
-          : ["today", "board", "upcoming"].includes(startView) ? startView : "today";
+          : boardRequested ? "board"
+            : ["today", "board", "upcoming"].includes(startView) ? startView : "today";
       setView(initialView);
       const inviteToken = query.get("invite");
       if (inviteToken) {
@@ -990,6 +997,7 @@
     if (!key) {
       title.textContent = t("Pick a day");
       hint.textContent = t("Select a date to read it without the grid.");
+      hint.classList.remove("hidden");
       return;
     }
     const date = new Date(`${key}T12:00:00`);
@@ -1000,9 +1008,8 @@
     const scheduled = new Set(blocks.map((block) => block.taskId));
     const dueOnly = (data?.tasks ?? []).filter((task) => !scheduled.has(task.id));
     const total = blocks.length + dueOnly.length;
-    hint.textContent = total
-      ? t("{{count}} items on this day.", { count: total })
-      : t("Nothing due. Keep it that way if you can.");
+    hint.textContent = total ? "" : t("Nothing due. Keep it that way if you can.");
+    hint.classList.toggle("hidden", total > 0);
     for (const block of blocks) {
       const row = element("button", "calendar-day-row scheduled");
       row.type = "button";
@@ -1012,11 +1019,11 @@
       list.append(row);
     }
     for (const task of dueOnly) {
-      const row = element("button", "calendar-day-row");
+      const row = element("button", "calendar-day-row due");
       row.type = "button";
-      const time = dueTimeLabel(task.dueDate, Boolean(task.dueAllDay));
-      row.append(element("span", "calendar-day-time", time || "—"));
-      row.append(element("span", "calendar-day-copy", task.title));
+      const dot = element("span", `side-dot${Number(task.completed) === 1 ? "" : " today"}`);
+      dot.setAttribute("aria-hidden", "true");
+      row.append(dot, element("span", "calendar-day-copy", task.title));
       row.addEventListener("click", () => void openTaskById(task.id));
       list.append(row);
     }
@@ -1122,7 +1129,7 @@
   }
 
   function labelPills(task) {
-    return (task.labels ?? []).slice(0, 3).map((label) =>
+    return (task.labels ?? []).slice(0, 2).map((label) =>
       element("span", `pill label-${label.color || "slate"}`, label.name));
   }
 
@@ -1355,7 +1362,8 @@
     }
   }
 
-  async function runSearch() {
+  async function runSearch(append = false) {
+    const seq = ++state.searchSeq;
     const query = $("searchInput").value.trim();
     const results = $("searchResults");
     const status = state.searchStatus || "all";
@@ -1371,13 +1379,22 @@
     document.querySelectorAll("[data-search-status]").forEach((button) => {
       button.classList.toggle("active", button.dataset.searchStatus === status);
     });
-    results.replaceChildren();
+    $("searchResetButton").classList.toggle("hidden", !(query || status !== "all" || priority || boardId));
+    if (!append) {
+      results.replaceChildren();
+      state.searchNextCursor = null;
+    }
+    state.searchAppending = append;
+    $("searchLoadMore").classList.toggle("hidden", append || !state.searchNextCursor);
+    if (append) $("searchLoadMore").textContent = t("Loading…");
     try {
-      const params = new URLSearchParams({ workspaceId: workspace().id, q: query });
+      const params = new URLSearchParams({ workspaceId: workspace().id, q: query, limit: "30" });
       if (status !== "all") params.set("status", status);
       if (priority) params.set("priority", priority);
       if (boardId) params.set("boardId", boardId);
+      if (append && state.searchNextCursor) params.set("cursor", state.searchNextCursor);
       const data = await request(`/api/search?${params.toString()}`);
+      if (seq !== state.searchSeq) return;
       const tasks = data.results ?? [];
       const total = Number(data.total ?? tasks.length);
       $("searchMeta").textContent = query
@@ -1386,7 +1403,7 @@
       const statusHint = $("searchStatusHint");
       statusHint.replaceChildren(icon("sliders"), document.createTextNode(` ${status === "all" ? t("all statuses") : t(status)}`));
       $("searchScopeHint").textContent = t("Search is scoped to {{name}}. Private boards only appear if they are yours.", { name: workspace().name });
-      if (!tasks.length) {
+      if (!tasks.length && !append) {
         const empty = element("div", "empty empty-state");
         const mark = element("span", "empty-mark");
         mark.append(icon("search"));
@@ -1398,10 +1415,23 @@
             : t("Nothing here yet. Capture a task and it becomes searchable instantly.")),
         );
         results.append(empty);
+        state.searchNextCursor = null;
+        $("searchLoadMore").classList.add("hidden");
         return;
       }
       for (const task of tasks) results.append(searchRow(task));
+      state.searchNextCursor = data.nextCursor || null;
+      $("searchLoadMore").textContent = t("Load more");
+      $("searchLoadMore").classList.toggle("hidden", !state.searchNextCursor);
     } catch (error) {
+      if (seq !== state.searchSeq) return;
+      if (append) {
+        state.searchAppending = false;
+        $("searchLoadMore").textContent = t("Load more");
+        $("searchLoadMore").classList.toggle("hidden", !state.searchNextCursor);
+        showToast(error.message);
+        return;
+      }
       results.replaceChildren();
       const empty = element("div", "empty empty-state");
       const mark = element("span", "empty-mark");
@@ -1417,6 +1447,10 @@
       );
       results.append(empty);
       $("searchMeta").textContent = t("Search is unavailable");
+      state.searchNextCursor = null;
+      $("searchLoadMore").classList.add("hidden");
+    } finally {
+      if (seq === state.searchSeq) state.searchAppending = false;
     }
   }
 
@@ -1618,7 +1652,7 @@
     const people = element("section", "panel metric-panel");
     const peopleHead = element("div", "section-head");
     const peopleCopy = element("div");
-    peopleCopy.append(element("h2", "", t("Load by person")), element("p", "hint", t("Estimate of open work, not a performance score.")));
+    peopleCopy.append(element("h2", "section-title", t("Load by person")), element("p", "section-subtitle", t("Estimate of open work, not a performance score.")));
     const peopleIcon = icon("timer");
     peopleIcon.style.color = "var(--faint)";
     peopleHead.append(peopleCopy, peopleIcon);
@@ -1642,7 +1676,7 @@
     const boards = element("section", "panel metric-panel");
     const boardsHead = element("div", "section-head");
     const boardsCopy = element("div");
-    boardsCopy.append(element("h2", "", t("Board health")), element("p", "hint", t("Where work is accumulating.")));
+    boardsCopy.append(element("h2", "section-title", t("Board health")), element("p", "section-subtitle", t("Where work is accumulating.")));
     const boardsIcon = icon("insights");
     boardsIcon.style.color = "var(--faint)";
     boardsHead.append(boardsCopy, boardsIcon);
@@ -1680,7 +1714,7 @@
     const focusCard = element("section", "panel metric-panel focus-suggestions");
     const focusHead = element("div", "section-head");
     const focusCopy = element("div");
-    focusCopy.append(element("h2", "", t("A sensible focus")), element("p", "hint", t("Highest priority and nearest dates. Suggestions, never automatic moves.")));
+    focusCopy.append(element("h2", "section-title", t("A sensible focus")), element("p", "section-subtitle", t("Highest priority and nearest dates. Suggestions, never automatic moves.")));
     focusHead.append(focusCopy);
     focusCard.append(focusHead);
     if (focus.length) {
@@ -1819,6 +1853,8 @@
     $("boardCreateName").value = "";
     $("boardCreateDescription").value = "";
     $("boardCreateVisibility").value = "workspace";
+    $("boardCreateVisibility").options[0].text = t("Everyone in {{name}}", { name: workspace()?.name ?? t("this workspace") });
+    $("boardCreateVisibility").options[1].text = t("Private to me");
     renderBoardTemplates();
     $("boardCreateModal").classList.remove("hidden");
     window.setTimeout(() => $("boardCreateName").focus(), 20);
@@ -1926,6 +1962,8 @@
     $("boardSettingsName").value = board.name ?? "";
     $("boardSettingsDescription").value = board.description ?? "";
     $("boardSettingsVisibility").value = board.visibility ?? "workspace";
+    $("boardSettingsVisibility").options[0].text = t("Everyone in {{name}}", { name: workspace()?.name ?? t("this workspace") });
+    $("boardSettingsVisibility").options[1].text = t("Private to me");
     $("boardSettingsModal").classList.remove("hidden");
     window.setTimeout(() => $("boardSettingsName").focus(), 20);
   }
@@ -2104,11 +2142,14 @@
   }
 
   async function loadBoard(boardId) {
+    const seq = ++state.boardLoadSeq;
     let data;
     try {
       data = await request(`/api/boards/${encodeURIComponent(boardId)}`);
+      if (seq !== state.boardLoadSeq) return null;
       window.DriftOffline?.cacheBoard(boardId, data);
     } catch (error) {
+      if (seq !== state.boardLoadSeq) return null;
       if (error.code === "NETWORK_ERROR") {
         const cached = window.DriftOffline?.readCachedBoard(boardId);
         if (cached) {
@@ -2202,6 +2243,16 @@
     scheduleAutoPlanRefresh();
   }
 
+  function syncUrl() {
+    if (location.pathname !== "/") return;
+    const params = new URLSearchParams();
+    if (state.view && state.view !== "today") params.set("view", state.view);
+    if (state.view === "board" && state.currentBoardId) params.set("board", state.currentBoardId);
+    if (state.editing?.id) params.set("task", state.editing.id);
+    const next = params.toString() ? `/?${params.toString()}` : "/";
+    if (`${location.pathname}${location.search}` !== next) history.replaceState(null, "", next);
+  }
+
   function setView(view) {
     state.view = view;
     document.body.dataset.view = view;
@@ -2261,6 +2312,7 @@
       $("viewTitle").textContent = t("Today");
       void loadToday();
     }
+    syncUrl();
   }
 
   function syncIdentityUi() {
@@ -2402,6 +2454,15 @@
     container.replaceChildren();
     const board = currentBoard();
     if (!board) return;
+    if (state.boardFilterScopeId !== board.id) {
+      state.boardFilterScopeId = board.id;
+      state.boardFilterText = "";
+      state.boardPriority = "";
+      state.boardAssignee = "";
+      state.boardMode = "board";
+      $("boardFilterInput").value = "";
+      $("boardPriorityFilter").value = "";
+    }
     $("viewTitle").textContent = board.name;
     $("boardTitle").textContent = board.name;
     $("boardDescription").textContent = board.description || t("A quiet place to move work forward.");
@@ -2422,19 +2483,29 @@
     const assigneeFilter = $("boardAssigneeFilter");
     const selectedAssignee = state.boardAssignee || "";
     const assignees = [...new Set(flatTasks.map((task) => task.assignee?.name || task.assigneeName || "").filter(Boolean))].sort();
-    assigneeFilter.replaceChildren(new Option(t("Everyone"), ""));
+    assigneeFilter.replaceChildren(
+      new Option(t("Everyone"), ""),
+      new Option(t("Assigned to me"), "__mine"),
+      new Option(t("Unassigned"), "__unassigned"),
+    );
     for (const assignee of assignees) assigneeFilter.add(new Option(assignee, assignee));
-    assigneeFilter.value = assignees.includes(selectedAssignee) ? selectedAssignee : "";
+    assigneeFilter.value = ["", "__mine", "__unassigned", ...assignees].includes(selectedAssignee) ? selectedAssignee : "";
     state.boardAssignee = assigneeFilter.value;
 
     const filterText = String(state.boardFilterText || "").toLowerCase();
     const priorityFilter = state.boardPriority || "";
     const assigneeName = state.boardAssignee || "";
+    const currentUserId = state.boot?.user?.id;
     const visibleTasks = flatTasks.filter((task) => {
       const assignee = task.assignee?.name || task.assigneeName || "";
+      const assigneeId = task.assignee?.id || task.assigneeId || "";
+      const matchesAssignee = !assigneeName
+        || (assigneeName === "__mine" && assigneeId === currentUserId)
+        || (assigneeName === "__unassigned" && !assigneeId)
+        || (assigneeName !== "__mine" && assigneeName !== "__unassigned" && assignee === assigneeName);
       return (!filterText || `${task.title} ${task.description || ""}`.toLowerCase().includes(filterText))
         && (!priorityFilter || task.priority === priorityFilter)
-        && (!assigneeName || assignee === assigneeName);
+        && matchesAssignee;
     });
     const taskMatches = (task) => visibleTasks.includes(task);
     const activeFilters = Boolean(filterText || priorityFilter || assigneeName);
@@ -2442,7 +2513,7 @@
     $("boardTaskCount").textContent = `${visibleTasks.length} ${t(visibleTasks.length === 1 ? "task" : "tasks")}`;
     $("boardSettingsButton").disabled = !(board.permissions?.canEdit ?? true);
     $("boardShareButton").disabled = !(board.permissions?.canShare ?? true);
-    $("boardShareButton").textContent = board.shareEnabled ? t("Disable share") : t("Share link");
+    $("boardShareLabel").textContent = board.shareEnabled ? t("Manage public link") : t("Share read-only link");
     $("boardDuplicateButton").disabled = !(board.permissions?.canEdit ?? true);
     $("boardArchiveButton").disabled = !(board.permissions?.canEdit ?? true);
     $("boardDeleteButton").classList.toggle("hidden", !(board.permissions?.canManage ?? true));
@@ -2479,6 +2550,7 @@
         dot.setAttribute("aria-hidden", "true");
         const copy = element("div", "row-title");
         copy.append(element("strong", "", task.title));
+        for (const pill of labelPills(task)) copy.append(pill);
         const column = (board.columns ?? []).find((item) => item.id === task.columnId);
         const priorityCell = element("span", "row-priority");
         if (task.priority && task.priority !== "none") {
@@ -2736,7 +2808,20 @@
       weekday: "long", month: "long", day: "numeric",
     }).format(now).toUpperCase();
     if (!suggestions.length) {
-      list.append(element("div", "empty", t("Nothing open. Add a task to begin.")));
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("sun"));
+      const add = element("button", "btn primary");
+      add.type = "button";
+      add.append(icon("capture"), document.createTextNode(t("Add something small")));
+      add.addEventListener("click", openCapture);
+      empty.append(
+        mark,
+        element("h3", "", t("A clear day.")),
+        element("p", "", t("Nothing is urgent. Capture one small next step, or take the win and stop here.")),
+        add,
+      );
+      list.append(empty);
     }
     const acceptedTasks = suggestions.filter((task) => task.accepted || task.selected);
     const restTasks = suggestions.filter((task) => !task.accepted && !task.selected);
@@ -3812,7 +3897,7 @@
     const boardList = boards();
     const preferred = (columnId
       ? boardList.find((board) => (board.columns ?? []).some((column) => column.id === columnId))
-      : boardList.find((board) => board.id === state.currentBoardId)) ?? boardList[0];
+      : state.view === "board" ? boardList.find((board) => board.id === state.currentBoardId) : boardList[0]) ?? boardList[0];
     $("captureBoard").replaceChildren();
     for (const board of boardList) $("captureBoard").add(new Option(board.name, board.id));
     $("captureBoard").value = preferred?.id ?? "";
@@ -4027,8 +4112,11 @@
     $("commentList").replaceChildren();
     $("subtaskTitle").value = "";
     $("subtaskAddButton").disabled = true;
+    $("commentBody").value = "";
+    $("commentAddButton").disabled = true;
     $("dependencyList").replaceChildren();
     $("dependencySelect").replaceChildren();
+    $("dependencyAddButton").disabled = true;
     $("attachmentList").replaceChildren();
     $("reminderList").replaceChildren();
     $("activityList").replaceChildren();
@@ -4102,13 +4190,12 @@
     $("subtaskSuggestions").replaceChildren();
     const completed = Boolean(task) && Number(task.completed) === 1;
     $("focusTaskButton").classList.toggle("hidden", !task || completed);
-    $("completeTaskButton").classList.toggle("hidden", !task || completed);
-    $("reopenTaskButton").classList.toggle("hidden", !task || !completed);
     $("copyTaskLinkButton").classList.toggle("hidden", !task);
     $("archiveTaskButton").classList.toggle("hidden", !task || Boolean(task.archivedAt));
     $("deleteTaskButton").classList.toggle("hidden", !task);
     renderTaskMetaBadges(task);
     $("taskModal").classList.remove("hidden");
+    syncUrl();
     window.setTimeout(() => $("taskTitle").focus(), 20);
     if (task) void loadTaskDetail(task.id);
   }
@@ -4125,8 +4212,6 @@
         state.editing = { ...state.editing, ...detail.task };
         $("taskColumn").value = detail.task.columnId;
         const nowCompleted = Number(detail.task.completed) === 1;
-        $("completeTaskButton").classList.toggle("hidden", nowCompleted);
-        $("reopenTaskButton").classList.toggle("hidden", !nowCompleted);
         $("focusTaskButton").classList.toggle("hidden", nowCompleted);
         $("archiveTaskButton").classList.toggle("hidden", Boolean(detail.task.archivedAt));
         const reminder = (detail.task.reminders ?? [])[0];
@@ -4222,13 +4307,17 @@
     const comments = task.comments ?? [];
     const commentsList = $("commentList");
     commentsList.replaceChildren();
-    if (!comments.length) commentsList.append(element("div", "empty", "No comments yet."));
+    if (!comments.length) commentsList.append(element("p", "field-hint", t("No comments yet. Keep the thread near the work.")));
     for (const comment of comments) {
-      const row = element("div", "detail-item");
-      const grow = element("div", "grow");
-      grow.append(element("strong", "", comment.authorName || "Someone"));
-      grow.append(element("p", "", comment.body));
-      row.append(grow);
+      const row = element("div", "comment");
+      const author = comment.authorName || "Someone";
+      const avatar = element("span", "account-avatar comment-avatar", author.trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "?");
+      avatar.setAttribute("aria-hidden", "true");
+      const content = element("div", "comment-content");
+      const head = element("div", "comment-head");
+      head.append(element("strong", "", author), element("span", "", relativeTime(comment.createdAt)));
+      content.append(head, element("div", "comment-body", comment.body));
+      row.append(avatar, content);
       commentsList.append(row);
     }
 
@@ -4237,18 +4326,24 @@
     dependencyList.replaceChildren();
     if (!dependencies.length) dependencyList.append(element("p", "field-hint", "No blockers. This task can move freely."));
     for (const dependency of dependencies) {
-      const row = element("div", "detail-item");
-      const title = element("span", "grow", dependency.title);
-      if (Number(dependency.completed) === 1) title.classList.add("muted");
-      const remove = element("button", "btn ghost sm", "Remove");
+      const row = element("div", "dependency-row");
+      const dot = element("span", `side-dot${Number(dependency.completed) === 1 ? "" : " over"}`);
+      dot.setAttribute("aria-hidden", "true");
+      const copy = element("div", "member-copy");
+      copy.append(element("strong", "", dependency.title));
+      copy.append(element("span", "", Number(dependency.completed) === 1 ? t("Done") : t("Still open")));
+      const remove = element("button", "icon-btn sm");
       remove.type = "button";
+      remove.setAttribute("aria-label", t("Remove {{name}}", { name: dependency.title }));
+      remove.append(icon("x"));
       remove.addEventListener("click", () => removeDependency(dependency.id));
-      row.append(title, remove);
+      row.append(dot, copy, remove);
       dependencyList.append(row);
     }
     const select = $("dependencySelect");
     select.replaceChildren();
     select.add(new Option(t("Choose a task to wait on..."), ""));
+    $("dependencyAddButton").disabled = true;
     const existing = new Set(dependencies.map((item) => item.id));
     for (const item of state.workspaceTasks) {
       if (item.id === task.id || existing.has(item.id)) continue;
@@ -4259,17 +4354,25 @@
     const attachments = task.attachments ?? [];
     const attachmentList = $("attachmentList");
     attachmentList.replaceChildren();
-    if (!attachments.length) attachmentList.append(element("div", "empty", "No attachments."));
+    if (!attachments.length) attachmentList.append(element("p", "field-hint", t("PDF, image and plain-text files up to 10 MB. Scanner is not configured; only upload trusted files.")));
     for (const attachment of attachments) {
-      const row = element("div", "detail-item");
+      const row = element("div", "detail-item attachment-row");
+      const href = `/api/attachments/${encodeURIComponent(attachment.id)}?workspaceId=${encodeURIComponent(workspace().id)}`;
       const link = element("a", "grow", attachment.name);
-      link.href = `/api/attachments/${encodeURIComponent(attachment.id)}`;
+      link.href = href;
       link.download = attachment.name;
       const size = element("span", "muted small", formatBytes(attachment.size));
-      const remove = element("button", "btn ghost sm", "Remove");
+      const download = element("a", "icon-btn sm");
+      download.href = href;
+      download.download = attachment.name;
+      download.setAttribute("aria-label", t("Download {{name}}", { name: attachment.name }));
+      download.append(icon("download"));
+      const remove = element("button", "icon-btn sm");
       remove.type = "button";
+      remove.setAttribute("aria-label", t("Remove {{name}}", { name: attachment.name }));
+      remove.append(icon("x"));
       remove.addEventListener("click", () => deleteAttachment(attachment.id));
-      row.append(link, size, remove);
+      row.append(link, size, download, remove);
       attachmentList.append(row);
     }
 
@@ -4293,7 +4396,7 @@
     const activity = task.activity ?? [];
     const activityList = $("activityList");
     activityList.replaceChildren();
-    if (!activity.length) activityList.append(element("div", "empty", "No activity recorded yet."));
+    if (!activity.length) activityList.append(element("p", "field-hint", t("No activity recorded yet.")));
     for (const entry of activity.slice(0, 50)) {
       const row = element("div", "activity-item");
       const dot = element("span", `side-dot${String(entry.action).includes("completed") ? " today" : ""}`);
@@ -4303,6 +4406,24 @@
       copy.append(document.createTextNode(` ${activityLabel(entry.action)}`));
       grow.append(copy, element("div", "activity-time", relativeTime(entry.createdAt)));
       row.append(dot, grow);
+      if (entry.undoId) {
+        const undo = element("button", "btn ghost sm");
+        undo.type = "button";
+        undo.append(icon("rotate"), document.createTextNode(t("Undo")));
+        undo.addEventListener("click", async () => {
+          undo.disabled = true;
+          try {
+            await request(`/api/undo/${encodeURIComponent(entry.undoId)}`, { method: "POST" });
+            showToast(t("Automation change undone."));
+            await loadTaskDetail(state.editing.id);
+            await refreshVisibleData({ notifications: false, bootstrap: false });
+          } catch (error) {
+            undo.disabled = false;
+            showToast(error.message);
+          }
+        });
+        row.append(undo);
+      }
       activityList.append(row);
     }
   }
@@ -4347,6 +4468,9 @@
     if (!file || !state.editing) return;
     const form = new FormData();
     form.append("file", file);
+    const uploadButton = $("attachmentUploadButton");
+    uploadButton.disabled = true;
+    uploadButton.textContent = t("Uploading…");
     try {
       const response = await fetch(`/api/tasks/${encodeURIComponent(state.editing.id)}/attachments`, {
         method: "POST",
@@ -4362,6 +4486,9 @@
       showToast(t("Attachment uploaded."));
     } catch (error) {
       showToast(error.message);
+    } finally {
+      uploadButton.disabled = false;
+      uploadButton.textContent = t("Attach file");
     }
   }
 
@@ -4480,6 +4607,7 @@
         body: { body },
       });
       $("commentBody").value = "";
+      $("commentAddButton").disabled = true;
       await loadTaskDetail(state.editing.id);
       showToast(t("Comment posted."));
     } catch (error) {
@@ -4492,6 +4620,7 @@
     $("taskModal").classList.add("hidden");
     state.editing = null;
     state.detail = null;
+    syncUrl();
   }
 
   function taskFormBody() {
@@ -4663,35 +4792,8 @@
       }
       await Promise.all([loadTaskDetail(task.id), refreshVisibleData({ notifications: false, bootstrap: false })]);
       window.DriftSound?.play(completed ? "complete" : "tap");
-      showToast(t(completed ? "Task completed." : "Task reopened."));
-    } catch (error) {
-      showToast(error.message);
-    }
-  }
-
-  async function setTaskCompleted(completed) {
-    if (!state.editing) return;
-    try {
-      const result = await requestOrQueue(
-        `/api/tasks/${encodeURIComponent(state.editing.id)}/${completed ? "complete" : "reopen"}`,
-        { method: "POST" },
-        { kind: "task.update", label: state.editing.title }
-      );
-      if (result?.queued) {
-        closeModal();
-        showToast(t("Saved on this device — will sync when you reconnect."));
-        return;
-      }
-      closeModal();
-      await refreshVisibleData();
-      window.DriftSound?.play(completed ? "complete" : "tap");
-      showToast(
-        t(completed ? "Task completed." : "Task reopened.")
-          + (result?.nextTaskId ? ` ${t("Next occurrence created.")}` : ""),
-        undoToastAction(result?.undo, async () => {
-          await refreshVisibleData({ notifications: false });
-        })
-      );
+      showToast(t(completed ? "Task completed." : "Task reopened.")
+        + (result?.nextTaskId ? ` ${t("Next occurrence created.")}` : ""));
     } catch (error) {
       showToast(error.message);
     }
@@ -5686,7 +5788,7 @@
     };
     toggleFeature("dayFlow", "Day Flow", "The 24-hour rail, capacity ring, and focus-next card.");
     toggleFeature("smartPlan", "Smart Plan", "Preview a local rules plan, then apply or undo it. No model call.");
-    toggleFeature("voice", "Voice capture", "Show the browser speech shortcut. Text capture is always available.");
+    toggleFeature("voice", "Voice capture (experimental)", "Show the browser speech shortcut. Text capture is always available.");
     return section;
   }
 
@@ -6449,6 +6551,7 @@
           input.max = "3650";
           input.style.width = "100px";
           input.value = String(draft.retentionDays ?? 30);
+          input.setAttribute("aria-label", t("Archived task retention"));
           input.addEventListener("input", () => { draft.retentionDays = Number(input.value); });
           return input;
         })());
@@ -6460,6 +6563,7 @@
           input.max = "3650";
           input.style.width = "100px";
           input.value = String(draft.auditRetentionDays ?? 365);
+          input.setAttribute("aria-label", t("Audit retention"));
           input.addEventListener("input", () => { draft.auditRetentionDays = Number(input.value); });
           return input;
         })());
@@ -7164,6 +7268,7 @@
       input.type = "checkbox";
       input.value = value;
       input.checked = true;
+      input.setAttribute("aria-label", t(label));
       eventInputs.push(input);
       option.append(input, document.createTextNode(t(label)));
       eventOptions.append(option);
@@ -7599,7 +7704,32 @@
     }
     items.push(
       { id: "capture", label: t("Capture a new task"), hint: t("Opens quick capture"), group: "Create", icon: "plus", shortcut: "C", run: openCapture },
+      { id: "shortcuts", label: t("Keyboard shortcuts"), hint: t("Learn the whole app"), group: "Create", icon: "keyboard", shortcut: "?", run: openShortcuts },
+      {
+        id: "toggle-theme",
+        label: t("Toggle light and dark"),
+        hint: t("Saved on this device"),
+        group: "Create",
+        icon: document.documentElement.dataset.theme === "dark" ? "sun" : "moon",
+        run: () => updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" }),
+      },
+      { id: "settings", label: t("Open settings"), hint: t("Account, team and data"), group: "Create", icon: "settings", run: () => window.location.assign("/settings") },
     );
+    for (const board of boards()) {
+      items.push({
+        id: `board-${board.id}`,
+        label: board.name,
+        hint: `${Number(board.taskCount || 0)} ${t(Number(board.taskCount || 0) === 1 ? "task" : "tasks")} · ${t(board.visibility === "private" ? "private" : "shared")}`,
+        group: "Boards",
+        icon: "board",
+        run: async () => {
+          state.currentBoardId = board.id;
+          await loadBoard(board.id);
+          setView("board");
+          renderSidebar();
+        },
+      });
+    }
     const needle = state.paletteQuery.trim().toLowerCase();
     const commands = items.filter((item) => !needle || `${item.label} ${item.hint} ${item.group}`.toLowerCase().includes(needle));
     const tasks = needle.length >= 2 ? state.paletteResults.slice(0, 6).map((task) => ({
@@ -8153,7 +8283,7 @@
     $("todayPlanReview").addEventListener("click", openAutoPlan);
     $("todayPlanRefresh").addEventListener("click", () => void loadToday());
     $("todayPlanClear").addEventListener("click", clearAutoPlan);
-    $("glanceInsightsButton").addEventListener("click", () => setView("insights"));
+    $("glanceInsightsButton").addEventListener("click", () => setView("upcoming"));
     $("applyTodayPlanButton").addEventListener("click", applyTodayPlan);
     const later = $("dayFlowLater");
     later.addEventListener("dragover", (event) => {
@@ -8191,15 +8321,21 @@
       state.boardMode = "list";
       renderBoard();
     });
-    $("boardMoreButton").addEventListener("click", () => {
+    $("boardMoreButton").addEventListener("click", (event) => {
+      event.stopPropagation();
       const menu = $("boardMoreMenu");
       const open = menu.classList.toggle("hidden");
       $("boardMoreButton").setAttribute("aria-expanded", String(!open));
     });
+    $("boardMoreMenu").addEventListener("click", (event) => {
+      if (!event.target.closest?.(".menu-item")) return;
+      $("boardMoreMenu").classList.add("hidden");
+      $("boardMoreButton").setAttribute("aria-expanded", "false");
+    });
     document.addEventListener("click", (event) => {
       const menu = $("boardMoreMenu");
       if (menu && !menu.classList.contains("hidden")
-        && !menu.contains(event.target) && event.target !== $("boardMoreButton")) {
+        && !menu.contains(event.target) && !event.target.closest?.("#boardMoreButton")) {
         menu.classList.add("hidden");
         $("boardMoreButton").setAttribute("aria-expanded", "false");
       }
@@ -8239,7 +8375,6 @@
     $("boardSettingsModal").addEventListener("click", (event) => {
       if (event.target === $("boardSettingsModal")) $("boardSettingsModal").classList.add("hidden");
     });
-    $("boardAddColumnButton").addEventListener("click", () => openColumnModal());
     $("columnForm").addEventListener("submit", saveColumn);
     $("closeColumnModal").addEventListener("click", () => $("columnModal").classList.add("hidden"));
     $("cancelColumnModal").addEventListener("click", () => $("columnModal").classList.add("hidden"));
@@ -8315,11 +8450,24 @@
     });
     $("searchPriorityFilter").addEventListener("change", () => void runSearch());
     $("searchBoardFilter").addEventListener("change", () => void runSearch());
-    $("searchOpenBoardButton").addEventListener("click", () => {
+    $("searchResetButton").addEventListener("click", () => {
+      $("searchInput").value = "";
+      state.searchStatus = "all";
+      state.searchNextCursor = null;
+      $("searchPriorityFilter").value = "";
+      $("searchBoardFilter").value = "";
+      void runSearch();
+    });
+    $("searchLoadMore").addEventListener("click", () => {
+      if (state.searchNextCursor) void runSearch(true);
+    });
+    $("searchOpenBoardButton").addEventListener("click", async () => {
       const first = boards()[0];
       if (!first) return;
       state.currentBoardId = first.id;
+      await loadBoard(first.id);
       setView("board");
+      renderSidebar();
     });
     $("calendarPrev").addEventListener("click", () => {
       state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() - 1, 1);
@@ -8398,8 +8546,14 @@
     $("archiveTaskButton").addEventListener("click", () => void archiveCurrentTask());
     $("subtaskAddButton").addEventListener("click", () => void addSubtask());
     $("subtaskSuggestButton").addEventListener("click", showChecklistSuggestions);
+    $("commentBody").addEventListener("input", () => {
+      $("commentAddButton").disabled = !$("commentBody").value.trim();
+    });
     $("commentAddButton").addEventListener("click", addComment);
     $("dependencyAddButton").addEventListener("click", addDependency);
+    $("dependencySelect").addEventListener("change", () => {
+      $("dependencyAddButton").disabled = !$("dependencySelect").value;
+    });
     $("attachmentUploadButton").addEventListener("click", () => $("attachmentInput").click());
     $("attachmentInput").addEventListener("change", uploadAttachment);
     $("reminderAddButton").addEventListener("click", addReminder);
@@ -8427,8 +8581,6 @@
       $("taskMoreButton").setAttribute("aria-expanded", "false");
       if (state.editing) void loadTaskDetail(state.editing.id);
     });
-    $("completeTaskButton").addEventListener("click", () => setTaskCompleted(true));
-    $("reopenTaskButton").addEventListener("click", () => setTaskCompleted(false));
     $("closeAuthModal").addEventListener("click", closeAuthModal);
     $("authModeButton").addEventListener("click", () => setAuthMode(state.authMode === "signin" ? "signup" : "signin"));
     $("authForm").addEventListener("submit", submitAuth);

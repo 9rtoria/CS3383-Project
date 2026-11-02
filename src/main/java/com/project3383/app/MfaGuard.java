@@ -39,6 +39,10 @@ public class MfaGuard {
                 """, Integer.class, userId);
             return enabled != null && enabled == 1;
         }
+        Integer enabled = jdbc.queryForObject("""
+            SELECT mfa_enabled FROM app_user WHERE id = ? AND deleted_at IS NULL
+            """, Integer.class, userId);
+        if (enabled == null || enabled != 1) return false;
         HttpSession session = request.getSession(false);
         Object verified = session == null ? null : session.getAttribute(AuthInterceptor.MFA_VERIFIED);
         return Boolean.TRUE.equals(verified);
