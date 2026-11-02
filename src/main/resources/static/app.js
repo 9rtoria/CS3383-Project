@@ -1853,6 +1853,7 @@
     $("boardCreateName").value = "";
     $("boardCreateDescription").value = "";
     $("boardCreateVisibility").value = "workspace";
+    $("boardCreateEyebrow").textContent = workspace()?.name ?? t("Workspace");
     $("boardCreateVisibility").options[0].text = t("Everyone in {{name}}", { name: workspace()?.name ?? t("this workspace") });
     $("boardCreateVisibility").options[1].text = t("Private to me");
     renderBoardTemplates();
@@ -1963,7 +1964,7 @@
     $("boardSettingsDescription").value = board.description ?? "";
     $("boardSettingsVisibility").value = board.visibility ?? "workspace";
     $("boardSettingsVisibility").options[0].text = t("Everyone in {{name}}", { name: workspace()?.name ?? t("this workspace") });
-    $("boardSettingsVisibility").options[1].text = t("Private to me");
+    $("boardSettingsVisibility").options[1].text = t("Only me and workspace admins");
     $("boardSettingsModal").classList.remove("hidden");
     window.setTimeout(() => $("boardSettingsName").focus(), 20);
   }

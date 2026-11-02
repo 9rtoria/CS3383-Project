@@ -1016,7 +1016,7 @@
   </div>
 
   <div id="columnModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="columnModalTitle">
-    <div class="modal" style="max-width:440px">
+    <div class="modal" style="max-width:420px">
       <div class="modal-head">
         <div>
           <p class="eyebrow">Board structure</p>
@@ -1056,32 +1056,32 @@
   </div>
 
   <div id="boardCreateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="boardCreateTitle">
-    <div class="modal" style="max-width:520px">
+    <div class="modal" style="max-width:560px">
       <div class="modal-head">
         <div>
-          <p class="eyebrow">Workspace</p>
-          <h2 id="boardCreateTitle">New board</h2>
+          <p class="eyebrow" id="boardCreateEyebrow">Workspace</p>
+          <h2 id="boardCreateTitle">A new board</h2>
         </div>
         <button type="button" id="closeBoardCreate" class="btn ghost sm" aria-label="Close">Close</button>
       </div>
       <form id="boardCreateForm">
         <div class="field">
           <label for="boardCreateName">Name</label>
-          <input id="boardCreateName" class="input" maxlength="120" required placeholder="Product launch">
+          <input id="boardCreateName" class="input" maxlength="120" required placeholder="e.g. Home, Launch, Writing">
         </div>
         <div class="field">
-          <label for="boardCreateDescription">Description</label>
-          <textarea id="boardCreateDescription" class="textarea" maxlength="1000" rows="3" placeholder="What is this board for?"></textarea>
+          <label for="boardCreateDescription">Description <span class="field-hint">(optional)</span></label>
+          <input id="boardCreateDescription" class="input" maxlength="200" placeholder="What belongs here?">
         </div>
         <div class="field">
           <span class="label">Starting point</span>
           <div id="boardCreateTemplates" class="template-picker" role="radiogroup" aria-label="Starting point"></div>
         </div>
         <div class="field">
-          <label for="boardCreateVisibility">Who can see this board?</label>
+          <label for="boardCreateVisibility">Visibility</label>
           <select id="boardCreateVisibility" class="select">
             <option value="workspace">Everyone in the workspace</option>
-            <option value="private">Only me and workspace admins</option>
+            <option value="private">Private to me</option>
           </select>
         </div>
         <div class="modal-actions">

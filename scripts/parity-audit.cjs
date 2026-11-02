@@ -374,6 +374,105 @@ async function captureAudit(appPage, appBase) {
     await appPage.keyboard.press("Escape");
     await appPage.waitForTimeout(150);
   }
+
+  const readCapture = async (label) => {
+    const data = await appPage.evaluate(() => ({
+      visible: !document.querySelector("#captureModal").classList.contains("hidden"),
+      board: document.querySelector("#captureBoard")?.value || "",
+      column: document.querySelector("#captureColumn")?.value || "",
+    }));
+    if (!data.visible || !data.board || !data.column) {
+      fail("capture", `${label}: default board/column missing`, data);
+    }
+  };
+  await gotoView(appPage, appBase, "today");
+  await appPage.click("#sidebarPlusButton");
+  await appPage.waitForTimeout(150);
+  await appPage.click("#sidebarQuickCapture");
+  await appPage.waitForTimeout(200);
+  await readCapture("sidebar Quick capture");
+  await appPage.keyboard.press("Escape");
+  await appPage.waitForTimeout(150);
+  await appPage.locator("body").press("c");
+  await appPage.waitForTimeout(200);
+  await readCapture("keyboard C");
+  await appPage.keyboard.press("Escape");
+  await appPage.waitForTimeout(150);
+}
+
+async function modalAudit(appPage, appBase) {
+  await gotoView(appPage, appBase, "board");
+  await appPage.click("#newBoardButton");
+  await appPage.waitForTimeout(250);
+  const create = await appPage.evaluate(() => {
+    const modal = document.querySelector("#boardCreateModal");
+    return {
+      visible: !modal.classList.contains("hidden"),
+      width: Math.round(modal.querySelector(".modal").getBoundingClientRect().width),
+      title: modal.querySelector("h2")?.textContent?.trim(),
+      placeholder: modal.querySelector("#boardCreateName")?.getAttribute("placeholder"),
+      descriptionTag: modal.querySelector("#boardCreateDescription")?.tagName,
+      descriptionMax: modal.querySelector("#boardCreateDescription")?.getAttribute("maxlength"),
+      privateLabel: modal.querySelector("#boardCreateVisibility")?.options[1]?.textContent,
+    };
+  });
+  if (!create.visible) fail("modal", "board create did not open");
+  if (create.width !== 560) fail("modal", "board create width differs from reference", create);
+  if (create.title !== "A new board") fail("modal", "board create title differs from reference", create);
+  if (create.descriptionTag !== "INPUT" || create.descriptionMax !== "200") {
+    fail("modal", "board create description field differs from reference", create);
+  }
+  if (create.privateLabel !== "Private to me") fail("modal", "board create private label differs", create);
+  await appPage.click("#closeBoardCreate");
+  await appPage.waitForTimeout(150);
+
+  await appPage.evaluate(() => document.querySelector("#boardSettingsButton")?.click());
+  await appPage.waitForTimeout(200);
+  const settings = await appPage.evaluate(() => {
+    const modal = document.querySelector("#boardSettingsModal");
+    return {
+      visible: !modal.classList.contains("hidden"),
+      width: Math.round(modal.querySelector(".modal").getBoundingClientRect().width),
+      privateLabel: modal.querySelector("#boardSettingsVisibility")?.options[1]?.textContent,
+    };
+  });
+  if (!settings.visible) fail("modal", "board settings did not open");
+  if (settings.width !== 520) fail("modal", "board settings width differs", settings);
+  if (settings.privateLabel !== "Only me and workspace admins") {
+    fail("modal", "board settings private label differs", settings);
+  }
+  await appPage.evaluate(() => document.querySelector("#cancelBoardSettings")?.click());
+  await appPage.waitForTimeout(150);
+
+  await appPage.click("#boardAddTaskButton");
+  await appPage.waitForTimeout(200);
+  const column = await appPage.evaluate(() => {
+    const modal = document.querySelector("#columnModal");
+    return {
+      visible: !modal.classList.contains("hidden"),
+      width: Math.round(modal.querySelector(".modal").getBoundingClientRect().width),
+      title: modal.querySelector("h2")?.textContent?.trim(),
+    };
+  });
+  if (!column.visible) fail("modal", "column modal did not open");
+  if (column.width !== 420) fail("modal", "column modal width differs", column);
+  if (column.title !== "Add a column") fail("modal", "column modal title differs", column);
+  await appPage.evaluate(() => document.querySelector("#closeColumnModal")?.click());
+  await appPage.waitForTimeout(150);
+
+  await appPage.click("#shortcutsButton");
+  await appPage.waitForTimeout(200);
+  const shortcuts = await appPage.evaluate(() => {
+    const modal = document.querySelector("#shortcutsModal");
+    return {
+      visible: !modal.classList.contains("hidden"),
+      width: Math.round(modal.querySelector(".modal").getBoundingClientRect().width),
+    };
+  });
+  if (!shortcuts.visible) fail("modal", "shortcut sheet did not open");
+  if (shortcuts.width !== 560) fail("modal", "shortcut sheet width differs", shortcuts);
+  await appPage.keyboard.press("Escape");
+  await appPage.waitForTimeout(150);
 }
 
 async function autoPlanAudit(appPage, appBase) {
@@ -695,6 +794,7 @@ async function main() {
 
     await overlayAudit(refPage, appPage, APP_BASE);
     await captureAudit(appPage, APP_BASE);
+    await modalAudit(appPage, APP_BASE);
     await autoPlanAudit(appPage, APP_BASE);
     await responsiveAudit(appPage, APP_BASE);
     await completedTransition(appPage, APP_BASE);

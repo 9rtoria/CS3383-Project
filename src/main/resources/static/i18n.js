@@ -1274,6 +1274,11 @@
     "Only the work that truly needs to happen now.": "只安排真正現在必須完成的工作。",
     "Nothing changes until you apply. Undo stays available for five minutes.": "在你套用之前不會改變。撤銷會保留五分鐘。",
     "No plan is available yet.": "尚未有可用的方案。",
+    "A new board": "新看板",
+    "Visibility": "可見性",
+    "(optional)": "（選填）",
+    "What belongs here?": "這裡要放什麼？",
+    "e.g. Home, Launch, Writing": "例如：家庭、發布、寫作",
   });
 
   let currentLocale = "en";

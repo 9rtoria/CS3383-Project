@@ -471,6 +471,10 @@ Frontend and interaction changes in this pass:
 - The "Add a task" control matches the reference dimensions, transparent border, 11.5px type,
   bottom-only radius, and hover reveal. The "Add column" dashed column uses the reference's
   14px label and top-left inline alignment instead of centring it in the full-height column.
+- Board creation now matches the reference 560px modal, "A new board" heading, workspace
+  eyebrow, single-line optional description (200 chars), visibility wording, and template
+  column counts. The column editor is 420px and the board-settings private option uses
+  "Only me and workspace admins" while creation uses "Private to me".
 - Quick Capture always selects a default board and first column, including the topbar, Today,
   Board, Upcoming, Calendar, Insights, sidebar and keyboard entry points. Board-column entry
   points still preselect the clicked column.
@@ -503,7 +507,7 @@ Frontend and interaction changes in this pass:
 - Bulk selection remains a rewrite-only desktop capability and now appears on hover instead
   of being permanently hidden.
 - The task drawer uses theme surfaces in dark mode, and Chinese translations cover the new UI
-  strings (`i18n` audit: 755 keys, 0 missing).
+  strings (`i18n` audit: 757 keys, 0 missing).
 
 Verification for this pass: `mvnw test` 36/36, `mvnw package -DskipTests`, JavaScript syntax
 checks, static ID/SVG audits (0 missing), i18n audit (0 missing), API pagination/rate-limit/
