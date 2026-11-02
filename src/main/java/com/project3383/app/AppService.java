@@ -1668,7 +1668,7 @@ public class AppService {
                 used++;
             }
         }
-        sql.append(" ORDER BY c.is_done, t.updated_at DESC LIMIT 50");
+        sql.append(" ORDER BY t.updated_at DESC LIMIT 50");
         List<Map<String, Object>> results = jdbc.queryForList(sql.toString(), args.toArray());
         for (Map<String, Object> task : results) {
             task.put("completed", number(task.get("isDone")));

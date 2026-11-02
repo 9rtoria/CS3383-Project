@@ -18,6 +18,7 @@
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M8 3v4M16 3v4M3.5 9.5h17"/></symbol>
 <symbol id="i-calendar-days" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.7" cy="10.7" r="6.2"/><path d="M15.4 15.4 21 21"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></symbol>
     <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 8h16v12H4zM3 4h18v4H3zM9 12h6"/></symbol>
     <symbol id="i-insights" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
     <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.4"/></symbol>
@@ -37,6 +38,7 @@
     <symbol id="i-reopen" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 2.3 6.7M4 4v6h6"/></symbol>
 <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
     <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
+<symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
 <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M20 12H4M10 6l-6 6 6 6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
@@ -48,6 +50,7 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
     <symbol id="i-message" viewBox="0 0 24 24"><path d="M20 15a3 3 0 0 1-3 3H8l-4 3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3z"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+<symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-5"/></symbol>
 <symbol id="i-check-check" viewBox="0 0 24 24"><path d="M18 6 7 17l-5-5M22 10l-7.5 7.5L13 16"/></symbol>
     <symbol id="i-swirl" viewBox="0 0 24 24"><path d="M4 7h12a5 5 0 0 1 0 10H9"/><circle cx="5" cy="18" r="1.6" fill="currentColor" stroke="none"/></symbol>
 <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16c3.3 0 6-2.7 6-6 0-5.5-4.5-10-10-10z"/><circle cx="13.5" cy="6.5" r="1" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1" fill="currentColor" stroke="none"/></symbol>
@@ -207,6 +210,8 @@
           </div>
         </section>
 
+        <div id="todayError" class="hidden"></div>
+
         <section class="auto-plan-card" id="todayPlanCard">
           <div class="auto-plan-card-head">
             <div>
@@ -343,6 +348,7 @@
           <select id="boardAssigneeFilter" class="select" aria-label="Filter by assignee">
             <option value="">Everyone</option>
           </select>
+          <button type="button" id="boardClearFiltersButton" class="btn ghost sm hidden">Clear filters</button>
           <span class="board-toolbar-end">
             <span id="boardTaskCount" class="board-task-count"></span>
             <button type="button" id="boardAddTaskButton" class="icon-btn" title="Add column" aria-label="Add column"><svg class="icon"><use href="#i-plus"/></svg></button>
@@ -398,6 +404,7 @@
             <div class="calendar-side-card">
               <h2>Dated tasks</h2>
               <p id="calendarDatedHint">Tasks with a due date stay in their board, where they belong.</p>
+              <button type="button" id="calendarRetryButton" class="btn sm hidden" style="margin-top:10px">Retry</button>
             </div>
             <div class="calendar-side-card quote">
               <blockquote>“A calendar is a promise to your future self.”</blockquote>
@@ -438,6 +445,7 @@
             <p class="page-sub">Completed and archived work. Restore anything you still need; the rest can stay quiet.</p>
           </div>
         </div>
+        <div id="archiveError" class="hidden"></div>
         <div id="archiveBoardsSection" class="archive-section hidden">
           <h2>Archived boards</h2>
           <p id="archiveBoardsMeta">Whole boards, folded away.</p>
@@ -493,9 +501,11 @@
           </div>
           <div class="search-results-head">
             <span id="searchMeta">0 results</span>
-            <span id="searchStatusHint"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg> all statuses</span>
+            <span id="searchStatusHint"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg> all statuses</span>
           </div>
           <div id="searchResults" class="search-results" data-i18n-skip></div>
+          <p id="searchScopeHint" class="field-hint search-scope">Search is scoped to this workspace. Private boards only appear if they are yours.</p>
+          <button type="button" id="searchOpenBoardButton" class="btn ghost sm search-open-board">Open a board <svg class="icon" aria-hidden="true"><use href="#i-arrow-up-right"/></svg></button>
         </div>
       </section>
 
@@ -684,7 +694,7 @@
       </div>
       <textarea id="captureInput" class="capture-input" rows="3" aria-label="What needs doing?" placeholder="What needs doing? Try “Draft launch note tomorrow 2pm !high #Work ~45m”"></textarea>
       <div id="captureVoice" class="capture-voice">
-        <button type="button" id="captureVoiceButton" class="btn ghost sm" aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg>Speak</button>
+        <button type="button" id="captureVoiceButton" class="btn ghost sm" aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg><span id="captureVoiceLabel">Speak</span></button>
         <span id="captureVoiceHint" class="field-hint">Uses your browser’s speech service. Edit the words before adding; typing always works too.</span>
         <span id="captureHeard" class="badge accent hidden">Heard</span>
       </div>
@@ -699,7 +709,7 @@
           <span class="label">Column</span>
           <select id="captureColumn" class="select" aria-label="Column"></select>
         </label>
-        <button type="button" id="captureAddButton" class="btn primary"><svg class="icon" aria-hidden="true"><use href="#i-capture"/></svg>Add task<span class="kbd">C</span></button>
+        <button type="button" id="captureAddButton" class="btn primary"><svg class="icon" aria-hidden="true"><use href="#i-capture"/></svg><span id="captureAddLabel">Add task</span><span class="kbd">C</span></button>
       </div>
       <p class="capture-tip">Keep it small. You can add details, checklists and people later — or press Esc and come back.</p>
     </div>
@@ -802,7 +812,7 @@
         <div id="taskDetail" class="hidden">
           <div class="detail-section">
             <div class="section-head">
-              <h3>Checklist</h3>
+              <h3 id="subtaskHeading">Checklist</h3>
               <button type="button" id="subtaskSuggestButton" class="btn ghost sm"><svg class="icon"><use href="#i-capture"/></svg>Suggest</button>
               <span id="subtaskProgress" class="checklist-meter" aria-hidden="true"></span>
             </div>
@@ -810,7 +820,7 @@
             <div id="subtaskSuggestions" class="checklist-suggestions" data-i18n-skip></div>
             <div id="subtaskForm" class="comment-compose">
               <input id="subtaskTitle" class="input" maxlength="300" placeholder="Add a checklist item" aria-label="New checklist item">
-              <button type="button" id="subtaskAddButton" class="btn sm"><svg class="icon"><use href="#i-plus"/></svg>Add</button>
+              <button type="button" id="subtaskAddButton" class="btn sm" disabled><svg class="icon"><use href="#i-plus"/></svg>Add</button>
             </div>
           </div>
           <div class="detail-section">

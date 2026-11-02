@@ -947,12 +947,15 @@
     const month = state.calendarMonth.getMonth();
     const start = new Date(year, month, 1);
     const end = new Date(year, month + 1, 0);
+    $("calendarDatedHint").textContent = t("Loading…");
+    $("calendarRetryButton").classList.add("hidden");
     try {
       const result = await request(`/api/calendar?workspaceId=${encodeURIComponent(workspace().id)}&start=${dateKey(start)}&end=${dateKey(end)}`);
       $("calendarTitle").textContent = new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "long", year: "numeric" }).format(start);
       renderCalendar(result.days ?? []);
     } catch (error) {
-      showToast(error.message);
+      $("calendarDatedHint").textContent = error.message;
+      $("calendarRetryButton").classList.remove("hidden");
     }
   }
 
@@ -1033,9 +1036,10 @@
     $("calendarDatedCount").textContent = `${totalDated} ${t("dated")}`;
     $("calendarDatedHint").textContent = totalDated
       ? totalDated === 1
-        ? t("1 task has a due date this month. Untimed work stays on its board, where it belongs.")
-        : t("{{count}} tasks have a due date this month. Untimed work stays on its board, where it belongs.", { count: totalDated })
+        ? t("1 task has a due date this month. Undated work stays on its board, where it belongs.")
+        : t("{{count}} tasks have a due date this month. Undated work stays on its board, where it belongs.", { count: totalDated })
       : t("Tasks with a due date stay in their board, where they belong.");
+    $("calendarRetryButton").classList.add("hidden");
     for (let i = 0; i < 42; i++) {
       const date = new Date(gridStart);
       date.setDate(gridStart.getDate() + i);
@@ -1145,25 +1149,55 @@
         left.append(element("span", "", `${month} ${weekday}`));
         left.append(element("small", "", `${tasks.length} ${t(tasks.length === 1 ? "task" : "tasks")}`));
         const cards = element("div", "upcoming-cards");
-        for (const task of tasks) cards.append(upcomingRow(task));
+        for (const task of tasks) cards.append(upcomingRow(task, day.date === localDateKey()));
         group.append(left, cards);
         container.append(group);
       }
-      if (!total) container.append(element("div", "empty", t("Nothing due in the next {{count}} days.", { count: range })));
+      if (!total) {
+        const empty = element("div", "empty empty-state");
+        const mark = element("span", "empty-mark");
+        mark.append(icon("sun"));
+        const add = element("button", "btn primary", t("Add a dated task"));
+        add.type = "button";
+        add.addEventListener("click", openCapture);
+        empty.append(
+          mark,
+          element("h3", "", t("Nothing scheduled ahead")),
+          element("p", "", t("The horizon is clear. Add a date when something actually needs one — not before.")),
+          add,
+        );
+        container.append(empty);
+      }
       const end = data.end ? new Date(`${data.end}T12:00:00`) : new Date();
       const endLabel = new Intl.DateTimeFormat(state.settings?.locale || undefined, {
         month: "long", day: "numeric",
       }).format(end);
       $("upcomingFoot").textContent = t("Showing tasks due through {{date}}. Overdue work lives in Today and Search.", { date: endLabel });
+      $("upcomingFoot").parentElement.classList.toggle("hidden", !total);
     } catch (error) {
-      showToast(error.message);
+      $("upcomingFoot").parentElement.classList.add("hidden");
+      const container = $("upcomingList");
+      container.replaceChildren();
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("calendar-days"));
+      const retry = element("button", "btn primary", t("Try again"));
+      retry.type = "button";
+      retry.addEventListener("click", () => void loadUpcoming());
+      empty.append(
+        mark,
+        element("h3", "", t("Couldn’t load your upcoming tasks")),
+        element("p", "", error.message),
+        retry,
+      );
+      container.append(empty);
     }
   }
 
-  function upcomingRow(task) {
+  function upcomingRow(task, isToday = false) {
     const row = element("button", "upcoming-row");
     row.type = "button";
-    const dot = element("span", `upcoming-dot priority-${task.priority || "none"}`);
+    const dot = element("span", `side-dot${isToday ? " today" : ""}`);
     const copy = element("span", "upcoming-row-copy");
     copy.append(element("strong", "", task.title));
     const meta = element("span", "upcoming-row-meta");
@@ -1192,6 +1226,8 @@
   async function loadArchive() {
     try {
       const data = await request(`/api/archive?workspaceId=${encodeURIComponent(workspace().id)}`);
+      $("archiveError").classList.add("hidden");
+      $("archiveError").replaceChildren();
       const tasks = data.tasks ?? [];
       const archived = tasks.filter((task) => task.archivedAt);
       const completed = tasks.filter((task) => !task.archivedAt && Number(task.completed) === 1);
@@ -1205,7 +1241,22 @@
       renderArchiveList($("archiveArchivedList"), archived, "archived");
       renderArchiveList($("archiveList"), completed, "completed");
     } catch (error) {
-      showToast(error.message);
+      const box = $("archiveError");
+      box.replaceChildren();
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("archive"));
+      const retry = element("button", "btn primary", t("Try again"));
+      retry.type = "button";
+      retry.addEventListener("click", () => void loadArchive());
+      empty.append(
+        mark,
+        element("h3", "", t("Archive unavailable")),
+        element("p", "", error.message),
+        retry,
+      );
+      box.append(empty);
+      box.classList.remove("hidden");
     }
   }
 
@@ -1329,16 +1380,43 @@
       const data = await request(`/api/search?${params.toString()}`);
       const tasks = data.results ?? [];
       const total = Number(data.total ?? tasks.length);
-      $("searchMeta").textContent = `${total} ${t(total === 1 ? "result" : "results")} · ${query ? t("matching your search") : t("most recently touched")}`;
+      $("searchMeta").textContent = query
+        ? `${total} ${t(total === 1 ? "result" : "results")} ${t("for “{{query}}”", { query })}`
+        : `${total} ${t(total === 1 ? "result" : "results")} · ${t("most recently touched")}`;
       const statusHint = $("searchStatusHint");
-      statusHint.replaceChildren(icon("list"), document.createTextNode(` ${status === "all" ? t("all statuses") : t(status)}`));
+      statusHint.replaceChildren(icon("sliders"), document.createTextNode(` ${status === "all" ? t("all statuses") : t(status)}`));
+      $("searchScopeHint").textContent = t("Search is scoped to {{name}}. Private boards only appear if they are yours.", { name: workspace().name });
       if (!tasks.length) {
-        results.append(element("div", "empty", t("No matching tasks.")));
+        const empty = element("div", "empty empty-state");
+        const mark = element("span", "empty-mark");
+        mark.append(icon("search"));
+        empty.append(
+          mark,
+          element("h3", "", query ? t("No matching tasks") : t("A quiet archive")),
+          element("p", "", query
+            ? t("Try fewer words, a different status, or search an older board.")
+            : t("Nothing here yet. Capture a task and it becomes searchable instantly.")),
+        );
+        results.append(empty);
         return;
       }
       for (const task of tasks) results.append(searchRow(task));
     } catch (error) {
-      showToast(error.message);
+      results.replaceChildren();
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("search"));
+      const retry = element("button", "btn primary", t("Try again"));
+      retry.type = "button";
+      retry.addEventListener("click", () => void runSearch());
+      empty.append(
+        mark,
+        element("h3", "", t("Search is unavailable")),
+        element("p", "", error.message),
+        retry,
+      );
+      results.append(empty);
+      $("searchMeta").textContent = t("Search is unavailable");
     }
   }
 
@@ -1348,22 +1426,24 @@
     const completed = Number(task.completed) === 1;
     const archived = Boolean(task.archivedAt);
     const marker = element("span", `search-row-marker${completed ? " done" : ""}`);
-    marker.append(icon(completed ? "check" : "search"));
+    marker.append(icon(completed ? "check-circle" : "search"));
     const copy = element("span", "search-row-copy");
     copy.append(element("strong", "", task.title));
     if (task.description) copy.append(element("span", "search-row-description", task.description));
     const meta = element("span", "search-row-meta");
-    meta.append(element("span", "search-row-meta-text", task.boardName || t("Board")));
-    meta.append(element("span", "search-row-meta-text", archived ? t("Archived") : (task.columnName || t("Task"))));
+    meta.append(makeBadge(task.boardName || t("Board"), "slate"));
+    meta.append(makeBadge(archived ? t("Archived") : (task.columnName || t("Task")), "slate"));
     if (task.dueDate) {
-      const due = element("span", `search-row-due${String(task.dueDate).slice(0, 10) < localDateKey() && !completed ? " overdue" : ""}`);
-      due.textContent = captureDueLabel(task);
-      meta.append(due);
+      const overdue = String(task.dueDate).slice(0, 10) < localDateKey() && !completed;
+      meta.append(makeBadge(captureDueLabel(task), overdue ? "rose" : "slate"));
+    }
+    if (Number(task.subtaskCount || 0) > 0) {
+      meta.append(makeBadge(`${Number(task.subtaskDone || 0)}/${Number(task.subtaskCount || 0)}`, "slate"));
     }
     copy.append(meta);
     const side = element("span", "search-row-side");
     if (task.priority && task.priority !== "none") {
-      side.append(element("span", `search-priority priority-${task.priority}`, priorityLabel(task.priority)));
+      side.append(makeBadge(priorityLabel(task.priority), priorityTone(task.priority)));
     }
     side.append(element("span", "search-row-status", archived ? t("Archived") : completed ? t("Done") : t("Open")));
     if (task.assigneeName) side.append(element("span", "search-row-assignee", task.assigneeName));
@@ -1375,18 +1455,20 @@
   async function loadInsights() {
     const grid = $("insightsGrid");
     try {
-      const data = await request(`/api/insights?workspaceId=${encodeURIComponent(workspace().id)}`);
-      const tasks = data.tasks ?? [];
-      const dated = tasks.filter((task) => task.dueDate);
       const range = Number(state.insightsRange || 30);
+      const data = await request(`/api/insights?workspaceId=${encodeURIComponent(workspace().id)}&days=${encodeURIComponent(range)}`);
+      const tasks = data.tasks ?? [];
+      const isOpen = (task) => !task.isDone && Number(task.completed) !== 1 && !task.completedAt;
+      const scheduled = tasks.filter((task) => isOpen(task) && (task.startDate || task.dueDate));
+      const unscheduled = tasks.filter((task) => isOpen(task) && !task.startDate && !task.dueDate);
       const mode = state.insightsMode || "timeline";
+      const timeZone = state.boot?.user?.timezone || "Asia/Hong_Kong";
       $("insightsTimelineButton").classList.toggle("active", mode === "timeline");
       $("insightsWorkloadButton").classList.toggle("active", mode === "workload");
       document.querySelectorAll("[data-range]").forEach((button) => {
         button.classList.toggle("active", Number(button.dataset.range) === range);
       });
-      const unscheduledCount = tasks.filter((task) => !task.isDone && Number(task.completed) !== 1 && !task.startDate && !task.dueDate).length;
-      $("insightsMeta").textContent = `${dated.length} ${t("dated tasks")} · ${unscheduledCount} ${t("unscheduled")} · ${t("dates in Asia/Hong_Kong")}`;
+      $("insightsMeta").textContent = `${scheduled.length} ${t("dated tasks")} · ${unscheduled.length} ${t("unscheduled")} · ${t("dates in {{zone}}", { zone: timeZone })}`;
       $("insightsMeta").classList.toggle("hidden", mode === "workload");
       $("insightsRange").classList.toggle("hidden", mode === "workload");
       grid.replaceChildren();
@@ -1394,102 +1476,120 @@
         renderInsightsWorkload(grid, tasks, data);
         return;
       }
-      renderInsightsTimeline(grid, tasks, dated, range);
+      renderInsightsTimeline(grid, tasks, scheduled, range, data);
     } catch (error) {
       grid.replaceChildren(element("div", "empty", error.message));
     }
   }
 
-  function renderInsightsTimeline(grid, tasks, dated, range) {
-    const start = new Date();
-    start.setHours(12, 0, 0, 0);
+  function renderInsightsTimeline(grid, tasks, scheduled, range, data) {
+    const startKey = data?.today || localDateKey();
+    const start = new Date(`${startKey}T12:00:00`);
     const days = [];
     for (let index = 0; index < range; index++) {
       const date = new Date(start);
       date.setDate(start.getDate() + index);
       days.push(date);
     }
-    const timeline = element("div", "timeline");
-    timeline.style.setProperty("--timeline-days", String(range));
-    const header = element("div", "timeline-header");
-    header.append(element("div", "timeline-label", t("Task")));
-    const dates = element("div", "timeline-dates");
-    for (const date of days) {
-      const isToday = dateKey(date) === localDateKey();
-      const cell = element("span", isToday ? "today" : "");
-      cell.append(element("strong", "", isToday
-        ? t("Today").toUpperCase()
-        : new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "short" }).format(date).toUpperCase()));
-      cell.append(element("small", "", new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(date)));
-      dates.append(cell);
-    }
-    header.append(dates);
-    timeline.append(header);
-    const groups = new Map();
-    for (const task of dated) {
-      const key = task.boardName || t("Board");
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(task);
-    }
-    for (const [boardName, boardTasks] of groups) {
-      const group = element("div", "timeline-group");
-      const label = element("div", "timeline-group-label");
-      label.append(document.createTextNode(boardName), element("span", "", String(boardTasks.length)));
-      group.append(label);
-      for (const task of boardTasks) {
-        const row = element("div", "timeline-row");
-        const copy = element("button", "timeline-task");
-        copy.type = "button";
-        copy.append(element("span", "timeline-task-title", task.title));
-        const meta = element("span", "timeline-task-meta");
-        if (task.priority && task.priority !== "none") meta.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
-        if (task.estimateMinutes) {
-          const estimate = element("span");
-          estimate.append(icon("clock"), document.createTextNode(`${task.estimateMinutes}m`));
-          meta.append(estimate);
-        }
-        const assigneeName = task.assigneeName || task.assignee?.name;
-        if (assigneeName) meta.append(element("span", "", assigneeName));
-        copy.append(meta);
-        copy.addEventListener("click", () => openTaskById(task.id));
-        const track = element("div", "timeline-track");
-        const due = new Date(`${String(task.dueDate).slice(0, 10)}T12:00:00`);
-        const barStart = task.startDate ? new Date(`${String(task.startDate).slice(0, 10)}T12:00:00`) : due;
-        const dueIndex = Math.max(0, Math.min(range - 1, Math.round((due - start) / 86400000)));
-        const overdue = due.getTime() < start.getTime();
-        const startIndex = overdue ? 0 : Math.max(0, Math.min(range - 1, Math.round((barStart - start) / 86400000)));
-        const endIndex = overdue ? range - 1 : Math.max(startIndex, dueIndex);
-        const bar = element("span", `timeline-bar${task.priority === "urgent" || task.priority === "high" ? " urgent" : ""}${Number(task.completed) === 1 ? " done" : ""}`);
-        bar.style.left = `${(startIndex / range) * 100}%`;
-        bar.style.width = `${Math.max(1.6, ((endIndex - startIndex + 1) / range) * 100)}%`;
-        bar.title = `${task.title} · ${String(task.dueDate).slice(0, 10)}`;
-        bar.addEventListener("click", () => openTaskById(task.id));
-        track.append(bar);
-        row.append(copy, track);
-        group.append(row);
+    const unscheduled = tasks.filter((task) => !task.isDone && Number(task.completed) !== 1 && !task.completedAt && !task.startDate && !task.dueDate);
+    if (!scheduled.length) {
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("calendar"));
+      empty.append(
+        mark,
+        element("h3", "", t("No dated work in this window")),
+        element("p", "", t("Timeline uses start and due dates. Add a date in a task, or keep working from Today — that is a valid way to plan.")),
+      );
+      grid.append(empty);
+    } else {
+      const timeline = element("div", "timeline");
+      timeline.style.setProperty("--timeline-days", String(range));
+      const header = element("div", "timeline-header");
+      header.append(element("div", "timeline-label", t("Task")));
+      const dates = element("div", "timeline-dates");
+      for (const date of days) {
+        const isToday = dateKey(date) === startKey;
+        const cell = element("span", isToday ? "today" : "");
+        cell.append(element("strong", "", isToday
+          ? t("Today").toUpperCase()
+          : new Intl.DateTimeFormat(state.settings?.locale || undefined, { weekday: "short" }).format(date).toUpperCase()));
+        cell.append(element("small", "", new Intl.DateTimeFormat(state.settings?.locale || undefined, { month: "short", day: "numeric" }).format(date)));
+        dates.append(cell);
       }
-      timeline.append(group);
+      header.append(dates);
+      timeline.append(header);
+      const groups = new Map();
+      for (const task of scheduled) {
+        const key = task.boardId || task.boardName || t("Board");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(task);
+      }
+      for (const [, boardTasks] of [...groups.entries()].sort((a, b) =>
+        String(a[1][0]?.boardName ?? "").localeCompare(String(b[1][0]?.boardName ?? "")))) {
+        const group = element("div", "timeline-group");
+        const label = element("div", "timeline-group-label");
+        label.append(document.createTextNode(boardTasks[0]?.boardName || t("Board")), element("span", "", String(boardTasks.length)));
+        group.append(label);
+        for (const task of boardTasks) {
+          const row = element("div", "timeline-row");
+          const copy = element("button", "timeline-task");
+          copy.type = "button";
+          copy.append(element("span", "timeline-task-title", task.title));
+          const meta = element("span", "timeline-task-meta");
+          if (task.priority && task.priority !== "none") meta.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
+          if (task.estimateMinutes) {
+            const estimate = element("span");
+            estimate.append(icon("clock"), document.createTextNode(`${task.estimateMinutes}m`));
+            meta.append(estimate);
+          }
+          const assigneeName = task.assigneeName || task.assignee?.name;
+          if (assigneeName) meta.append(element("span", "", assigneeName));
+          copy.append(meta);
+          copy.addEventListener("click", () => openTaskById(task.id));
+          const track = element("div", "timeline-track");
+          const taskStartKey = task.startDate ? String(task.startDate).slice(0, 10) : String(task.dueDate).slice(0, 10);
+          const dueKey = task.dueDate ? String(task.dueDate).slice(0, 10) : taskStartKey;
+          const startIndex = Math.max(0, days.findIndex((date) => dateKey(date) === taskStartKey));
+          const rawEnd = days.findIndex((date) => dateKey(date) === dueKey);
+          const endIndex = rawEnd < 0 ? range - 1 : Math.max(startIndex, Math.min(range - 1, rawEnd));
+          const bar = element("span", `timeline-bar${task.priority === "urgent" || task.priority === "high" ? " urgent" : ""}${task.isDone || Number(task.completed) === 1 ? " done" : ""}`);
+          bar.style.left = `${(startIndex / range) * 100}%`;
+          bar.style.width = `${Math.max(1.6, ((endIndex - startIndex + 1) / range) * 100)}%`;
+          bar.title = `${task.title}: ${taskStartKey} — ${dueKey}`;
+          bar.addEventListener("click", () => openTaskById(task.id));
+          track.append(bar);
+          row.append(copy, track);
+          group.append(row);
+        }
+        timeline.append(group);
+      }
+      const scroll = element("div", "timeline-scroll");
+      scroll.tabIndex = 0;
+      scroll.setAttribute("role", "region");
+      scroll.setAttribute("aria-label", t("Timeline"));
+      scroll.append(timeline);
+      grid.append(scroll);
     }
-    if (!dated.length) timeline.append(element("div", "empty", t("No dated tasks yet.")));
-    const scroll = element("div", "timeline-scroll");
-    scroll.tabIndex = 0;
-    scroll.setAttribute("role", "region");
-    scroll.setAttribute("aria-label", t("Timeline"));
-    scroll.append(timeline);
-    grid.append(scroll);
-    const unscheduled = tasks.filter((task) => !task.isDone && Number(task.completed) !== 1 && !task.startDate && !task.dueDate);
     if (unscheduled.length) {
-      const block = element("div", "insights-unscheduled");
-      block.append(element("h2", "", t("Unscheduled")));
+      const block = element("section", "insights-unscheduled");
+      const head = element("div", "section-head");
+      head.append(element("h2", "section-title", t("Unscheduled")), element("span", "badge slate", String(unscheduled.length)));
+      block.append(head);
+      block.append(element("p", "field-hint", t("Undated work is not late. It waits until you give it a place.")));
       const list = element("div", "unscheduled-list");
       for (const task of unscheduled.slice(0, 20)) {
-        const row = element("button", "unscheduled-row");
+        const row = element("button", "slim-task");
         row.type = "button";
-        row.append(element("strong", "", task.title), element("span", "", task.boardName || ""));
+        row.append(element("span", "slim-title", task.title));
+        row.append(element("span", "task-foot-meta", `${task.boardName || t("Board")} · ${task.columnName || t("Task")}`));
         row.addEventListener("click", () => openTaskById(task.id));
         list.append(row);
       }
       block.append(list);
+      if (unscheduled.length > 20) {
+        block.append(element("p", "field-hint", t("Showing 20 of {{count}}. Search can find the rest.", { count: unscheduled.length })));
+      }
       grid.append(block);
     }
   }
@@ -1519,7 +1619,9 @@
     const peopleHead = element("div", "section-head");
     const peopleCopy = element("div");
     peopleCopy.append(element("h2", "", t("Load by person")), element("p", "hint", t("Estimate of open work, not a performance score.")));
-    peopleHead.append(peopleCopy);
+    const peopleIcon = icon("timer");
+    peopleIcon.style.color = "var(--faint)";
+    peopleHead.append(peopleCopy, peopleIcon);
     people.append(peopleHead);
     const peopleList = element("div", "workload-list");
     for (const member of data.members ?? []) {
@@ -1541,7 +1643,9 @@
     const boardsHead = element("div", "section-head");
     const boardsCopy = element("div");
     boardsCopy.append(element("h2", "", t("Board health")), element("p", "hint", t("Where work is accumulating.")));
-    boardsHead.append(boardsCopy);
+    const boardsIcon = icon("insights");
+    boardsIcon.style.color = "var(--faint)";
+    boardsHead.append(boardsCopy, boardsIcon);
     boards.append(boardsHead);
     if ((data.boards ?? []).length) {
       const maxBoard = Math.max(1, ...data.boards.map((board) => Number(board.estimateMinutes || 0)));
@@ -1988,7 +2092,7 @@
       button.dataset.boardId = board.id;
       button.append(icon("board"), element("span", "board-name", board.name));
       if (board.taskCount != null) button.append(element("span", "board-count", String(board.taskCount)));
-      if (board.id === state.currentBoardId) button.classList.add("active");
+      if (board.id === state.currentBoardId && state.view === "board") button.classList.add("active");
       button.addEventListener("click", async () => {
         state.currentBoardId = board.id;
         await loadBoard(board.id);
@@ -2017,7 +2121,24 @@
           return;
         }
       }
-      throw error;
+      state.currentBoardId = boardId;
+      const container = $("board");
+      container.classList.remove("list-mode");
+      container.replaceChildren();
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("board"));
+      const retry = element("button", "btn primary", t("Try again"));
+      retry.type = "button";
+      retry.addEventListener("click", () => void loadBoard(boardId));
+      empty.append(
+        mark,
+        element("h3", "", t("This board didn’t load")),
+        element("p", "", error.message || t("The board may have moved or your role may have changed.")),
+        retry,
+      );
+      container.append(empty);
+      return null;
     }
     state.board = data;
     state.currentBoardId = boardId;
@@ -2029,9 +2150,12 @@
   async function loadToday() {
     const current = workspace();
     if (!current) return;
+    let loadFailed = false;
     try {
       state.today = await request(`/api/today?workspaceId=${encodeURIComponent(current.id)}`);
       window.DriftOffline?.cacheToday(current.id, state.today);
+      $("todayError").classList.add("hidden");
+      $("todayError").replaceChildren();
       if (settingOn(state.settings?.autoPlanEnabled)) {
         try {
           state.autoPlan = await request("/api/auto-plan", {
@@ -2050,10 +2174,28 @@
           state.today = cached;
           updateOfflineBanner();
         } else {
-          throw error;
+          loadFailed = true;
         }
       } else {
-        throw error;
+        loadFailed = true;
+      }
+      if (loadFailed) {
+        const box = $("todayError");
+        box.replaceChildren();
+        const empty = element("div", "empty empty-state");
+        const mark = element("span", "empty-mark");
+        mark.append(icon("sun"));
+        const retry = element("button", "btn primary", t("Try again"));
+        retry.type = "button";
+        retry.addEventListener("click", () => void loadToday());
+        empty.append(
+          mark,
+          element("h3", "", t("Today didn’t load")),
+          element("p", "", error.message),
+          retry,
+        );
+        box.append(empty);
+        box.classList.remove("hidden");
       }
     }
     renderToday();
@@ -2072,6 +2214,9 @@
     if (locked) $("mfaLockCopy").textContent = t("{{workspace}} requires MFA. Enable it in account settings, then reload.", { workspace: workspace()?.name ?? t("This workspace") });
     document.querySelectorAll(".nav button, .mobile-nav-item").forEach((button) => {
       button.classList.toggle("active", button.dataset.view === view);
+    });
+    document.querySelectorAll(".board-link").forEach((button) => {
+      button.classList.toggle("active", view === "board" && button.dataset.boardId === state.currentBoardId);
     });
     const viewLabels = {
       today: t("Today"), board: currentBoard()?.name ?? t("Board"), calendar: t("Calendar"),
@@ -2242,6 +2387,16 @@
     }
   }
 
+  function clearBoardFilters() {
+    state.boardFilterText = "";
+    state.boardPriority = "";
+    state.boardAssignee = "";
+    $("boardFilterInput").value = "";
+    $("boardPriorityFilter").value = "";
+    $("boardAssigneeFilter").value = "";
+    renderBoard();
+  }
+
   function renderBoard() {
     const container = $("board");
     container.replaceChildren();
@@ -2282,6 +2437,8 @@
         && (!assigneeName || assignee === assigneeName);
     });
     const taskMatches = (task) => visibleTasks.includes(task);
+    const activeFilters = Boolean(filterText || priorityFilter || assigneeName);
+    $("boardClearFiltersButton").classList.toggle("hidden", !activeFilters);
     $("boardTaskCount").textContent = `${visibleTasks.length} ${t(visibleTasks.length === 1 ? "task" : "tasks")}`;
     $("boardSettingsButton").disabled = !(board.permissions?.canEdit ?? true);
     $("boardShareButton").disabled = !(board.permissions?.canShare ?? true);
@@ -2291,6 +2448,23 @@
     $("boardDeleteButton").classList.toggle("hidden", !(board.permissions?.canManage ?? true));
     $("boardViewButton").classList.toggle("active", state.boardMode !== "list");
     $("listViewButton").classList.toggle("active", state.boardMode === "list");
+
+    if (!visibleTasks.length && activeFilters) {
+      const empty = element("div", "empty empty-state");
+      const mark = element("span", "empty-mark");
+      mark.append(icon("filter"));
+      const clear = element("button", "btn", t("Clear filters"));
+      clear.type = "button";
+      clear.addEventListener("click", clearBoardFilters);
+      empty.append(
+        mark,
+        element("h3", "", t("No tasks match those filters")),
+        element("p", "", t("Try a shorter search, a different person, or clear the filters.")),
+        clear,
+      );
+      container.append(empty);
+      return;
+    }
 
     if (state.boardMode === "list") {
       container.classList.add("list-mode");
@@ -2317,7 +2491,22 @@
         row.addEventListener("click", () => openTaskModal(task));
         table.append(row);
       }
-      if (!visibleTasks.length) table.append(element("div", "empty", t("No tasks match these filters.")));
+      if (!visibleTasks.length) {
+        const empty = element("div", "empty empty-state");
+        const mark = element("span", "empty-mark");
+        mark.append(icon("capture"));
+        const add = element("button", "btn primary");
+        add.type = "button";
+        add.append(icon("capture"), document.createTextNode(t("Add the first task")));
+        add.addEventListener("click", openCapture);
+        empty.append(
+          mark,
+          element("h3", "", t("Nothing on this board yet")),
+          element("p", "", t("Capture the first small step. You can organize it later.")),
+          add,
+        );
+        table.append(empty);
+      }
       container.append(table);
       return;
     }
@@ -2549,7 +2738,10 @@
     if (!suggestions.length) {
       list.append(element("div", "empty", t("Nothing open. Add a task to begin.")));
     }
-    const visibleTasks = state.todayShowAll ? suggestions : suggestions.slice(0, 6);
+    const acceptedTasks = suggestions.filter((task) => task.accepted || task.selected);
+    const restTasks = suggestions.filter((task) => !task.accepted && !task.selected);
+    const orderedSuggestions = [...acceptedTasks, ...restTasks];
+    const visibleTasks = state.todayShowAll ? orderedSuggestions : orderedSuggestions.slice(0, 8);
     const toneFor = (priority) => priority === "urgent" || priority === "high" ? "rose" : priority === "medium" ? "amber" : "blue";
     visibleTasks.forEach((task, index) => {
       const card = element("article", `focus-card${task.accepted ? " accepted" : ""}${task.blocked ? " blocked" : ""}`);
@@ -2628,11 +2820,17 @@
       card.append(marker, main, actions);
       list.append(card);
     });
-    if (!state.todayShowAll && suggestions.length > 6) {
-      const more = element("button", "btn ghost sm today-show-more", t("Show the other {{count}}", { count: suggestions.length - 6 }));
+    if (orderedSuggestions.length > 8) {
+      const more = element("button", "btn ghost sm today-show-more");
       more.type = "button";
+      more.append(document.createTextNode(state.todayShowAll
+        ? t("Show less")
+        : t("Show the other {{count}}", { count: orderedSuggestions.length - 8 })));
+      const chevron = icon("chevron-right");
+      chevron.style.transform = state.todayShowAll ? "rotate(-90deg)" : "rotate(90deg)";
+      more.append(chevron);
       more.addEventListener("click", () => {
-        state.todayShowAll = true;
+        state.todayShowAll = !state.todayShowAll;
         renderToday();
       });
       list.append(more);
@@ -3579,7 +3777,7 @@
     }
     const button = $("captureVoiceButton");
     if (button) {
-      button.textContent = t("Speak");
+      setCaptureVoiceLabel(t("Speak"));
       button.classList.remove("listening");
       button.setAttribute("aria-pressed", "false");
     }
@@ -3590,6 +3788,16 @@
         ? t("Uses your browser’s speech service. Edit the words before adding; typing always works too.")
         : t("Voice isn’t available in this browser — type instead.");
     }
+  }
+
+  function setCaptureVoiceLabel(label) {
+    const text = $("captureVoiceLabel");
+    if (text) text.textContent = label;
+  }
+
+  function updateCaptureSubmit() {
+    const button = $("captureAddButton");
+    if (button) button.disabled = state.captureSaving || !$("captureInput").value.trim();
   }
 
   function populateCaptureColumns() {
@@ -3620,6 +3828,7 @@
       ? t("Uses your browser’s speech service. Edit the words before adding; typing always works too.")
       : t("Voice isn’t available in this browser — type instead.");
     renderCapturePreview();
+    updateCaptureSubmit();
     $("captureModal").classList.remove("hidden");
     window.setTimeout(() => $("captureInput").focus(), 30);
   }
@@ -3692,7 +3901,7 @@
     recognition.onend = () => {
       state.captureRecognition = null;
       state.captureListening = false;
-      $("captureVoiceButton").textContent = t("Speak");
+      setCaptureVoiceLabel(t("Speak"));
       $("captureVoiceButton").classList.remove("listening");
       $("captureVoiceButton").setAttribute("aria-pressed", "false");
       $("captureHeard").classList.add("hidden");
@@ -3702,7 +3911,7 @@
     state.captureRecognition = recognition;
     state.captureListening = true;
     $("captureVoiceError").classList.add("hidden");
-    $("captureVoiceButton").textContent = t("Stop listening");
+    setCaptureVoiceLabel(t("Stop listening"));
     $("captureVoiceButton").classList.add("listening");
     $("captureVoiceButton").setAttribute("aria-pressed", "true");
     $("captureVoiceHint").textContent = t("Listening… speak now. You can edit the words before adding.");
@@ -3741,7 +3950,7 @@
     const button = $("captureAddButton");
     state.captureSaving = true;
     button.disabled = true;
-    button.firstChild.textContent = t("Adding…");
+    $("captureAddLabel").textContent = t("Adding…");
     try {
       let created = null;
       try {
@@ -3773,8 +3982,8 @@
       showToast(error.message);
     } finally {
       state.captureSaving = false;
-      button.disabled = false;
-      button.firstChild.textContent = `${t("Add task")} `;
+      $("captureAddLabel").textContent = t("Add task");
+      updateCaptureSubmit();
     }
   }
 
@@ -3816,6 +4025,8 @@
     $("taskDetail").classList.toggle("hidden", !task);
     $("subtaskList").replaceChildren();
     $("commentList").replaceChildren();
+    $("subtaskTitle").value = "";
+    $("subtaskAddButton").disabled = true;
     $("dependencyList").replaceChildren();
     $("dependencySelect").replaceChildren();
     $("attachmentList").replaceChildren();
@@ -3823,7 +4034,7 @@
     $("activityList").replaceChildren();
     $("subtaskProgress").replaceChildren();
     $("subtaskProgress").hidden = true;
-    const board = currentBoard();
+    const board = (task?.boardId && boards().find((item) => item.id === task.boardId)) || currentBoard();
     const columns = board?.columns ?? [];
     $("taskModalTitle").textContent = task?.title ?? t("New task");
     $("taskModal").setAttribute("aria-label", task?.title ?? t("New task"));
@@ -3881,6 +4092,9 @@
       .catch(() => undefined);
     $("taskColumn").replaceChildren();
     for (const column of columns) $("taskColumn").add(new Option(column.name, column.id));
+    if (task?.columnId && ![...$("taskColumn").options].some((option) => option.value === task.columnId)) {
+      $("taskColumn").add(new Option(task.columnName || t("Status"), task.columnId));
+    }
     if (columnId) $("taskColumn").value = columnId;
     else if (task?.columnId) $("taskColumn").value = task.columnId;
     $("columnField").classList.remove("hidden");
@@ -3973,6 +4187,9 @@
     if (!task) return;
     const subtasks = task.subtasks ?? [];
     const completed = subtasks.filter((item) => Number(item.completed) === 1).length;
+    $("subtaskHeading").textContent = subtasks.length
+      ? `${t("Checklist")} · ${completed}/${subtasks.length}`
+      : t("Checklist");
     const meter = $("subtaskProgress");
     meter.replaceChildren();
     const fill = element("i");
@@ -3983,15 +4200,16 @@
     list.replaceChildren();
     if (!subtasks.length) list.classList.add("hidden"); else list.classList.remove("hidden");
     for (const subtask of subtasks) {
-      const row = element("label", `detail-item${Number(subtask.completed) === 1 ? " done" : ""}`);
+      const row = element("label", `check-row${Number(subtask.completed) === 1 ? " completed" : ""}`);
       const checkbox = element("input");
       checkbox.type = "checkbox";
       checkbox.checked = Number(subtask.completed) === 1;
       checkbox.addEventListener("change", () => toggleSubtask(subtask.id, checkbox.checked));
       const title = element("span", "grow", subtask.title);
-      const remove = element("button", "btn ghost sm", t("Remove"));
+      const remove = element("button", "icon-btn sm");
       remove.type = "button";
       remove.setAttribute("aria-label", t("Remove {{name}}", { name: subtask.title }));
+      remove.append(icon("x"));
       remove.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -4222,6 +4440,7 @@
         body: { title },
       });
       $("subtaskTitle").value = "";
+      $("subtaskAddButton").disabled = true;
       $("subtaskSuggestions").replaceChildren();
       await loadTaskDetail(state.editing.id);
       await refreshVisibleData({ notifications: false, bootstrap: false });
@@ -7887,7 +8106,10 @@
       if (event.target === $("captureModal")) closeCapture();
     });
     $("captureBoard").addEventListener("change", populateCaptureColumns);
-    $("captureInput").addEventListener("input", renderCapturePreview);
+    $("captureInput").addEventListener("input", () => {
+      renderCapturePreview();
+      updateCaptureSubmit();
+    });
     $("captureInput").addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -7960,6 +8182,7 @@
       state.boardAssignee = event.target.value;
       renderBoard();
     });
+    $("boardClearFiltersButton").addEventListener("click", clearBoardFilters);
     $("boardViewButton").addEventListener("click", () => {
       state.boardMode = "board";
       renderBoard();
@@ -8076,10 +8299,7 @@
         void loadUpcoming();
       });
     });
-    $("upcomingNewTaskButton").addEventListener("click", () => {
-      const columnId = currentBoard()?.columns?.[0]?.id ?? null;
-      openTaskModal(null, columnId);
-    });
+    $("upcomingNewTaskButton").addEventListener("click", openCapture);
     $("searchInput").addEventListener("input", () => {
       window.clearTimeout(state.searchTimer);
       state.searchTimer = window.setTimeout(() => void runSearch(), 180);
@@ -8095,6 +8315,12 @@
     });
     $("searchPriorityFilter").addEventListener("change", () => void runSearch());
     $("searchBoardFilter").addEventListener("change", () => void runSearch());
+    $("searchOpenBoardButton").addEventListener("click", () => {
+      const first = boards()[0];
+      if (!first) return;
+      state.currentBoardId = first.id;
+      setView("board");
+    });
     $("calendarPrev").addEventListener("click", () => {
       state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() - 1, 1);
       void loadCalendar();
@@ -8107,14 +8333,9 @@
       state.calendarMonth = new Date();
       void loadCalendar();
     });
-    $("calendarNewTaskButton").addEventListener("click", () => {
-      const columnId = currentBoard()?.columns?.[0]?.id ?? null;
-      openTaskModal(null, columnId);
-    });
-    $("insightsNewTaskButton").addEventListener("click", () => {
-      const columnId = currentBoard()?.columns?.[0]?.id ?? null;
-      openTaskModal(null, columnId);
-    });
+    $("calendarNewTaskButton").addEventListener("click", openCapture);
+    $("calendarRetryButton").addEventListener("click", () => void loadCalendar());
+    $("insightsNewTaskButton").addEventListener("click", openCapture);
     $("insightsTimelineButton").addEventListener("click", () => {
       state.insightsMode = "timeline";
       void loadInsights();
@@ -8182,6 +8403,9 @@
     $("attachmentUploadButton").addEventListener("click", () => $("attachmentInput").click());
     $("attachmentInput").addEventListener("change", uploadAttachment);
     $("reminderAddButton").addEventListener("click", addReminder);
+    $("subtaskTitle").addEventListener("input", () => {
+      $("subtaskAddButton").disabled = !$("subtaskTitle").value.trim();
+    });
     $("subtaskTitle").addEventListener("keydown", (event) => {
       if (event.key === "Enter") { event.preventDefault(); void addSubtask(); }
     });

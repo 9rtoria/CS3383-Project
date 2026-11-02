@@ -352,6 +352,46 @@ Fixed during the pass:
   workspace, labels, two boards, WIP limits, tasks, descriptions, checklists, comments, view,
   and notifications.
 
+### Second live-audit reconciliation (same day)
+
+A second side-by-side pass was run after a report that some pages still looked different.
+The following gaps were confirmed and fixed rather than treated as data drift:
+
+- **Insights**: New task now opens Quick Capture on Timeline and Workload; the timeline
+  requests the selected `days` range, uses start/due dates, excludes completed work, groups
+  rows by board, uses the reference empty state, and the Unscheduled card now includes its
+  count, subtitle, board/column meta, badge, and 20-item hint. Workload section headings use
+  the reference 13px title scale, board/member order icons, and the same metric/list markup.
+- **Today**: the first screen again shows eight suggestions, the Show the other/Show less
+  toggle is bidirectional, and the footer matches the reference.
+- **Upcoming / Calendar**: Upcoming rows use the neutral/today side dot rather than a
+  priority-coloured dot, the footer is hidden when empty, and both views now expose inline
+  error states with Retry. Calendar's summary copy uses “Undated”, and failed loads report the
+  error in the Dated tasks card instead of only a toast.
+- **Search**: restored the result meta badges, checklist counts, full empty/error states,
+  scoped-workspace footer, Open a board action, query-specific result count, and the reference
+  unfiltered “most recently touched” ordering (done items are no longer forced to the bottom).
+- **Archive / Board**: Archive has an inline unavailable state with Retry. Board list mode has
+  the reference “Nothing on this board yet” and “No tasks match those filters” cards, the
+  toolbar/empty-card Clear filters action, and the filtered card spans the full board width.
+- **Shell / navigation**: a board stays highlighted in the sidebar only while Board is the
+  active view; Board, Upcoming, Calendar, Search, Archive, Insights, and Today no longer keep
+  a stale board selection.
+- **Quick capture / task drawer**: the voice button keeps its microphone icon after listening;
+  Add task is disabled until text is entered and no longer mutates the button’s SVG label;
+  the task drawer now loads Status options from the task’s own board (not the previously
+  selected board), shows the checklist count, uses borderless checklist rows with X remove
+  controls, and keeps the reference notes field.
+- **Error feedback**: Today, Board, Upcoming, Calendar, Search, Archive, and Insights now
+  all show an in-place error card with a retry action instead of a silent blank area or a
+  toast-only failure.
+
+The black circular control in the reference screenshots is the **Next.js development
+indicator** (the “N” badge shown when `ProjectA2` runs under `next dev`). It is not a Drift
+feature, is absent from both codebases, and is not reproduced in this build. The other
+right-side sparkle/translate controls seen in some browser screenshots are browser
+extensions, also outside the application.
+
 Three intentional rewrite-only additions remain visible in Settings: the Keyboard
 "Shortcut sheet" link row, the collapsed "Events" selector under Webhooks, and the four-item
 Workspace group in personal Owner/Admin workspaces (the reference hides Automations and Audit
