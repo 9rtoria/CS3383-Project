@@ -6,6 +6,21 @@ A new implementation of the Drift task planner, built with **Java + Spring Boot 
 
 See `docs/PARITY.md` for the API/model/UI status and `docs/ACCEPTANCE.md` for the build, browser, accessibility, performance, and security acceptance report.
 
+## Cross-application parity audit
+
+`scripts/parity-audit.cjs` compares the live reference app (`localhost:3000`) with this build
+(`localhost:3383`). It checks static IDs/SVG/i18n, every main view, board card and list-row
+geometry/computed styles, completed/reopened drag state, light/dark completed colors, the task
+drawer, command palette, quick capture, Settings, and responsive widths. Any mismatch exits
+non-zero.
+
+```powershell
+$env:NODE_PATH="C:\path\to\ProjectA2\node_modules"
+node scripts/parity-audit.cjs
+```
+
+The report is written to `target/parity-audit/report.json`.
+
 Implemented:
 
 - Spring Boot 3.5 application on port `3383`

@@ -2707,7 +2707,9 @@
     if (canEdit) {
       const addColumn = element("button", "column column-add-column");
       addColumn.type = "button";
-      addColumn.append(icon("plus"), document.createTextNode(` ${t("Add column")}`));
+      const addColumnLabel = element("span", "inline");
+      addColumnLabel.append(icon("plus"), document.createTextNode(t("Add column")));
+      addColumn.append(addColumnLabel);
       addColumn.addEventListener("click", () => openColumnModal());
       container.append(addColumn);
     }

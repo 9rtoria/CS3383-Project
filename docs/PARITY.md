@@ -463,8 +463,18 @@ Frontend and interaction changes in this pass:
   reference's compact single-line card height; titles clamp at three lines and description
   spacing matches the reference. Card footers also expose open dependencies, attachments, and
   tracked focus minutes.
-- The "Add column" dashed column aligns its label to the top-left like the reference instead
-  of centring it in the full-height column.
+- Completed card titles use `var(--muted)` with the reference line-through treatment, and the
+  extra metadata opacity that the reference does not have was removed. The same state was
+  verified in light and dark themes.
+- Board list rows now use the reference 12px row type, 11px dim columns, 550 title weight, and
+  surface-2 hover.
+- The "Add a task" control matches the reference dimensions, transparent border, 11.5px type,
+  bottom-only radius, and hover reveal. The "Add column" dashed column uses the reference's
+  14px label and top-left inline alignment instead of centring it in the full-height column.
+- `scripts/parity-audit.cjs` now provides a repeatable cross-application audit: static IDs/SVG/
+  i18n, every main view, card and list-row geometry/state, completed transitions, light/dark
+  completed colors, task drawer, palette, capture, settings, and responsive widths. Any
+  mismatch exits non-zero.
 - New guest workspaces now use the reference defaults: user "You", workspace "Personal",
   starter board description "A calm place for everything on your plate.", and Personal/Work
   labels. V13 normalises existing guest starter data.

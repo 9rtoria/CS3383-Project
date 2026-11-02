@@ -14,6 +14,7 @@ Date: 2026-11-02
 | Flyway migrations | V1 to V13 validated and applied, including MFA pending secret, email attempts, task completed_at, and guest starter defaults |
 | Static audit | 422 HTML ids / 327 JS id references, 0 missing; 72 SVG symbols, 0 missing |
 | i18n audit | 749 keys, 0 missing |
+| Cross-app parity audit | `node scripts/parity-audit.cjs`: 0 failures, 0 warnings |
 | Git | Clean working tree at the acceptance commit |
 
 The API smoke suite covers guest sessions, persistent/revocable sessions, account claim/sign-in and guest-workspace merge, roles and invite preview/acceptance, board templates/columns/WIP/archived boards, task CRUD and field-presence-safe PATCH, create-time reminders, drag/move/conflict handling, checklist deletion, Today selection and rebalancing, recurrence, comments/dependencies/attachments, notification preferences/read state, calendar/upcoming/search/archive/rich insights, labels/views/metrics/OpenAPI/client errors, idempotent replay and key conflicts, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), security headers/origin rejection, OAuth exchange contracts for GitHub, Google, and JWKS-verified Apple profiles including a tampered-signature rejection, and real SMTP socket delivery of a queued digest message.
@@ -44,6 +45,22 @@ Verified fixes in this pass:
 - Imported JSON assignee objects resolve by email/name; imported completed tasks retain a
   completion timestamp.
 - `GET /api/boards?workspaceId=...` matches the published OpenAPI contract.
+
+The repeatable cross-application audit is `scripts/parity-audit.cjs`. It logs into both apps,
+compares card/list geometry and computed styles by task title, checks completed/reopened drag
+transitions, add-column geometry, completed colors in light and dark themes, every main view,
+the drawer/palette/capture/settings states, static IDs/SVG/i18n, and 390/768/1024/1440 widths.
+Run it with `NODE_PATH` pointing at the reference app's `node_modules`:
+
+```powershell
+$env:NODE_PATH="C:\path\to\ProjectA2\node_modules"
+node scripts/parity-audit.cjs
+```
+
+The final run reported 0 failures and 0 warnings. It specifically caught the completed-title
+token mismatch (`--text-soft` instead of `--muted`), the missing removal of the extra
+metadata opacity, list-row 11px/12px typography, and the Add a task/Add column styling drift;
+all were fixed before the passing run.
 
 Browser checks in this pass: all seven main views plus Settings, the drawer, command palette,
 and quick capture rendered with zero horizontal overflow, zero unnamed visible controls, no
