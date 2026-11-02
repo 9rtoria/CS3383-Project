@@ -4824,16 +4824,16 @@
       definitions.push(
         { id: "members", label: "People", group: "Workspace", icon: "users", render: renderPeopleSettings },
         { id: "policies", label: "Policies", group: "Workspace", icon: "lock", render: renderPolicySettings },
-        { id: "automations", label: "Automations", group: "Workspace", icon: "workflow", render: renderAutomationSettings },
       );
+    }
+    if (enterprise || isAdmin) {
+      definitions.push({ id: "automations", label: "Automations", group: "Workspace", icon: "workflow", render: renderAutomationSettings });
     }
     if (isAdmin) {
       definitions.push(
         { id: "integrations", label: "Integrations", group: "Workspace", icon: "code", render: renderIntegrationSettings },
+        { id: "audit", label: "Audit log", group: "Workspace", icon: "history", render: renderAuditSettings },
       );
-    }
-    if (enterprise && isAdmin) {
-      definitions.push({ id: "audit", label: "Audit log", group: "Workspace", icon: "history", render: renderAuditSettings });
     }
     definitions.push(
       { id: "data", label: "Data & export", group: "Data", icon: "database", render: renderDataSettings },

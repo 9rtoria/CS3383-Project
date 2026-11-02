@@ -174,6 +174,7 @@ Status key:
 | Settings / Voice / Sound | DONE | Personal Settings UI, Sound Lab, Voice capture |
 | Settings navigation / scrollspy | DONE | One-page Settings keeps click-to-jump, while the desktop sidebar and mobile section picker follow the section actually in view. Scrollspy pauses during search, updates the URL hash, preserves the active section across re-renders, and keeps short sections (Keyboard, Automations, Audit) selectable. |
 | Restored rewrite-only admin capabilities | DONE | Kept the reference layout while restoring useful rewrite capabilities: token created/expires/last-used metadata and copy; webhook event selection, one-time signing secret with copy, pause/resume, delivery count/last-delivery status, URL copy; SSO configured badge, enable/require toggles, and Try SSO; invite-link copy, member joined dates, shortcut-sheet entry point, and automation board scope. |
+| Workspace settings visibility | DONE | Personal Owner/Admin workspaces expose the newer four-item group: Workspace, Automations, Integrations, and Audit log. Team/org Owners/Admins keep the full six-item group; team members retain the existing People/Policies/Automations entries; personal non-admins see Workspace only. |
 | Offline / PWA | DONE | Service worker, manifest, cached bootstrap/board/today/settings, offline queue with per-write idempotency keys, replay, retry/discard, explicit 409 failures, dedicated `/offline` page |
 | i18n | DONE | English / Traditional Chinese for every statically extracted UI, auth, board, task, calendar, archive, search, settings, and admin string; `t()` audit reports zero missing keys |
 | Public board share | DONE | Read-only `/share/{token}` page, team workspace links, revocable tokens |
@@ -309,6 +310,10 @@ Fixed during the pass:
   each section reaches the reading position, short sections are not skipped, search temporarily
   clears the marker, and click-to-jump remains intact. The URL hash follows the active section,
   and re-rendering a Settings section keeps the current scroll position.
+- Personal Owner/Admin workspaces retain the newer four-item Workspace group (Workspace,
+  Automations, Integrations, Audit log). Team/org admins keep the full six items, team members
+  keep the existing People/Policies/Automations entries, and personal non-admins see Workspace
+  only.
 - Restored rewrite-only admin capabilities without changing the default reference layout:
   API-token metadata/copy, webhook event selection and one-time signing secrets, delivery
   status, pause/resume and URL copy; SSO status, enable/require toggles and Try SSO; invite-link
@@ -332,9 +337,11 @@ Fixed during the pass:
   workspace, labels, two boards, WIP limits, tasks, descriptions, checklists, comments, view,
   and notifications.
 
-Two intentional rewrite-only additions remain visible in Settings: the Keyboard
-"Shortcut sheet" link row and the collapsed "Events" selector under Webhooks. Both expose
-previously removed capabilities while leaving the rest of the reference layout unchanged.
+Three intentional rewrite-only additions remain visible in Settings: the Keyboard
+"Shortcut sheet" link row, the collapsed "Events" selector under Webhooks, and the four-item
+Workspace group in personal Owner/Admin workspaces (the reference hides Automations and Audit
+log there). They expose previously removed capabilities while leaving team/org and member
+layouts unchanged.
 
 Apart from the deliberate capability restorations above, the remaining visible differences are
 **state/data drift and timing, not missing UI or behavior**:

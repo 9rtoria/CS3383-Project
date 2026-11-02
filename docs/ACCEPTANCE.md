@@ -36,6 +36,7 @@ Playwright browser runs verified:
 - Settings navigation groups/search, workspace/user hover states, account, appearance, language, planning, auto-plan, focus, sound, notifications, keyboard, features, security/MFA, workspace, people, policies, automations, integrations, audit, data/export, danger zone, About, and mobile section picker/header.
 - Settings scrollspy: every section reaches the desktop sidebar and mobile picker at the correct reading position, including the short Keyboard, Automations, Audit, and Data sections. Click-to-jump still aligns each section, the URL hash follows the active section, search clears the marker, and re-rendering preserves the current scroll position.
 - Restored rewrite-only capabilities: API-token created/expires/last-used metadata and copy, webhook event selection, one-time signing secret with copy, pause/resume, delivery metadata and URL copy; SSO configured badge, enable/require toggles, persistence after reload and removal; invite-link copy, member joined dates, shortcut-sheet entry point, and automation board scope.
+- Workspace settings gating: guest/personal Owner/Admin workspaces show Workspace, Automations, Integrations, and Audit log; the team Owner/Admin workspace keeps the full six-item group. The added sections render, scrollspy includes them, and the mobile picker matches on both desktop and 390 px layouts.
 - Notifications anchored dropdown (unread styling, relative timestamps, Mark read, settings link), account menu with icons/theme/sign-out, and Escape/outside-click closing.
 - Keyboard shortcut sheet card layout, scroll clipping, row labels, single-key toggle, and close button.
 - Board list view with relative due labels, compact priority tones, and mobile toolbar grouping.
@@ -43,7 +44,7 @@ Playwright browser runs verified:
 - Mobile: Today, Board, Settings, Upcoming, Search, single-row topbar, bottom navigation, hidden desktop sidebar, and settings section picker.
 - Service worker/PWA registration and offline queue render path remain present.
 - No browser console errors were observed across the main views and auth flows.
-- Final scrollspy/feature pass: all 19 Settings sections synced on desktop and at 390 px mobile width, all main views reported zero horizontal overflow, and the token, webhook, SSO, invite-link, joined-date, and shortcut-sheet flows completed with zero console errors.
+- Final scrollspy/feature pass: all Settings sections synced on desktop and at 390 px mobile width, all main views reported zero horizontal overflow, and the token, webhook, SSO, invite-link, joined-date, shortcut-sheet, and workspace-gating flows completed with zero console errors.
 
 Screenshots are in [`docs/screenshots`](screenshots/):
 
