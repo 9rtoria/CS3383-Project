@@ -1267,6 +1267,8 @@
     "Manage public link": "管理公開連結",
     "Uploading…": "上傳中…",
     "PDF, image and plain-text files up to 10 MB. Scanner is not configured; only upload trusted files.": "PDF、圖片與純文字檔，單檔上限 10 MB。未設定掃描器；請只上傳信任的檔案。",
+    "{{count}} open dependencies": "{{count}} 個未完成依賴",
+    "{{count}} minutes tracked in Focus": "專注已記錄 {{count}} 分鐘",
   });
 
   let currentLocale = "en";

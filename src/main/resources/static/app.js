@@ -2741,12 +2741,16 @@
       event.dataTransfer.effectAllowed = "move";
     });
 
-    const top = element("div", "card-top-meta");
-    if (task.priority && task.priority !== "none") top.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
-    for (const label of task.labels ?? []) {
-      top.append(element("span", `pill label-${label.color || "slate"}`, label.name));
+    const labels = task.labels ?? [];
+    if ((task.priority && task.priority !== "none") || labels.length) {
+      const top = element("div", "card-top-meta");
+      if (task.priority && task.priority !== "none") top.append(element("span", `pill priority-${task.priority}`, priorityLabel(task.priority)));
+      for (const label of labels) {
+        top.append(element("span", `pill label-${label.color || "slate"}`, label.name));
+      }
+      card.append(top);
     }
-    card.append(top, element("h3", "", task.title));
+    card.append(element("h3", "", task.title));
     if (task.description) card.append(element("p", "card-description", task.description));
     const foot = element("div", "card-foot");
     const facts = element("div", "card-facts");
@@ -2756,32 +2760,54 @@
       if (String(task.dueDate).slice(0, 10) < localDateKey() && Number(task.completed) !== 1) due.classList.add("overdue");
       facts.append(due);
     }
+    if (task.recurrenceRule) {
+      const repeat = element("span", "card-fact");
+      repeat.title = describeRecurrence(task.recurrenceRule);
+      repeat.append(icon("repeat"));
+      facts.append(repeat);
+    }
+    if (Number(task.openDependencies || 0) > 0) {
+      const blocked = element("span", "card-fact blocked");
+      blocked.title = t("{{count}} open dependencies", { count: Number(task.openDependencies) });
+      blocked.append(icon("link"), document.createTextNode(` ${Number(task.openDependencies)}`));
+      facts.append(blocked);
+    }
     if (task.estimateMinutes) {
       const estimate = element("span", "card-fact");
-      estimate.append(icon("insights"), document.createTextNode(` ${task.estimateMinutes}m`));
+      estimate.append(icon("timer"), document.createTextNode(` ${task.estimateMinutes}m`));
       facts.append(estimate);
     }
+    if (Number(task.actualMinutes || 0) > 0) {
+      const tracked = element("span", "card-fact");
+      tracked.title = t("{{count}} minutes tracked in Focus", { count: Number(task.actualMinutes) });
+      tracked.append(icon("timer"), document.createTextNode(` ${Number(task.actualMinutes)}m ${t("tracked")}`));
+      facts.append(tracked);
+    }
+    const right = element("div", "card-foot-right");
     if (Number(task.subtaskCount || 0) > 0) {
       const checklist = element("span", "card-fact");
       checklist.append(icon("list"), document.createTextNode(` ${Number(task.subtaskDone || 0)}/${Number(task.subtaskCount)}`));
-      facts.append(checklist);
+      right.append(checklist);
     }
     if (Number(task.commentCount || 0) > 0) {
       const comments = element("span", "card-fact");
       comments.append(icon("message"), document.createTextNode(` ${Number(task.commentCount)}`));
-      facts.append(comments);
+      right.append(comments);
     }
-    if (task.recurrenceRule) {
-      const repeat = element("span", "card-fact");
-      repeat.title = t("Repeats");
-      repeat.append(icon("calendar-up"), document.createTextNode(` ${describeRecurrence(task.recurrenceRule)}`));
-      facts.append(repeat);
+    if (Number(task.attachmentCount || 0) > 0) {
+      const attachments = element("span", "card-fact");
+      attachments.append(icon("paperclip"), document.createTextNode(` ${Number(task.attachmentCount)}`));
+      right.append(attachments);
     }
-    foot.append(facts);
     if (task.assignee) {
       const avatar = element("span", "avatar-sm", initials(task.assignee.name));
       avatar.title = task.assignee.name || task.assignee.email || "";
-      foot.append(avatar);
+      right.append(avatar);
+    }
+    if (facts.children.length || right.children.length) {
+      foot.append(facts);
+      if (right.children.length) foot.append(right);
+      card.append(foot);
     }
     const select = element("input", "task-select");
     select.type = "checkbox";
@@ -2791,7 +2817,7 @@
     select.addEventListener("click", (event) => event.stopPropagation());
     select.addEventListener("dragstart", (event) => event.preventDefault());
     select.addEventListener("change", () => toggleTaskSelection(task.id, select.checked));
-    card.append(foot, select);
+    card.append(select);
     return card;
   }
 

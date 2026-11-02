@@ -70,8 +70,17 @@ public class AppService {
         jdbc.update("""
             INSERT INTO app_user (id, email, display_name, is_guest, timezone, created_at)
             VALUES (?, NULL, ?, 1, 'Asia/Hong_Kong', ?)
-            """, userId, "Guest", now);
-        createStarterWorkspace(userId, "My workspace");
+            """, userId, "You", now);
+        String workspaceId = createStarterWorkspace(userId, "Personal", "personal",
+            "A calm place for everything on your plate.");
+        jdbc.update("""
+            INSERT OR IGNORE INTO label (id, workspace_id, name, color, created_at)
+            VALUES (?, ?, 'Personal', 'moss', ?)
+            """, id(), workspaceId, now);
+        jdbc.update("""
+            INSERT OR IGNORE INTO label (id, workspace_id, name, color, created_at)
+            VALUES (?, ?, 'Work', 'blue', ?)
+            """, id(), workspaceId, now);
         return bootstrap(userId);
     }
 
@@ -114,7 +123,7 @@ public class AppService {
                 INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
                 VALUES (?, ?, ?, ?, 0, ?, ?)
                 """, userId, email, name, hash, timezone, Instant.now().toString());
-            createStarterWorkspace(userId, name + "'s workspace");
+            createStarterWorkspace(userId, "Personal");
         }
         return new AuthResult(userId, bootstrap(userId));
     }
@@ -399,7 +408,7 @@ public class AppService {
                 INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
                 VALUES (?, ?, ?, NULL, 0, 'Asia/Hong_Kong', ?)
                 """, userId, email, displayName, now);
-            createStarterWorkspace(userId, displayName + "'s workspace");
+            createStarterWorkspace(userId, "Personal");
             mfaEnabled = false;
         }
         String challenge = mfaEnabled ? mfaService.createChallenge(userId) : null;
@@ -613,7 +622,7 @@ public class AppService {
             INSERT INTO app_user (id, email, display_name, password_hash, is_guest, timezone, created_at)
             VALUES (?, ?, ?, NULL, 0, 'Asia/Hong_Kong', ?)
             """, userId, normalized, displayName, Instant.now().toString());
-        createStarterWorkspace(userId, displayName + "'s workspace");
+        createStarterWorkspace(userId, "Personal");
         return userId;
     }
 
@@ -876,11 +885,16 @@ public class AppService {
         return linked(Map.of("removed", true));
     }
 
-    private void createStarterWorkspace(String userId, String workspaceName) {
-        createStarterWorkspace(userId, workspaceName, "personal");
+    private String createStarterWorkspace(String userId, String workspaceName) {
+        return createStarterWorkspace(userId, workspaceName, "personal", null);
     }
 
-    private void createStarterWorkspace(String userId, String workspaceName, String type) {
+    private String createStarterWorkspace(String userId, String workspaceName, String type) {
+        return createStarterWorkspace(userId, workspaceName, type, null);
+    }
+
+    private String createStarterWorkspace(String userId, String workspaceName, String type,
+                                          String boardDescription) {
         String workspaceId = id();
         String boardId = id();
         String now = Instant.now().toString();
@@ -893,9 +907,9 @@ public class AppService {
             VALUES (?, ?, 'OWNER', ?)
             """, userId, workspaceId, now);
         jdbc.update("""
-            INSERT INTO board (id, workspace_id, name, position, created_at)
-            VALUES (?, ?, 'My tasks', 0, ?)
-            """, boardId, workspaceId, now);
+            INSERT INTO board (id, workspace_id, name, description, position, created_at)
+            VALUES (?, ?, 'My tasks', ?, 0, ?)
+            """, boardId, workspaceId, boardDescription == null ? "" : boardDescription, now);
         String[] columns = {"To do", "In progress", "Done"};
         for (int i = 0; i < columns.length; i++) {
             jdbc.update("""
@@ -903,6 +917,7 @@ public class AppService {
                 VALUES (?, ?, ?, ?, ?)
                 """, id(), boardId, columns[i], i, i == columns.length - 1 ? 1 : 0);
         }
+        return workspaceId;
     }
 
     private Map<String, Object> userRow(String userId) {
@@ -3250,7 +3265,14 @@ public class AppService {
                    c.is_done AS completed,
                    (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id) AS subtaskCount,
                    (SELECT COUNT(*) FROM subtask s WHERE s.task_id = t.id AND s.completed = 1) AS subtaskDone,
-                   (SELECT COUNT(*) FROM task_comment tc WHERE tc.task_id = t.id) AS commentCount
+                   (SELECT COUNT(*) FROM task_comment tc WHERE tc.task_id = t.id) AS commentCount,
+                   (SELECT COUNT(*) FROM attachment a
+                    WHERE a.task_id = t.id AND a.deleted_at IS NULL) AS attachmentCount,
+                   (SELECT COUNT(*) FROM task_dependency td
+                    JOIN task dep ON dep.id = td.depends_on_task_id
+                    JOIN board_column dc ON dc.id = dep.column_id
+                    WHERE td.task_id = t.id AND dep.deleted_at IS NULL
+                      AND dep.archived_at IS NULL AND dc.is_done = 0) AS openDependencies
             FROM task t
             JOIN board b ON b.id = t.board_id
             JOIN board_column c ON c.id = t.column_id

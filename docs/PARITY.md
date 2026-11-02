@@ -459,6 +459,17 @@ Backend and data-integrity changes in this pass:
 
 Frontend and interaction changes in this pass:
 
+- Board cards now render the metadata row and footer only when they have content, restoring the
+  reference's compact single-line card height; titles clamp at three lines and description
+  spacing matches the reference. Card footers also expose open dependencies, attachments, and
+  tracked focus minutes.
+- The "Add column" dashed column aligns its label to the top-left like the reference instead
+  of centring it in the full-height column.
+- New guest workspaces now use the reference defaults: user "You", workspace "Personal",
+  starter board description "A calm place for everything on your plate.", and Personal/Work
+  labels. V13 normalises existing guest starter data.
+- The service worker cache version advanced to v5; static assets remain network-first with an
+  offline cache fallback.
 - Search gained Reset, cursor pagination with Load more, stale-response protection, and stable
   paging; the command palette gained Keyboard shortcuts, theme toggle, Settings, and board
   commands; board filters gained Assigned to me / Unassigned and label chips in list view.
@@ -471,7 +482,7 @@ Frontend and interaction changes in this pass:
 - Bulk selection remains a rewrite-only desktop capability and now appears on hover instead
   of being permanently hidden.
 - The task drawer uses theme surfaces in dark mode, and Chinese translations cover the new UI
-  strings (`i18n` audit: 747 keys, 0 missing).
+  strings (`i18n` audit: 749 keys, 0 missing).
 
 Verification for this pass: `mvnw test` 36/36, `mvnw package -DskipTests`, JavaScript syntax
 checks, static ID/SVG audits (0 missing), i18n audit (0 missing), API pagination/rate-limit/

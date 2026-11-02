@@ -11,9 +11,9 @@ Date: 2026-11-02
 | `./mvnw test` | 36 tests, 0 failures, 0 errors |
 | `./mvnw -DskipTests package` | Passed; executable jar produced |
 | `node --check app.js`, `auth.js`, `i18n.js`, `offline.js` | Passed |
-| Flyway migrations | V1 to V12 validated and applied, including MFA pending secret, email attempts, and task completed_at |
-| Static audit | 420 HTML ids / 327 JS id references, 0 missing; 70 SVG symbols, 0 missing |
-| i18n audit | 747 keys, 0 missing |
+| Flyway migrations | V1 to V13 validated and applied, including MFA pending secret, email attempts, task completed_at, and guest starter defaults |
+| Static audit | 422 HTML ids / 327 JS id references, 0 missing; 72 SVG symbols, 0 missing |
+| i18n audit | 749 keys, 0 missing |
 | Git | Clean working tree at the acceptance commit |
 
 The API smoke suite covers guest sessions, persistent/revocable sessions, account claim/sign-in and guest-workspace merge, roles and invite preview/acceptance, board templates/columns/WIP/archived boards, task CRUD and field-presence-safe PATCH, create-time reminders, drag/move/conflict handling, checklist deletion, Today selection and rebalancing, recurrence, comments/dependencies/attachments, notification preferences/read state, calendar/upcoming/search/archive/rich insights, labels/views/metrics/OpenAPI/client errors, idempotent replay and key conflicts, command palette/bulk actions/undo, API tokens/audit, webhooks (signature and delivery retry path), automations (preview, run, undo, enable/disable), import/export, account/workspace deletion, TOTP MFA, workspace policy enforcement, OIDC SSO with a local fake provider, magic links (new account, replay rejection, MFA handoff), security headers/origin rejection, OAuth exchange contracts for GitHub, Google, and JWKS-verified Apple profiles including a tampered-signature rejection, and real SMTP socket delivery of a queued digest message.
@@ -47,7 +47,12 @@ Verified fixes in this pass:
 
 Browser checks in this pass: all seven main views plus Settings, the drawer, command palette,
 and quick capture rendered with zero horizontal overflow, zero unnamed visible controls, no
-undefined/NaN/placeholder text, and no console errors. Search Reset/pagination, board drag and
+undefined/NaN/placeholder text, and no console errors. Board title-only cards measured 42px
+(the reference's 11px padding plus 12.5px/1.42 title line), metadata cards expanded only when
+content existed, and the dashed Add column label aligned to the top-left. A fresh guest showed
+"You / Personal / My tasks", the reference board description, and Personal/Work labels. The
+black circular control in the reference remains the Next.js dev-tools indicator
+(`#devtools-indicator` inside `nextjs-portal`), not Drift UI, so it is intentionally absent. Search Reset/pagination, board drag and
 keyboard move, bulk move, duplicate/archive/restore board, URL refresh, comments, dependencies,
 attachment actions, dark drawer, and Chinese locale were exercised. Static ID/SVG audits report
 zero missing references; the translation audit reports 747 keys with zero missing.
@@ -80,7 +85,7 @@ Playwright browser runs verified:
 - Restored rewrite-only capabilities: API-token created/expires/last-used metadata and copy, webhook event selection, one-time signing secret with copy, pause/resume, delivery metadata and URL copy; SSO configured badge, enable/require toggles, persistence after reload and removal; invite-link copy, member joined dates, shortcut-sheet entry point, and automation board scope.
 - Workspace settings gating: guest/personal Owner/Admin workspaces show Workspace, Automations, Integrations, and Audit log; the team Owner/Admin workspace keeps the full six-item group. The added sections render, scrollspy includes them, and the mobile picker matches on both desktop and 390 px layouts.
 - Settings workspace avatar: uses the soft `workspace-avatar` treatment, matching the main sidebar and the reference light-mint avatar instead of the dark brand mark. Computed colors and dimensions were checked in light and dark themes; account and member avatars remain unchanged.
-- Favicon/PWA icon: `/icon.svg?v=2` and `/icon-maskable.svg` now serve the reference Drift swirl mark instead of the new “D” glyph. The service-worker cache advanced to `project3383-v4`; the icon was fetched and rendered in-browser with no console errors.
+- Favicon/PWA icon: `/icon.svg?v=2` and `/icon-maskable.svg` now serve the reference Drift swirl mark instead of the new “D” glyph. The service-worker cache advanced to `project3383-v5`; the icon was fetched and rendered in-browser with no console errors.
 - Notifications anchored dropdown (unread styling, relative timestamps, Mark read, settings link), account menu with icons/theme/sign-out, and Escape/outside-click closing.
 - Keyboard shortcut sheet card layout, scroll clipping, row labels, single-key toggle, and close button.
 - Board list view with relative due labels, compact priority tones, and mobile toolbar grouping.

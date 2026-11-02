@@ -1,7 +1,8 @@
-/* Project3383 service worker: network-first navigation, cache-first static
- * assets. Authenticated API responses are never cached. Offline writes live
- * in localStorage and are replayed by the browser app. */
-const VERSION = "project3383-v4";
+/* Project3383 service worker: network-first navigation and static assets with
+ * a cache fallback for offline use. Authenticated API responses are never
+ * cached. Offline writes live in localStorage and are replayed by the browser
+ * app. Bump VERSION whenever the shell changes. */
+const VERSION = "project3383-v5";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const PRECACHE = [

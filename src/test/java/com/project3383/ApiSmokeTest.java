@@ -157,7 +157,7 @@ class ApiSmokeTest {
     void guestCanCreateAndMoveATask() throws Exception {
         MvcResult guest = mockMvc.perform(post("/api/auth/guest"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.user.name").value("Guest"))
+            .andExpect(jsonPath("$.user.name").value("You"))
             .andReturn();
         MockHttpSession session = (MockHttpSession) guest.getRequest().getSession(false);
         JsonNode boot = objectMapper.readTree(guest.getResponse().getContentAsString());
@@ -489,9 +489,9 @@ class ApiSmokeTest {
 
         mockMvc.perform(get("/api/boards/" + boardId).session(session))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.board.description").value(""))
+            .andExpect(jsonPath("$.board.description").value("A calm place for everything on your plate."))
             .andExpect(jsonPath("$.board.permissions.canManage").value(true))
-            .andExpect(jsonPath("$.board.members[0].name").value("Guest"));
+            .andExpect(jsonPath("$.board.members[0].name").value("You"));
 
         mockMvc.perform(patch("/api/boards/" + boardId)
                 .session(session)
@@ -746,7 +746,7 @@ class ApiSmokeTest {
             .andExpect(jsonPath("$.board.tasks[0].completed").value(false))
             .andExpect(jsonPath("$.board.tasks[0].labels[0].name").value("shared"))
             .andExpect(jsonPath("$.board.tasks[0].subtasks[0].title").value("Shared step"))
-            .andExpect(jsonPath("$.board.tasks[0].assignee.name").value("Guest"));
+            .andExpect(jsonPath("$.board.tasks[0].assignee.name").value("You"));
 
         mockMvc.perform(get("/share/" + token))
             .andExpect(status().isOk())
@@ -811,7 +811,7 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/tasks/" + taskId).session(session))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.task.activity[0].action").value("task.reopened"))
-            .andExpect(jsonPath("$.task.activity[0].actor.name").value("Guest"))
+            .andExpect(jsonPath("$.task.activity[0].actor.name").value("You"))
             .andExpect(jsonPath("$.task.activity[?(@.action == 'task.created')]").isNotEmpty())
             .andExpect(jsonPath("$.task.activity[?(@.action == 'task.completed')]").isNotEmpty())
             .andExpect(jsonPath("$.task.activity[?(@.action == 'task.reopened')]").isNotEmpty())
@@ -1255,7 +1255,7 @@ class ApiSmokeTest {
         mockMvc.perform(get("/api/audit").session(session).param("workspaceId", workspaceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.events[?(@.action == 'api_token.created')]").isNotEmpty())
-            .andExpect(jsonPath("$.events[0].actor.name").value("Guest"));
+            .andExpect(jsonPath("$.events[0].actor.name").value("You"));
 
         mockMvc.perform(get("/api/tasks")
                 .header("Authorization", "Bearer " + rawToken)

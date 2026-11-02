@@ -1478,17 +1478,19 @@ body[data-view="settings"] .main { padding: 0; }
 .card { position: relative; padding: 11px 12px; border-radius: var(--radius-sm); border-color: var(--border); background: var(--surface-raised); box-shadow: var(--shadow-sm); cursor: grab; transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease; user-select: none; }
 .card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
 .card:active { cursor: grabbing; }
-.card h3 { margin: 0; font-size: 12.5px; line-height: 1.42; font-weight: 550; }
+.card h3 { margin: 0; font-size: 12.5px; line-height: 1.42; font-weight: 550; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .card.completed h3 { color: var(--text-soft); text-decoration: line-through; }
 .card.completed .card-top-meta { opacity: .82; }
-.card p.card-description { margin: 0 0 8px; color: var(--muted); font-size: 10.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card p.card-description { margin: 5px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-top-meta { display: flex; flex-wrap: wrap; gap: 4px; min-height: 17px; margin-bottom: 6px; }
 .card-top-meta .pill { min-height: 17px; padding: 1px 7px; font-size: 9px; font-weight: 600; border-radius: 999px; line-height: 1.3; }
 .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; min-height: 15px; line-height: 15px; }
 .card-facts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 9px; color: var(--muted); font-size: 10px; line-height: 15px; }
+.card-foot-right { display: flex; align-items: center; gap: 5px; margin-left: auto; }
 .card-fact { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; font-size: 10px; line-height: 15px; }
 .card-fact .icon { width: 11px; height: 11px; stroke-width: 2; }
 .card-fact.overdue { color: var(--danger); }
+.card-fact.blocked { color: var(--warning); }
 .card .avatar-sm { width: 23px; height: 23px; font-size: 8px; flex: none; }
 .task-select { position: absolute; top: 8px; right: 8px; opacity: 0; pointer-events: none; transition: opacity .12s; }
 .card:hover .task-select, .card.selected .task-select, .task-select:focus-visible { opacity: 1; pointer-events: auto; }
@@ -1511,7 +1513,7 @@ body[data-view="settings"] .main { padding: 0; }
 .column-menu-wrap { position: relative; }
 .column-menu { top: 26px; right: 0; min-width: 154px; }
 .column .menu-sep { height: 1px; background: var(--border); margin: 3px 2px; }
-.column-add-column { display: flex; align-items: center; justify-content: flex-start; gap: 7px; min-height: 72px; padding: 14px; background: transparent; border-style: dashed; color: var(--muted); font-size: 11px; }
+.column-add-column { display: flex; align-items: flex-start; justify-content: flex-start; gap: 7px; min-height: 90px; padding: 14px; background: transparent; border-style: dashed; color: var(--muted); font-size: 11px; }
 .column-add-column:hover { background: var(--surface); color: var(--text-soft); }
 .template-picker { display: grid; gap: 7px; }
 .template-option { display: flex; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; background: var(--surface); cursor: pointer; }
