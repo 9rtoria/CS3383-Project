@@ -2,6 +2,102 @@
 
 A new implementation of the Drift task planner, built with **Java + Spring Boot + SQLite + plain HTML/CSS/JavaScript**. The existing `ProjectA2` is kept untouched as the reference.
 
+## Quick Start
+
+### Requirements
+
+- **JDK 17** (the project is built with Java 17)
+- Git
+- An internet connection on the first run, so the Maven Wrapper can download Maven and dependencies
+- No separate Maven installation and no database server are required
+
+Check Java before starting:
+
+```bash
+java -version
+```
+
+The output should report version 17 or newer.
+
+### Clone and run with demo data
+
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/9rtoria/CS3383-Project.git
+cd CS3383-Project
+$env:SEED_DEMO="true"
+.\mvnw.cmd spring-boot:run
+```
+
+macOS / Linux:
+
+```bash
+git clone https://github.com/9rtoria/CS3383-Project.git
+cd CS3383-Project
+chmod +x mvnw
+SEED_DEMO=true ./mvnw spring-boot:run
+```
+
+Open <http://localhost:3383> and sign in with:
+
+```text
+Email:    demo@drift.local
+Password: DriftDemo123!
+```
+
+`SEED_DEMO=true` is intended for the first run with an empty database. It seeds the demo
+workspace; it does not replace an existing database.
+
+### Run without demo data
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+```bash
+./mvnw spring-boot:run
+```
+
+Then open <http://localhost:3383/auth> to create a guest workspace, register, or sign in.
+
+On first launch the application automatically creates `data/project3383.db`, runs the Flyway
+migrations, and creates `data/attachments/` and `data/mfa.key` when needed. The whole `data/`
+directory is ignored by Git, so a fresh clone starts without the previous local database.
+
+### Build and run the jar
+
+```powershell
+.\mvnw.cmd -DskipTests package
+java -jar target\project3383-0.0.1-SNAPSHOT.jar
+```
+
+```bash
+./mvnw -DskipTests package
+java -jar target/project3383-0.0.1-SNAPSHOT.jar
+```
+
+Add `SEED_DEMO=true` to the environment before `java -jar` if you also want the demo data on the
+first run.
+
+To use a different port:
+
+```powershell
+java -jar target\project3383-0.0.1-SNAPSHOT.jar --server.port=3390
+```
+
+### Reset local data
+
+Stop the application, back up `data/` if needed, then delete:
+
+```text
+data/project3383.db
+data/attachments/*
+data/mfa.key
+```
+
+The next launch recreates these files. This is destructive, so keep a backup if the data matters.
+
 ## Current milestone
 
 See `docs/PARITY.md` for the API/model/UI status and `docs/ACCEPTANCE.md` for the build, browser, accessibility, performance, and security acceptance report.
@@ -108,24 +204,8 @@ The final acceptance report, including screenshots and QA results, is at:
 
 ## Run
 
-JDK 17 is required. On this machine the default `java` command points to Java 8, so set `JAVA_HOME` first:
-
-```powershell
-$env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot'
-$env:Path="$env:JAVA_HOME\bin;$env:Path"
-.\mvnw.cmd spring-boot:run
-```
-
-Open <http://localhost:3383>.
-
-Alternative:
-
-```powershell
-.\mvnw.cmd -DskipTests package
-java -jar target\project3383-0.0.1-SNAPSHOT.jar
-```
-
-The database file is created at `data/project3383.db`. Delete it to reset the local demo data.
+See [Quick Start](#quick-start) for the supported JDK, clone, demo-data, packaging, and data-reset
+instructions.
 
 For a TLS-terminated deployment, run with the production profile:
 
