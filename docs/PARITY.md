@@ -305,7 +305,10 @@ Fixed during the pass:
   Audit, Data, and About. The About runtime copy now mirrors the reference.
 - Settings workspace/user hover states, reset buttons, theme icons, preview block, login-state
   health row, search/empty-state behavior, section heights, and mobile layout with a section
-  picker instead of the desktop sidebar.
+  picker instead of the desktop sidebar. The Settings workspace avatar now uses the same soft
+  accent treatment as the main sidebar and reference (light mint in the light theme) instead
+  of the dark brand-mark treatment; the account and member avatars retain their reference
+  identity styling.
 - Settings navigation now tracks scrolling: the desktop sidebar and mobile picker update as
   each section reaches the reading position, short sections are not skipped, search temporarily
   clears the marker, and click-to-jump remains intact. The URL hash follows the active section,

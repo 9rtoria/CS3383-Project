@@ -769,7 +769,7 @@ body[data-view="settings"] .main { padding: 0; }
 .settings-workspace:hover { background: var(--surface-2); border-color: var(--border); }
 .settings-workspace strong { display: block; font-size: 13px; font-weight: 600; line-height: 1.5; }
 .settings-workspace span:last-child { display: block; color: var(--faint); font-size: 11px; margin-top: 0; }
-.settings-workspace .brand-mark { width: 24px; height: 24px; border-radius: 8px; font-size: 9px; font-weight: 700; }
+.settings-workspace .workspace-avatar { width: 24px; height: 24px; border-radius: 8px; font-size: 9px; font-weight: 700; }
 .settings-nav .side-label { padding: 16px 10px 7px; margin: 0; font-size: 10px; letter-spacing: 0.12em; font-weight: 650; }
 .settings-nav-list { display: grid; gap: 3px; margin-top: 0; }
 .settings-nav-item {
