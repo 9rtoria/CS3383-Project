@@ -1,14 +1,16 @@
 @startuml Project3383_UseCaseDiagram
-' Project3383 ("Drift") — simplified UML use case diagram
-' Only user-facing interactions (no internals, no APIs, no external services)
+' Project3383 ("Drift") — UML use case diagram
+' Style matches class-diagram.puml and the existing use-case diagram (green PlantUML theme).
 
 left to right direction
 skinparam shadowing false
 skinparam nodesep 20
 skinparam ranksep 60
+skinparam defaultFontSize 13
 skinparam usecase {
   BackgroundColor #EEF4EF
   BorderColor #3F6B4F
+  ArrowColor #3F6B4F
   FontSize 13
 }
 skinparam actor {
@@ -34,13 +36,16 @@ rectangle "Drift" {
   usecase "Manage workspaces" as UC_Workspace
   usecase "Invite & manage\nmembers" as UC_Members
   usecase "Configure workspace\n& security settings" as UC_Admin
+  usecase "Manage SSO config" as UC_Sso
 
   usecase "Create & edit boards" as UC_Board
   usecase "Share board\nread-only" as UC_Share
+  usecase "Manage columns & WIP" as UC_Column
 
   usecase "Create & manage tasks" as UC_Task
   usecase "Move, complete &\narchive tasks" as UC_TaskStatus
   usecase "Comment, checklist,\ndependencies, attachments" as UC_TaskDetail
+  usecase "Bulk actions & undo" as UC_Bulk
 
   usecase "Plan the day\n(Today, Auto-plan, Focus)" as UC_Plan
   usecase "Browse calendar\n& upcoming" as UC_Calendar
@@ -50,6 +55,9 @@ rectangle "Drift" {
   usecase "Capture tasks quickly" as UC_Capture
   usecase "Customize personal\nsettings" as UC_Settings
   usecase "Manage notifications" as UC_Notifications
+  usecase "Manage API tokens" as UC_Tokens
+  usecase "Configure webhooks\n& automations" as UC_Webhook
+  usecase "Export / import data" as UC_Export
 }
 
 Guest --> UC_Auth
@@ -59,10 +67,12 @@ User --> UC_Mfa
 User --> UC_Signout
 User --> UC_Workspace
 User --> UC_Board
+User --> UC_Column
 User --> UC_Share
 User --> UC_Task
 User --> UC_TaskStatus
 User --> UC_TaskDetail
+User --> UC_Bulk
 User --> UC_Plan
 User --> UC_Calendar
 User --> UC_Search
@@ -70,10 +80,23 @@ User --> UC_Insights
 User --> UC_Capture
 User --> UC_Settings
 User --> UC_Notifications
+User --> UC_Tokens
+User --> UC_Export
 
 Admin --> UC_Members
 Admin --> UC_Admin
+Admin --> UC_Sso
+Admin --> UC_Webhook
 
 Public --> UC_ViewShared
+
+' <<include>> / <<extend>> relationships
+UC_Mfa ..> UC_Auth : <<include>>
+UC_Share ..> UC_Board : <<extend>>
+UC_TaskStatus ..> UC_Task : <<extend>>
+UC_TaskDetail ..> UC_Task : <<extend>>
+UC_Bulk ..> UC_TaskStatus : <<include>>
+UC_Plan ..> UC_Task : <<include>>
+UC_ViewShared ..> UC_Share : <<include>>
 
 @enduml

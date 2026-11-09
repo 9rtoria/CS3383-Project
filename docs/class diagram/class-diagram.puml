@@ -1,0 +1,382 @@
+@startuml Project3383_ClassDiagram
+' Project3383 ("Drift") — UML class diagram
+' Domain entities mirror the SQLite schema; one representative service/controller slice
+' is shown to document the layered architecture (Controller -> Service -> Data).
+
+skinparam shadowing false
+skinparam nodesep 25
+skinparam ranksep 45
+skinparam classAttributeIconSize 0
+skinparam defaultFontSize 12
+skinparam class {
+  BackgroundColor #EEF4EF
+  BorderColor #3F6B4F
+  ArrowColor #3F6B4F
+  HeaderBackgroundColor #DFEADF
+}
+skinparam package {
+  BackgroundColor #F7FAF7
+  BorderColor #3F6B4F
+}
+
+' ============================================================
+' DOMAIN ENTITIES (Data layer — one class per SQLite table)
+' ============================================================
+package "domain" {
+
+  class AppUser {
+    - id : String
+    - email : String
+    - displayName : String
+    - passwordHash : String
+    - isGuest : boolean
+    - timezone : String
+    - mfaEnabled : boolean
+    - mfaSecretEnc : String
+    - deletedAt : Instant
+    + isRegistered() : boolean
+  }
+
+  class Workspace {
+    - id : String
+    - name : String
+    - type : String
+    - createdBy : String
+    - requireMfa : boolean
+    - attachmentsEnabled : boolean
+    - publicSharingEnabled : boolean
+    - version : int
+    - deletedAt : Instant
+  }
+
+  class Membership {
+    - userId : String
+    - workspaceId : String
+    - role : Role
+    - joinedAt : Instant
+  }
+
+  class Board {
+    - id : String
+    - workspaceId : String
+    - name : String
+    - visibility : String
+    - shareEnabled : boolean
+    - shareToken : String
+    - archivedAt : Instant
+    - version : int
+  }
+
+  class BoardColumn {
+    - id : String
+    - boardId : String
+    - name : String
+    - position : int
+    - isDone : boolean
+    - wipLimit : Integer
+    - wipEnforced : boolean
+  }
+
+  class Task {
+    - id : String
+    - boardId : String
+    - columnId : String
+    - title : String
+    - priority : String
+    - startDate : String
+    - dueDate : String
+    - estimateMinutes : Integer
+    - actualMinutes : Integer
+    - assigneeId : String
+    - recurrenceRule : String
+    - version : int
+    - completedAt : Instant
+    - archivedAt : Instant
+  }
+
+  class Subtask {
+    - id : String
+    - taskId : String
+    - title : String
+    - done : boolean
+    - position : int
+  }
+
+  class TaskComment {
+    - id : String
+    - taskId : String
+    - authorId : String
+    - body : String
+    - createdAt : Instant
+  }
+
+  class Attachment {
+    - id : String
+    - taskId : String
+    - name : String
+    - storageName : String
+    - mimeType : String
+    - size : long
+  }
+
+  class Label {
+    - id : String
+    - workspaceId : String
+    - name : String
+    - color : String
+  }
+
+  class Dependency {
+    - taskId : String
+    - dependsOnTaskId : String
+  }
+
+  class Reminder {
+    - id : String
+    - taskId : String
+    - offsetMinutes : int
+    - fireAt : Instant
+  }
+
+  class ActivityEvent {
+    - id : String
+    - workspaceId : String
+    - taskId : String
+    - actorId : String
+    - action : String
+    - createdAt : Instant
+  }
+
+  class PlanBlock {
+    - id : String
+    - userId : String
+    - taskId : String
+    - date : String
+    - startMinute : int
+    - minutes : int
+    - source : String
+  }
+
+  class TodaySelection {
+    - userId : String
+    - workspaceId : String
+    - taskId : String
+    - selectedAt : Instant
+  }
+
+  class AuthSession {
+    - id : String
+    - tokenHash : String
+    - userId : String
+    - mfaVerifiedAt : Instant
+    - lastUsedAt : Instant
+    - expiresAt : Instant
+    - revokedAt : Instant
+  }
+
+  class ApiToken {
+    - id : String
+    - userId : String
+    - workspaceId : String
+    - tokenHash : String
+    - expiresAt : Instant
+  }
+
+  class UserSettings {
+    - userId : String
+    - json : String
+  }
+
+  class Webhook {
+    - id : String
+    - workspaceId : String
+    - kind : String
+    - url : String
+    - secretEnc : String
+    - enabled : boolean
+  }
+
+  class AutomationRule {
+    - id : String
+    - workspaceId : String
+    - trigger : String
+    - conditions : String
+    - actions : String
+    - enabled : boolean
+  }
+
+  class AuditEvent {
+    - id : String
+    - workspaceId : String
+    - actorId : String
+    - action : String
+    - createdAt : Instant
+  }
+
+  class UndoAction {
+    - id : String
+    - userId : String
+    - kind : String
+    - snapshotJson : String
+    - expiresAt : Instant
+  }
+
+  enum Role {
+    OWNER
+    ADMIN
+    MEMBER
+    GUEST
+  }
+}
+
+' ============================================================
+' LAYERED ARCHITECTURE (representative slice)
+' ============================================================
+package "presentation" {
+  class TaskController {
+    + create(TaskCreate) : Map
+    + patch(id, TaskUpdate) : Map
+    + move(id, TaskMove) : Map
+    + complete(id) : Map
+    + reopen(id) : Map
+  }
+
+  class AuthInterceptor {
+    + preHandle(req, res, handler) : boolean
+    + tokenWorkspaceId() : String
+    - checkCsrf(request) : void
+  }
+
+  class ApiExceptionHandler {
+    + handleApi(ApiException) : ResponseEntity
+  }
+}
+
+package "service" {
+  class AppService {
+    - jdbc : JdbcTemplate
+    - passwordEncoder : PasswordEncoder
+    - auditService : AuditService
+    - webhookService : WebhookService
+    - automationService : AutomationService
+    - mfaGuard : MfaGuard
+    - notificationService : NotificationService
+    + createBoard(userId, BoardCreate) : Map
+    + createTask(userId, TaskCreate) : Map
+    + updateTask(userId, id, TaskUpdate) : Map
+    + moveTask(userId, id, TaskMove) : Map
+    + bootstrap(userId) : Map
+    - requireMembership(userId, workspaceId) : void
+    - requireMinimumRole(userId, workspaceId, role) : void
+  }
+
+  class AutoPlanService {
+    - jdbc : JdbcTemplate
+    + preview(userId, workspaceId, mode) : Map
+    + apply(userId, workspaceId, mode) : Map
+    - score(task, ctx) : int
+  }
+
+  class AutomationService {
+    + runForEvent(workspaceId, event, taskId) : void
+    + preview(userId, rule) : Map
+  }
+
+  class WebhookService {
+    - allowPrivate : boolean
+    + dispatch(workspaceId, event, payload) : void
+    - sign(payload, secret) : String
+  }
+
+  class AuditService {
+    + record(workspaceId, actorId, action) : void
+    + feed(userId, workspaceId, cursor) : Map
+  }
+
+  class MfaService {
+    + setup(userId) : Map
+    + verify(userId, code) : boolean
+    - encrypt(secret) : String
+  }
+
+  class MfaGuard {
+    + requireSatisfied(userId, workspaceId) : void
+    + satisfied(userId, workspaceId) : boolean
+  }
+
+  class SessionService {
+    + start(session, userId, request, mfaVerified) : void
+    + touch(session, userId) : boolean
+    + revoke(sessionId, userId) : void
+  }
+
+  class NotificationService {
+    + notify(userId, title, body) : void
+    + list(userId) : Map
+  }
+
+  class UndoService {
+    + record(userId, kind, snapshot) : String
+    + undo(userId, id) : Map
+  }
+
+  class BoardTemplates {
+    + find(id) : Template
+    + catalog() : List
+  }
+}
+
+package "security/config" {
+  class SecurityConfig {
+    + passwordEncoder() : PasswordEncoder
+    + securityFilterChain(http) : SecurityFilterChain
+  }
+}
+
+' ============================================================
+' RELATIONSHIPS — domain
+' ============================================================
+AppUser "1" -- "0..*" Membership : holds >
+Membership "*" -- "1" Workspace : in >
+Workspace "1" -- "0..*" Board : contains >
+Board "1" -- "0..*" BoardColumn : has >
+BoardColumn "1" -- "0..*" Task : holds >
+Task "0..*" -- "1" AppUser : assignedTo >
+Task "1" *-- "0..*" Subtask : checklist >
+Task "1" *-- "0..*" TaskComment : comments >
+Task "1" *-- "0..*" Attachment : files >
+Task "1" *-- "0..*" Reminder : alerts >
+Task "1" -- "0..*" Label : labels >
+Task "1" -- "0..*" Dependency : blocks >
+Task "1" -- "0..*" PlanBlock : scheduled >
+
+Membership --> Role
+Board "1" -- "0..*" TodaySelection
+Workspace "1" -- "0..*" Webhook
+Workspace "1" -- "0..*" AutomationRule
+Workspace "1" -- "0..*" AuditEvent
+
+' ============================================================
+' RELATIONSHIPS — layered architecture
+' ============================================================
+TaskController --> AppService : uses >
+AuthInterceptor ..> SessionService : validates >
+TaskController ..> AuthInterceptor : intercepted by >
+ApiExceptionHandler ..> AppService : wraps errors of >
+
+AppService --> AutoPlanService
+AppService --> AutomationService
+AppService --> WebhookService
+AppService --> AuditService
+AppService --> NotificationService
+AppService --> MfaService
+AppService --> MfaGuard
+AppService --> BoardTemplates
+
+AppService ..> AppUser : reads/writes >
+AppService ..> Board : reads/writes >
+AppService ..> Task : reads/writes >
+
+SecurityConfig --> SessionService : configures >
+
+@enduml
