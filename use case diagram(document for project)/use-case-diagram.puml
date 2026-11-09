@@ -1,0 +1,79 @@
+@startuml Project3383_UseCaseDiagram
+' Project3383 ("Drift") — simplified UML use case diagram
+' Only user-facing interactions (no internals, no APIs, no external services)
+
+left to right direction
+skinparam shadowing false
+skinparam nodesep 20
+skinparam ranksep 60
+skinparam usecase {
+  BackgroundColor #EEF4EF
+  BorderColor #3F6B4F
+  FontSize 13
+}
+skinparam actor {
+  BorderColor #3F6B4F
+  BackgroundColor #FFFFFF
+}
+
+actor "Guest" as Guest
+actor "User" as User
+actor "Workspace Admin" as Admin
+actor "Public Visitor" as Public
+
+Guest <|-- User
+User <|-- Admin
+
+rectangle "Drift" {
+  usecase "Sign up / Sign in\n(password, magic link, OAuth, SSO)" as UC_Auth
+  usecase "Complete two-factor\nauthentication" as UC_Mfa
+  usecase "Sign out" as UC_Signout
+
+  usecase "View shared board" as UC_ViewShared
+
+  usecase "Manage workspaces" as UC_Workspace
+  usecase "Invite & manage\nmembers" as UC_Members
+  usecase "Configure workspace\n& security settings" as UC_Admin
+
+  usecase "Create & edit boards" as UC_Board
+  usecase "Share board\nread-only" as UC_Share
+
+  usecase "Create & manage tasks" as UC_Task
+  usecase "Move, complete &\narchive tasks" as UC_TaskStatus
+  usecase "Comment, checklist,\ndependencies, attachments" as UC_TaskDetail
+
+  usecase "Plan the day\n(Today, Auto-plan, Focus)" as UC_Plan
+  usecase "Browse calendar\n& upcoming" as UC_Calendar
+  usecase "Search tasks" as UC_Search
+  usecase "View archive & insights" as UC_Insights
+
+  usecase "Capture tasks quickly" as UC_Capture
+  usecase "Customize personal\nsettings" as UC_Settings
+  usecase "Manage notifications" as UC_Notifications
+}
+
+Guest --> UC_Auth
+Guest --> UC_Capture
+
+User --> UC_Mfa
+User --> UC_Signout
+User --> UC_Workspace
+User --> UC_Board
+User --> UC_Share
+User --> UC_Task
+User --> UC_TaskStatus
+User --> UC_TaskDetail
+User --> UC_Plan
+User --> UC_Calendar
+User --> UC_Search
+User --> UC_Insights
+User --> UC_Capture
+User --> UC_Settings
+User --> UC_Notifications
+
+Admin --> UC_Members
+Admin --> UC_Admin
+
+Public --> UC_ViewShared
+
+@enduml
