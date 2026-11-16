@@ -1,11 +1,12 @@
 @startuml Project3383_ClassDiagram
+!pragma layout smetana
 ' Project3383 ("Drift") — UML class diagram
 ' Domain entities mirror the SQLite schema; one representative service/controller slice
 ' is shown to document the layered architecture (Controller -> Service -> Data).
 
 skinparam shadowing false
 skinparam nodesep 25
-skinparam ranksep 45
+skinparam ranksep 55
 skinparam classAttributeIconSize 0
 skinparam defaultFontSize 12
 skinparam class {
@@ -252,7 +253,9 @@ package "presentation" {
   }
 }
 
+left to right direction
 package "service" {
+  skinparam direction rightToLeft
   class AppService {
     - jdbc : JdbcTemplate
     - passwordEncoder : PasswordEncoder
